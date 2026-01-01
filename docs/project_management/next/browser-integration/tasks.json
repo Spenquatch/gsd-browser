@@ -1,0 +1,467 @@
+{
+  "tasks": [
+    {
+      "id": "B1-code",
+      "name": "Streaming core implementation",
+      "type": "code",
+      "phase": "B1",
+      "status": "pending",
+      "description": "Port CDP streaming + screenshot sampler + /healthz plumbing into mcp-template.",
+      "references": [
+        "docs/project_management/next/browser-integration/plan.md",
+        "docs/project_management/next/browser-integration/B1-spec.md"
+      ],
+      "acceptance_criteria": [
+        "Env toggles enable CDP vs screenshot mode with quality presets.",
+        "ScreenshotManager stores sampled frames with metadata.",
+        "/healthz returns latency/drop stats from new emitters."
+      ],
+      "start_checklist": [
+        "git checkout feat/browser-integration && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, B1-spec.md, kickoff_prompts/B1-code.md",
+        "Set B1-code status to in_progress in tasks.json",
+        "Add START entry to session_log.md; commit docs (docs: start B1-code)",
+        "git branch bi-b1-streaming-code feat/browser-integration",
+        "git worktree add wt/bi-b1-streaming-code bi-b1-streaming-code",
+        "Do not edit docs/tasks/session_log from the worktree"
+      ],
+      "end_checklist": [
+        "uv run ruff format --check",
+        "uv run ruff check",
+        "Commit changes inside wt/bi-b1-streaming-code",
+        "Update tasks.json and session_log.md on feat/browser-integration (docs: finish B1-code)",
+        "git worktree remove wt/bi-b1-streaming-code"
+      ],
+      "worktree": "wt/bi-b1-streaming-code",
+      "integration_task": "B1-integ",
+      "kickoff_prompt": "docs/project_management/next/browser-integration/kickoff_prompts/B1-code.md",
+      "depends_on": [],
+      "concurrent_with": ["B1-test"]
+    },
+    {
+      "id": "B1-test",
+      "name": "Streaming core tests",
+      "type": "test",
+      "phase": "B1",
+      "status": "pending",
+      "description": "Author pytest coverage for env helpers and screenshot filtering; add health endpoint checks.",
+      "references": [
+        "docs/project_management/next/browser-integration/plan.md",
+        "docs/project_management/next/browser-integration/B1-spec.md"
+      ],
+      "acceptance_criteria": [
+        "Tests cover STREAMING_MODE/STREAMING_QUALITY defaults and invalid inputs.",
+        "ScreenshotManager filtering behavior validated (session/type/timestamp).",
+        "Health endpoint mocked to ensure fields present."
+      ],
+      "start_checklist": [
+        "git checkout feat/browser-integration && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, B1-spec.md, kickoff_prompts/B1-test.md",
+        "Set B1-test status to in_progress in tasks.json",
+        "Add START entry to session_log.md; commit docs (docs: start B1-test)",
+        "git branch bi-b1-streaming-test feat/browser-integration",
+        "git worktree add wt/bi-b1-streaming-test bi-b1-streaming-test",
+        "Avoid docs/tasks/session_log edits from worktree"
+      ],
+      "end_checklist": [
+        "uv run ruff format --check",
+        "uv run pytest tests/smoke/test_streaming.py",
+        "Commit changes inside wt/bi-b1-streaming-test",
+        "Update tasks.json + session_log.md (docs: finish B1-test)",
+        "git worktree remove wt/bi-b1-streaming-test"
+      ],
+      "worktree": "wt/bi-b1-streaming-test",
+      "integration_task": "B1-integ",
+      "kickoff_prompt": "docs/project_management/next/browser-integration/kickoff_prompts/B1-test.md",
+      "depends_on": [],
+      "concurrent_with": ["B1-code"]
+    },
+    {
+      "id": "B1-integ",
+      "name": "Streaming core integration",
+      "type": "integration",
+      "phase": "B1",
+      "status": "pending",
+      "description": "Merge streaming code/tests, run full suite, ensure /healthz + screenshot mode parity.",
+      "references": [
+        "docs/project_management/next/browser-integration/plan.md",
+        "docs/project_management/next/browser-integration/B1-spec.md"
+      ],
+      "acceptance_criteria": [
+        "All required commands pass (ruff, pytest, make smoke).",
+        "CDP and screenshot modes verified via manual smoke or telemetry script per spec.",
+        "Spec acceptance items reflected in README/docs."
+      ],
+      "start_checklist": [
+        "git checkout feat/browser-integration && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, B1-spec.md, kickoff_prompts/B1-integ.md",
+        "Set B1-integ status to in_progress in tasks.json",
+        "Add START entry to session_log.md; commit docs (docs: start B1-integ)",
+        "git branch bi-b1-streaming-integ feat/browser-integration",
+        "git worktree add wt/bi-b1-streaming-integ bi-b1-streaming-integ",
+        "Do not edit docs/tasks/session_log from worktree"
+      ],
+      "end_checklist": [
+        "uv run ruff format --check",
+        "uv run ruff check",
+        "uv run pytest",
+        "make smoke",
+        "Commit integration changes inside worktree",
+        "Merge branch into feat/browser-integration, update tasks/session_log (docs: finish B1-integ)",
+        "git worktree remove wt/bi-b1-streaming-integ"
+      ],
+      "worktree": "wt/bi-b1-streaming-integ",
+      "integration_task": "B1-integ",
+      "kickoff_prompt": "docs/project_management/next/browser-integration/kickoff_prompts/B1-integ.md",
+      "depends_on": ["B1-code", "B1-test"],
+      "concurrent_with": []
+    },
+    {
+      "id": "B2-code",
+      "name": "Dashboard UI & security implementation",
+      "type": "code",
+      "phase": "B2",
+      "status": "pending",
+      "description": "Port dashboard assets, Socket.IO control namespace, auth (API key, nonce, rate limiting).",
+      "references": [
+        "docs/project_management/next/browser-integration/plan.md",
+        "docs/project_management/next/browser-integration/B2-spec.md"
+      ],
+      "acceptance_criteria": [
+        "Canvas renderer + HUD toggles between CDP/screenshot modes.",
+        "Control channel implements Take Control/Release/Pause/Resume with locks.",
+        "API key + nonce handshake enforced in log server."
+      ],
+      "start_checklist": [
+        "git checkout feat/browser-integration && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, B2-spec.md, kickoff_prompts/B2-code.md",
+        "Set B2-code status to in_progress in tasks.json",
+        "Add START entry to session_log.md; commit docs (docs: start B2-code)",
+        "git branch bi-b2-dashboard-code feat/browser-integration",
+        "git worktree add wt/bi-b2-dashboard-code bi-b2-dashboard-code",
+        "No docs/tasks/session_log edits inside worktree"
+      ],
+      "end_checklist": [
+        "uv run ruff format --check",
+        "uv run ruff check",
+        "Commit dashboard/server code in worktree",
+        "Update tasks/session log (docs: finish B2-code)",
+        "git worktree remove wt/bi-b2-dashboard-code"
+      ],
+      "worktree": "wt/bi-b2-dashboard-code",
+      "integration_task": "B2-integ",
+      "kickoff_prompt": "docs/project_management/next/browser-integration/kickoff_prompts/B2-code.md",
+      "depends_on": ["B1-integ"],
+      "concurrent_with": ["B2-test"]
+    },
+    {
+      "id": "B2-test",
+      "name": "Dashboard security tests",
+      "type": "test",
+      "phase": "B2",
+      "status": "pending",
+      "description": "Add tests for auth, nonce validation, rate limiting, telemetry script.",
+      "references": [
+        "docs/project_management/next/browser-integration/plan.md",
+        "docs/project_management/next/browser-integration/B2-spec.md"
+      ],
+      "acceptance_criteria": [
+        "Unit tests cover API key required path and allowed origins.",
+        "Nonce verification + rate limiter behavior tested.",
+        "Streaming latency script has automated check (mock sockets)."
+      ],
+      "start_checklist": [
+        "git checkout feat/browser-integration && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, B2-spec.md, kickoff_prompts/B2-test.md",
+        "Set B2-test status to in_progress in tasks.json",
+        "Add START entry; commit docs (docs: start B2-test)",
+        "git branch bi-b2-dashboard-test feat/browser-integration",
+        "git worktree add wt/bi-b2-dashboard-test bi-b2-dashboard-test",
+        "Avoid docs/tasks/session_log edits inside worktree"
+      ],
+      "end_checklist": [
+        "uv run ruff format --check",
+        "uv run pytest tests/dashboard/test_security.py",
+        "Commit tests",
+        "Update tasks/session log (docs: finish B2-test)",
+        "git worktree remove wt/bi-b2-dashboard-test"
+      ],
+      "worktree": "wt/bi-b2-dashboard-test",
+      "integration_task": "B2-integ",
+      "kickoff_prompt": "docs/project_management/next/browser-integration/kickoff_prompts/B2-test.md",
+      "depends_on": ["B1-integ"],
+      "concurrent_with": ["B2-code"]
+    },
+    {
+      "id": "B2-integ",
+      "name": "Dashboard integration",
+      "type": "integration",
+      "phase": "B2",
+      "status": "pending",
+      "description": "Merge dashboard code/tests, verify auth + telemetry end-to-end.",
+      "references": [
+        "docs/project_management/next/browser-integration/plan.md",
+        "docs/project_management/next/browser-integration/B2-spec.md"
+      ],
+      "acceptance_criteria": [
+        "make smoke exercises dashboard scripts with API key enabled.",
+        "Telemetry script produces latency JSON under reports/.",
+        "Docs updated per spec."
+      ],
+      "start_checklist": [
+        "git checkout feat/browser-integration && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, B2-spec.md, kickoff_prompts/B2-integ.md",
+        "Set B2-integ status to in_progress in tasks.json",
+        "Add START entry; commit docs (docs: start B2-integ)",
+        "git branch bi-b2-dashboard-integ feat/browser-integration",
+        "git worktree add wt/bi-b2-dashboard-integ bi-b2-dashboard-integ",
+        "No docs/tasks edits inside worktree"
+      ],
+      "end_checklist": [
+        "uv run ruff format --check",
+        "uv run ruff check",
+        "uv run pytest",
+        "make smoke",
+        "Run scripts/measure_stream_latency.py --duration 10 --mode cdp",
+        "Commit + merge, update docs/session log (docs: finish B2-integ)",
+        "git worktree remove wt/bi-b2-dashboard-integ"
+      ],
+      "worktree": "wt/bi-b2-dashboard-integ",
+      "integration_task": "B2-integ",
+      "kickoff_prompt": "docs/project_management/next/browser-integration/kickoff_prompts/B2-integ.md",
+      "depends_on": ["B2-code", "B2-test"],
+      "concurrent_with": []
+    },
+    {
+      "id": "B3-code",
+      "name": "MCP tools implementation",
+      "type": "code",
+      "phase": "B3",
+      "status": "pending",
+      "description": "Add MCP tools (web_eval_agent, setup_browser_state, get_screenshots) + screenshot manager plumbing + scripts.",
+      "references": [
+        "docs/project_management/next/browser-integration/plan.md",
+        "docs/project_management/next/browser-integration/B3-spec.md"
+      ],
+      "acceptance_criteria": [
+        "Three MCP tools registered with correct arguments and docstrings.",
+        "Screenshot filtering + metadata wiring implemented in prod code.",
+        "Diagnostics scripts ported to template CLI."
+      ],
+      "start_checklist": [
+        "git checkout feat/browser-integration && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, B3-spec.md, kickoff_prompts/B3-code.md",
+        "Set B3-code status to in_progress",
+        "Add START entry; commit docs (docs: start B3-code)",
+        "git branch bi-b3-mcp-code feat/browser-integration",
+        "git worktree add wt/bi-b3-mcp-code bi-b3-mcp-code",
+        "No docs/tasks/session log edits inside worktree"
+      ],
+      "end_checklist": [
+        "uv run ruff format --check",
+        "uv run ruff check",
+        "Commit changes",
+        "Update tasks/session log (docs: finish B3-code)",
+        "git worktree remove wt/bi-b3-mcp-code"
+      ],
+      "worktree": "wt/bi-b3-mcp-code",
+      "integration_task": "B3-integ",
+      "kickoff_prompt": "docs/project_management/next/browser-integration/kickoff_prompts/B3-code.md",
+      "depends_on": ["B2-integ"],
+      "concurrent_with": ["B3-test"]
+    },
+    {
+      "id": "B3-test",
+      "name": "MCP tools tests",
+      "type": "test",
+      "phase": "B3",
+      "status": "pending",
+      "description": "Write pytest coverage for screenshot filters and MCP handler envelopes.",
+      "references": [
+        "docs/project_management/next/browser-integration/plan.md",
+        "docs/project_management/next/browser-integration/B3-spec.md"
+      ],
+      "acceptance_criteria": [
+        "Tests assert filter combinations (session/type/timestamp/metadata-only).",
+        "MCP responses sanitized (no secrets).",
+        "Scripts/diagnostics invoked via tests smoke (mock)."
+      ],
+      "start_checklist": [
+        "git checkout feat/browser-integration && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, B3-spec.md, kickoff_prompts/B3-test.md",
+        "Set B3-test status to in_progress",
+        "Add START entry; commit docs (docs: start B3-test)",
+        "git branch bi-b3-mcp-test feat/browser-integration",
+        "git worktree add wt/bi-b3-mcp-test bi-b3-mcp-test",
+        "Avoid docs/tasks/session log edits from worktree"
+      ],
+      "end_checklist": [
+        "uv run ruff format --check",
+        "uv run pytest tests/mcp/test_screenshot_tool.py",
+        "Commit tests",
+        "Update tasks/session log (docs: finish B3-test)",
+        "git worktree remove wt/bi-b3-mcp-test"
+      ],
+      "worktree": "wt/bi-b3-mcp-test",
+      "integration_task": "B3-integ",
+      "kickoff_prompt": "docs/project_management/next/browser-integration/kickoff_prompts/B3-test.md",
+      "depends_on": ["B2-integ"],
+      "concurrent_with": ["B3-code"]
+    },
+    {
+      "id": "B3-integ",
+      "name": "MCP tooling integration",
+      "type": "integration",
+      "phase": "B3",
+      "status": "pending",
+      "description": "Merge MCP tool code/tests, verify scripts and docs.",
+      "references": [
+        "docs/project_management/next/browser-integration/plan.md",
+        "docs/project_management/next/browser-integration/B3-spec.md"
+      ],
+      "acceptance_criteria": [
+        "uv run pytest && make smoke pass with MCP tools enabled.",
+        "CLI docs/README updated for new tools.",
+        "Session log captures final smoke results."
+      ],
+      "start_checklist": [
+        "git checkout feat/browser-integration && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, B3-spec.md, kickoff_prompts/B3-integ.md",
+        "Set B3-integ status to in_progress",
+        "Add START entry; commit docs (docs: start B3-integ)",
+        "git branch bi-b3-mcp-integ feat/browser-integration",
+        "git worktree add wt/bi-b3-mcp-integ bi-b3-mcp-integ",
+        "Do not edit docs/tasks/session log from worktree"
+      ],
+      "end_checklist": [
+        "uv run ruff format --check",
+        "uv run ruff check",
+        "uv run pytest",
+        "make smoke",
+        "Commit + merge, update docs/session log (docs: finish B3-integ)",
+        "git worktree remove wt/bi-b3-mcp-integ"
+      ],
+      "worktree": "wt/bi-b3-mcp-integ",
+      "integration_task": "B3-integ",
+      "kickoff_prompt": "docs/project_management/next/browser-integration/kickoff_prompts/B3-integ.md",
+      "depends_on": ["B3-code", "B3-test"],
+      "concurrent_with": []
+    },
+    {
+      "id": "B4-code",
+      "name": "browser-use upgrade & provider plumbing",
+      "type": "code",
+      "phase": "B4",
+      "status": "pending",
+      "description": "Upgrade browser-use dependency and add provider selection (cloud vs OSS).",
+      "references": [
+        "docs/project_management/next/browser-integration/plan.md",
+        "docs/project_management/next/browser-integration/B4-spec.md"
+      ],
+      "acceptance_criteria": [
+        "pyproject/lock updated to browser-use≥0.11.",
+        "CLI/config exposes provider toggles w/ validation.",
+        "Docs mention new env vars/flags."
+      ],
+      "start_checklist": [
+        "git checkout feat/browser-integration && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, B4-spec.md, kickoff_prompts/B4-code.md",
+        "Set B4-code status to in_progress",
+        "Add START entry; commit docs (docs: start B4-code)",
+        "git branch bi-b4-browseruse-code feat/browser-integration",
+        "git worktree add wt/bi-b4-browseruse-code bi-b4-browseruse-code",
+        "No docs/tasks/session log edits inside worktree"
+      ],
+      "end_checklist": [
+        "uv run ruff format --check",
+        "uv run ruff check",
+        "poetry lock --no-update && uv sync (if required by spec)",
+        "Commit changes",
+        "Update tasks/session log (docs: finish B4-code)",
+        "git worktree remove wt/bi-b4-browseruse-code"
+      ],
+      "worktree": "wt/bi-b4-browseruse-code",
+      "integration_task": "B4-integ",
+      "kickoff_prompt": "docs/project_management/next/browser-integration/kickoff_prompts/B4-code.md",
+      "depends_on": ["B3-integ"],
+      "concurrent_with": ["B4-test"]
+    },
+    {
+      "id": "B4-test",
+      "name": "browser-use provider tests",
+      "type": "test",
+      "phase": "B4",
+      "status": "pending",
+      "description": "Add smoke tests for cloud vs OSS provider instantiation and config validation.",
+      "references": [
+        "docs/project_management/next/browser-integration/plan.md",
+        "docs/project_management/next/browser-integration/B4-spec.md"
+      ],
+      "acceptance_criteria": [
+        "Tests stub ChatBrowserUse + Ollama providers and assert selection logic.",
+        "Config errors (missing API key) raise helpful messages.",
+        "Docs mention OSS/local path in README."
+      ],
+      "start_checklist": [
+        "git checkout feat/browser-integration && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, B4-spec.md, kickoff_prompts/B4-test.md",
+        "Set B4-test status to in_progress",
+        "Add START entry; commit docs (docs: start B4-test)",
+        "git branch bi-b4-browseruse-test feat/browser-integration",
+        "git worktree add wt/bi-b4-browseruse-test bi-b4-browseruse-test",
+        "Avoid docs/tasks/session log edits inside worktree"
+      ],
+      "end_checklist": [
+        "uv run ruff format --check",
+        "uv run pytest tests/llm/test_browseruse_providers.py",
+        "Commit tests",
+        "Update tasks/session log (docs: finish B4-test)",
+        "git worktree remove wt/bi-b4-browseruse-test"
+      ],
+      "worktree": "wt/bi-b4-browseruse-test",
+      "integration_task": "B4-integ",
+      "kickoff_prompt": "docs/project_management/next/browser-integration/kickoff_prompts/B4-test.md",
+      "depends_on": ["B3-integ"],
+      "concurrent_with": ["B4-code"]
+    },
+    {
+      "id": "B4-integ",
+      "name": "browser-use upgrade integration",
+      "type": "integration",
+      "phase": "B4",
+      "status": "pending",
+      "description": "Merge provider code/tests, verify dependency upgrade, finalize docs.",
+      "references": [
+        "docs/project_management/next/browser-integration/plan.md",
+        "docs/project_management/next/browser-integration/B4-spec.md"
+      ],
+      "acceptance_criteria": [
+        "uv run pytest && make smoke succeed with new dependency.",
+        "Ollama/local path documented and verified via stub test.",
+        "Feature branch ready for review."
+      ],
+      "start_checklist": [
+        "git checkout feat/browser-integration && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, B4-spec.md, kickoff_prompts/B4-integ.md",
+        "Set B4-integ status to in_progress",
+        "Add START entry; commit docs (docs: start B4-integ)",
+        "git branch bi-b4-browseruse-integ feat/browser-integration",
+        "git worktree add wt/bi-b4-browseruse-integ bi-b4-browseruse-integ",
+        "No docs/tasks/session log edits in worktree"
+      ],
+      "end_checklist": [
+        "uv run ruff format --check",
+        "uv run ruff check",
+        "uv run pytest",
+        "make smoke",
+        "Commit + merge, update docs/session log (docs: finish B4-integ)",
+        "git worktree remove wt/bi-b4-browseruse-integ"
+      ],
+      "worktree": "wt/bi-b4-browseruse-integ",
+      "integration_task": "B4-integ",
+      "kickoff_prompt": "docs/project_management/next/browser-integration/kickoff_prompts/B4-integ.md",
+      "depends_on": ["B4-code", "B4-test"],
+      "concurrent_with": []
+    }
+  ]
+}
