@@ -53,6 +53,7 @@ addopts = "-ra"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/gsd_browser"]
+include = ["src/gsd_browser/streaming/dashboard_static/**"]
 
 [tool.hatch.build.targets.sdist]
 include = [

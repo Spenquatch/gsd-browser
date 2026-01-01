@@ -22,6 +22,9 @@ venv/
 .poetry/
 uv.lock
 
+# Runtime logs
+security.log
+
 # OS/editor
 .DS_Store
 Thumbs.db

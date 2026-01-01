@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>GSD Browser Dashboard</title>
+    <link rel="stylesheet" href="/static/dashboard.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand">GSD Browser</div>
+      <div class="status">
+        <span id="connStatus" class="pill pill-muted">disconnected</span>
+        <span id="modeStatus" class="pill pill-muted">mode: —</span>
+        <span id="ctrlStatus" class="pill pill-muted">control: —</span>
+      </div>
+    </header>
+
+    <main class="layout">
+      <section class="panel">
+        <h2>Stream</h2>
+        <div class="hud">
+          <div class="hud-row">
+            <div class="hud-item"><span class="k">FPS</span> <span id="fps">—</span></div>
+            <div class="hud-item">
+              <span class="k">Server latency</span> <span id="serverLatency">—</span>
+            </div>
+            <div class="hud-item"><span class="k">Seq</span> <span id="seq">—</span></div>
+            <div class="hud-item">
+              <span class="k">Samples</span> <span id="samples">—</span>
+              <span id="samplePulse" class="pulse" aria-hidden="true"></span>
+            </div>
+          </div>
+        </div>
+        <div class="viewer">
+          <canvas id="canvas" width="1280" height="720"></canvas>
+          <img id="fallbackImg" alt="Stream frame" />
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>Control</h2>
+        <div class="control">
+          <div class="field">
+            <label for="apiKey">API key</label>
+            <input id="apiKey" type="password" placeholder="required when auth enabled" />
+          </div>
+          <div class="buttons">
+            <button id="btnConnect" class="primary">Connect</button>
+            <button id="btnTake" disabled>Take Control</button>
+            <button id="btnRelease" disabled>Release</button>
+            <button id="btnPause" disabled>Pause Agent</button>
+            <button id="btnResume" disabled>Resume</button>
+          </div>
+          <div class="meta">
+            <div><span class="k">Holder SID</span> <span id="holderSid">—</span></div>
+            <div><span class="k">Since</span> <span id="heldSince">—</span></div>
+            <div><span class="k">Paused</span> <span id="paused">—</span></div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <div id="toasts" class="toasts" aria-live="polite" aria-atomic="true"></div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="/static/dashboard.js"></script>
+  </body>
+</html>
+
