@@ -3,7 +3,7 @@
     {
       "id": "T1",
       "title": "Create repository skeleton",
-      "description": "Initialize mcp-template directory tree (src/, scripts/, tools/, docker/, docs/, tests/, config/) plus placeholder README and TEMPLATE_GUIDE referencing MCP_TEMPLATE_BLUEPRINT.md.",
+      "description": "Initialize gsd-browser directory tree (src/, scripts/, tools/, docker/, docs/, tests/, config/) plus placeholder README and TEMPLATE_GUIDE referencing GSD_BROWSER_BLUEPRINT.md.",
       "status": "done",
       "sessions": [
         {
@@ -29,7 +29,7 @@
     {
       "id": "T3",
       "title": "Configure Python project",
-      "description": "Author pyproject.toml for src/ layout, include dependencies, formatting/lint tools, and define console script entry point `mcp-template`.",
+      "description": "Author pyproject.toml for src/ layout, include dependencies, formatting/lint tools, and define console script entry point `gsd-browser`.",
       "status": "done",
       "sessions": [
         {
@@ -42,7 +42,7 @@
     {
       "id": "T4",
       "title": "Implement stub MCP server",
-      "description": "Create src/mcp_template package with __init__.py, cli.py exposing serve/diagnose/smoke commands, and main.py with placeholder stdio loop.",
+      "description": "Create src/gsd_browser package with __init__.py, cli.py exposing serve/diagnose/smoke commands, and main.py with placeholder stdio loop.",
       "status": "done",
       "sessions": [
         {

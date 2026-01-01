@@ -6,7 +6,7 @@
       "type": "code",
       "phase": "B1",
       "status": "done",
-      "description": "Port CDP streaming + screenshot sampler + /healthz plumbing into mcp-template.",
+      "description": "Port CDP streaming + screenshot sampler + /healthz plumbing into gsd-browser.",
       "references": [
         "docs/project_management/next/browser-integration/plan.md",
         "docs/project_management/next/browser-integration/B1-spec.md"

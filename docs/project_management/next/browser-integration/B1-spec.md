@@ -1,13 +1,13 @@
 # B1 – Streaming Core Spec
 
 ## Scope
-- Port CDP screencast pipeline from `web-agent` into `mcp-template`:
+- Port CDP screencast pipeline from `web-agent` into `gsd-browser`:
   - Env toggles `STREAMING_MODE` (`cdp`\|`screenshot`) and `STREAMING_QUALITY` (`low`/`med`/`high`).
   - Start/stop CDP screencast via Playwright, queue frames, attach metadata (timestamp, seq, session id).
   - Forward sampled frames to `ScreenshotManager` (store every Nth frame) and emit stats.
   - Provide `/healthz` JSON with frame latency, drop counts, sampler totals, last frame timestamps.
 - Maintain screenshot fallback: when `STREAMING_MODE=screenshot`, emit legacy `browser_update` payloads and bypass CDP namespace.
-- Integrate structured logging + metrics (Gauge/counter placeholders) into template logging utils.
+- Integrate structured logging + metrics (Gauge/counter placeholders) into `gsd-browser` logging utils.
 
 ## Acceptance Criteria
 1. Template CLI accepts env toggles, streams frames via Socket.IO namespace `/stream` in CDP mode, and falls back to screenshot updates otherwise.

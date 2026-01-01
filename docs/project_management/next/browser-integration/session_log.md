@@ -30,7 +30,7 @@ Use this log for START/END entries only. Template:
 - Timestamp: 2026-01-01T22:10:15Z
 - Role: test
 - Worktree: wt/bi-b1-streaming-test
-- Commands executed: (in mcp-template/tests) uv run ruff format --check (pass); (in mcp-template) uv run pytest tests/smoke/test_streaming.py (pass; 3 skipped until streaming code lands)
+- Commands executed: (in gsd-browser/tests) uv run ruff format --check (pass); (in gsd-browser) uv run pytest tests/smoke/test_streaming.py (pass; 3 skipped until streaming code lands)
 - Result: pass
 - Blockers/next steps: B1-code needs to land streaming settings, ScreenshotManager, and /healthz so the new tests run assertions instead of skipping.
 
@@ -60,6 +60,6 @@ Use this log for START/END entries only. Template:
 - Timestamp: 2026-01-01T22:38:39Z
 - Role: integration
 - Worktree: wt/bi-b1-streaming-integ
-- Commands executed: (in mcp-template) uv run ruff format --check (pass); uv run ruff check (pass); uv run pytest (pass; 4 passed); make smoke (pass)
+- Commands executed: (in gsd-browser) uv run ruff format --check (pass); uv run ruff check (pass); uv run pytest (pass; 4 passed); make smoke (pass)
 - Result: pass
 - Blockers/next steps: CDP start/stop + screenshot fallback core is implemented and /healthz returns 200 in both STREAMING_MODE=cdp and STREAMING_MODE=screenshot; end-to-end CDP screencast requires wiring a real Playwright Page into CdpScreencastStreamer.start (future triads).

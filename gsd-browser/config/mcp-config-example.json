@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "gsd-browser": {
+      "type": "stdio",
+      "command": "gsd-browser",
+      "env": {
+        "ANTHROPIC_API_KEY": "${ANTHROPIC_API_KEY}"
+      },
+      "description": "GSD Browser MCP server"
+    }
+  }
+}
