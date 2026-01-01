@@ -85,3 +85,11 @@ Use this log for START/END entries only. Template:
 - Worktree: wt/bi-b2-dashboard-code
 - Commands planned: uv run ruff format --check; uv run ruff check
 - Notes: Local repo has no upstream for feat/browser-integration (origin only has main), so git pull --ff-only cannot run as written.
+
+## B2-code END
+- Timestamp: 2026-01-01T23:57:57Z
+- Role: code
+- Worktree: wt/bi-b2-dashboard-code
+- Commands executed: (in gsd-browser) uv run ruff format --check (pass); uv run ruff check (pass)
+- Result: pass
+- Blockers/next steps: Merge bi-b2-dashboard-code with bi-b2-dashboard-test in B2-integ; run full suite and telemetry script.
