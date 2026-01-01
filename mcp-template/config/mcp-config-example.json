@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "mcp-template": {
+      "type": "stdio",
+      "command": "mcp-template",
+      "env": {
+        "ANTHROPIC_API_KEY": "${ANTHROPIC_API_KEY}"
+      },
+      "description": "Reusable MCP template server"
+    }
+  }
+}

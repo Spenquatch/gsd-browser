@@ -1,0 +1,29 @@
+# Python artifacts
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+.pytest_cache/
+*.egg-info/
+build/
+dist/
+.eggs/
+.coverage
+htmlcov/
+.mypy_cache/
+.pyenv/
+.venv/
+venv/
+.env
+.env.*
+
+# Tooling
+.poetry/
+uv.lock
+
+# OS/editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/

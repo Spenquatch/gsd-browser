@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "mcp-template-ts": {
+      "type": "stdio",
+      "command": "mcp-template-ts",
+      "env": {
+        "ANTHROPIC_API_KEY": "${ANTHROPIC_API_KEY}"
+      },
+      "description": "Reusable MCP template server (TypeScript)"
+    }
+  }
+}

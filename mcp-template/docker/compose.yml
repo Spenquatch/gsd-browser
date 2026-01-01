@@ -1,0 +1,9 @@
+services:
+  mcp-template:
+    build: ..
+    environment:
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - MCP_TEMPLATE_MODEL=${MCP_TEMPLATE_MODEL:-claude-haiku-4-5}
+    ports:
+      - "5009:5009"
+    command: serve

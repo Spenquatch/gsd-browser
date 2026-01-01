@@ -1,0 +1,134 @@
+{
+  "tasks": [
+    {
+      "id": "T1",
+      "title": "Create repository skeleton",
+      "description": "Initialize mcp-template directory tree (src/, scripts/, tools/, docker/, docs/, tests/, config/) plus placeholder README and TEMPLATE_GUIDE referencing MCP_TEMPLATE_BLUEPRINT.md.",
+      "status": "done",
+      "sessions": [
+        {
+          "start": "2025-12-31T20:40:41+00:00",
+          "end": "2025-12-31T20:40:41+00:00",
+          "notes": "Created directory tree and placeholder README/TEMPLATE_GUIDE."
+        }
+      ]
+    },
+    {
+      "id": "T2",
+      "title": "Add boilerplate metadata files",
+      "description": "Create .gitignore, .env.example, config/mcp-config-example.json, and docs placeholders (SETUP.md, TROUBLESHOOTING.md, UPDATING.md).",
+      "status": "done",
+      "sessions": [
+        {
+          "start": "2025-12-31T20:44:31+00:00",
+          "end": "2025-12-31T20:44:52+00:00",
+          "notes": "Added .gitignore, .env.example, config template, and docs placeholders."
+        }
+      ]
+    },
+    {
+      "id": "T3",
+      "title": "Configure Python project",
+      "description": "Author pyproject.toml for src/ layout, include dependencies, formatting/lint tools, and define console script entry point `mcp-template`.",
+      "status": "done",
+      "sessions": [
+        {
+          "start": "2025-12-31T20:45:06+00:00",
+          "end": "2025-12-31T20:45:18+00:00",
+          "notes": "Created pyproject.toml with build metadata, deps, entry point, and tooling config."
+        }
+      ]
+    },
+    {
+      "id": "T4",
+      "title": "Implement stub MCP server",
+      "description": "Create src/mcp_template package with __init__.py, cli.py exposing serve/diagnose/smoke commands, and main.py with placeholder stdio loop.",
+      "status": "done",
+      "sessions": [
+        {
+          "start": "2025-12-31T20:45:32+00:00",
+          "end": "2025-12-31T20:45:50+00:00",
+          "notes": "Added __init__.py, Typer CLI with serve/diagnose/smoke, and placeholder stdio main loop."
+        }
+      ]
+    },
+    {
+      "id": "T5",
+      "title": "Configuration system",
+      "description": "Add config.py (dataclass/pydantic), implement env/CLI loading precedence, schema validation, and script to print MCP config snippet.",
+      "status": "done",
+      "sessions": [
+        {
+          "start": "2025-12-31T20:50:52+00:00",
+          "end": "2025-12-31T20:51:26+00:00",
+          "notes": "Added pydantic Settings loader, wired CLI to load config, and created print-mcp-config script."
+        }
+      ]
+    },
+    {
+      "id": "T6",
+      "title": "Local developer tooling scripts",
+      "description": "Write scripts/run-local.sh, scripts/diagnose.sh, scripts/smoke-test.sh, and scripts/check-mcp-config.sh with portability improvements.",
+      "status": "done",
+      "sessions": [
+        {
+          "start": "2025-12-31T20:51:26+00:00",
+          "end": "2025-12-31T20:52:07+00:00",
+          "notes": "Added run-local, diagnose, smoke-test, and check-mcp-config scripts with portability improvements."
+        }
+      ]
+    },
+    {
+      "id": "T7",
+      "title": "pipx-focused installer suite",
+      "description": "Implement tools/install.sh/upgrade.sh/uninstall.sh using pipx, manifest tracking, dependency checks, and cleanup routines.",
+      "status": "done",
+      "sessions": [
+        {
+          "start": "2025-12-31T20:52:07+00:00",
+          "end": "2025-12-31T20:52:44+00:00",
+          "notes": "Created pipx install/upgrade/uninstall scripts with manifest tracking."
+        }
+      ]
+    },
+    {
+      "id": "T8",
+      "title": "Docker packaging",
+      "description": "Author docker/Dockerfile, docker/entrypoint.sh, and optional compose file mirroring claude-quickstarts pattern.",
+      "status": "done",
+      "sessions": [
+        {
+          "start": "2025-12-31T20:54:40+00:00",
+          "end": "2025-12-31T20:54:58+00:00",
+          "notes": "Added Dockerfile, entrypoint, and compose configuration."
+        }
+      ]
+    },
+    {
+      "id": "T9",
+      "title": "Diagnostics and automated tests",
+      "description": "Create tests/smoke suite validating stdio handshake, CLI commands, and include Makefile/Taskfile targets to run lint/test/smoke.",
+      "status": "done",
+      "sessions": [
+        {
+          "start": "2025-12-31T20:54:58+00:00",
+          "end": "2025-12-31T20:55:17+00:00",
+          "notes": "Added smoke pytest, CLI round-trip script integration, and Makefile targets for dev/lint/test/smoke/docker."
+        }
+      ]
+    },
+    {
+      "id": "T10",
+      "title": "Documentation pass",
+      "description": "Fill README, TEMPLATE_GUIDE, SETUP, TROUBLESHOOTING, and UPDATING docs with clear install/upgrade/uninstall/docker guidance.",
+      "status": "done",
+      "sessions": [
+        {
+          "start": "2025-12-31T20:55:25+00:00",
+          "end": "2025-12-31T20:55:53+00:00",
+          "notes": "Expanded README, Template Guide, and docs (SETUP/TROUBLESHOOTING/UPDATING) with actionable instructions."
+        }
+      ]
+    }
+  ]
+}
