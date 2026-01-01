@@ -40,3 +40,11 @@ Use this log for START/END entries only. Template:
 - Worktree: wt/bi-b1-streaming-code
 - Commands planned: uv run ruff format --check; uv run ruff check
 - Notes: Implement B1 CDP/screenshot streaming core per spec; do not edit docs from worktree.
+
+## B1-code END
+- Timestamp: 2026-01-01T22:14:39Z
+- Role: code
+- Worktree: wt/bi-b1-streaming-code
+- Commands executed: uv run ruff format --check (13 files already formatted); uv run ruff check (All checks passed!)
+- Result: pass
+- Blockers/next steps: Merge with B1-test in B1-integ; wire CDP start/stop to a concrete Playwright session and validate end-to-end streaming.
