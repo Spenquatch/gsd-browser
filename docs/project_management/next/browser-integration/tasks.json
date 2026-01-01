@@ -43,7 +43,7 @@
       "name": "Streaming core tests",
       "type": "test",
       "phase": "B1",
-      "status": "in_progress",
+      "status": "done",
       "description": "Author pytest coverage for env helpers and screenshot filtering; add health endpoint checks.",
       "references": [
         "docs/project_management/next/browser-integration/plan.md",
