@@ -78,3 +78,10 @@ Use this log for START/END entries only. Template:
 - Commands executed: (in gsd-browser) uv run ruff format --check (pass); uv run pytest tests/dashboard/test_security.py (pass; 6 skipped pending B2-code)
 - Result: pass
 - Blockers/next steps: Tests are scaffolded but skipped until B2-code lands `ensure_authenticated`, nonce helpers, rate limiter, and `scripts/measure_stream_latency.py`.
+
+## B2-code START
+- Timestamp: 2026-01-01T23:55:54Z
+- Role: code
+- Worktree: wt/bi-b2-dashboard-code
+- Commands planned: uv run ruff format --check; uv run ruff check
+- Notes: Local repo has no upstream for feat/browser-integration (origin only has main), so git pull --ff-only cannot run as written.

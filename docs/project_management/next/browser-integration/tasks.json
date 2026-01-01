@@ -121,7 +121,7 @@
       "name": "Dashboard UI & security implementation",
       "type": "code",
       "phase": "B2",
-      "status": "pending",
+      "status": "in_progress",
       "description": "Port dashboard assets, Socket.IO control namespace, auth (API key, nonce, rate limiting).",
       "references": [
         "docs/project_management/next/browser-integration/plan.md",
