@@ -43,3 +43,6 @@ gsd-browser mcp-config --format json   # or toml
 ./scripts/print-mcp-config.py --format toml
 ```
 Copy the output into your Claude MCP settings file. The snippet is also stored at `config/mcp-config-example.json`.
+
+## Browser Streaming
+See `docs/STREAMING.md` for running the streaming server, the dashboard UI, and auth configuration.

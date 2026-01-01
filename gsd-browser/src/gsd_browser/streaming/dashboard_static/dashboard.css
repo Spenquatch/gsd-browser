@@ -1,0 +1,270 @@
+:root {
+  --bg: #0b1020;
+  --panel: rgba(255, 255, 255, 0.06);
+  --border: rgba(255, 255, 255, 0.12);
+  --text: rgba(255, 255, 255, 0.92);
+  --muted: rgba(255, 255, 255, 0.68);
+  --good: #25d5a1;
+  --warn: #ffd24d;
+  --bad: #ff5d5d;
+  --brand: #8fb6ff;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family:
+    ui-sans-serif,
+    system-ui,
+    -apple-system,
+    Segoe UI,
+    Roboto,
+    Helvetica,
+    Arial,
+    Apple Color Emoji,
+    Segoe UI Emoji;
+  background: radial-gradient(
+      1200px 700px at 20% 0%,
+      rgba(143, 182, 255, 0.18),
+      transparent 60%
+    ),
+    radial-gradient(900px 600px at 85% 10%, rgba(37, 213, 161, 0.12), transparent 55%),
+    var(--bg);
+  color: var(--text);
+}
+
+.topbar {
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--border);
+  background: rgba(0, 0, 0, 0.25);
+  backdrop-filter: blur(14px);
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.brand {
+  font-weight: 650;
+  letter-spacing: 0.2px;
+  color: var(--brand);
+}
+
+.status {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.pill {
+  border: 1px solid var(--border);
+  padding: 6px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  color: var(--muted);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.pill-good {
+  color: var(--good);
+  border-color: rgba(37, 213, 161, 0.4);
+}
+
+.pill-warn {
+  color: var(--warn);
+  border-color: rgba(255, 210, 77, 0.4);
+}
+
+.pill-bad {
+  color: var(--bad);
+  border-color: rgba(255, 93, 93, 0.45);
+}
+
+.pill-muted {
+  color: var(--muted);
+}
+
+.layout {
+  display: grid;
+  gap: 16px;
+  padding: 16px;
+  grid-template-columns: 1.65fr 1fr;
+}
+
+@media (max-width: 980px) {
+  .layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+.panel {
+  border: 1px solid var(--border);
+  background: var(--panel);
+  border-radius: 16px;
+  padding: 14px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35);
+  overflow: hidden;
+}
+
+h2 {
+  margin: 4px 0 12px 0;
+  font-size: 14px;
+  font-weight: 650;
+  color: rgba(255, 255, 255, 0.88);
+}
+
+.viewer {
+  width: 100%;
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+  overflow: hidden;
+  position: relative;
+}
+
+canvas,
+img#fallbackImg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+img#fallbackImg {
+  display: none;
+}
+
+.hud {
+  margin-bottom: 10px;
+}
+
+.hud-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.hud-item {
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(0, 0, 0, 0.22);
+  padding: 8px 10px;
+  border-radius: 12px;
+  font-size: 13px;
+}
+
+.k {
+  color: var(--muted);
+  font-weight: 600;
+  margin-right: 6px;
+}
+
+.pulse {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-left: 6px;
+  background: rgba(255, 255, 255, 0.12);
+  opacity: 0;
+  transform: scale(0.8);
+  transition:
+    opacity 240ms ease,
+    transform 240ms ease,
+    background 240ms ease;
+}
+
+.pulse.on {
+  opacity: 1;
+  transform: scale(1);
+  background: rgba(37, 213, 161, 0.9);
+}
+
+.control {
+  display: grid;
+  gap: 12px;
+}
+
+.field label {
+  display: block;
+  font-size: 12px;
+  color: var(--muted);
+  margin-bottom: 6px;
+}
+
+.field input {
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(0, 0, 0, 0.25);
+  color: var(--text);
+  outline: none;
+}
+
+.buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+button {
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text);
+  cursor: pointer;
+}
+
+button.primary {
+  border-color: rgba(143, 182, 255, 0.35);
+  background: rgba(143, 182, 255, 0.16);
+}
+
+button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.meta {
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  padding-top: 10px;
+  display: grid;
+  gap: 6px;
+  font-size: 13px;
+}
+
+.toasts {
+  position: fixed;
+  right: 14px;
+  bottom: 14px;
+  display: grid;
+  gap: 10px;
+  z-index: 50;
+  width: min(420px, calc(100vw - 28px));
+}
+
+.toast {
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(12px);
+  border-radius: 14px;
+  padding: 10px 12px;
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.88);
+}
+
+.toast.bad {
+  border-color: rgba(255, 93, 93, 0.35);
+}
+
+.toast.good {
+  border-color: rgba(37, 213, 161, 0.3);
+}
+
