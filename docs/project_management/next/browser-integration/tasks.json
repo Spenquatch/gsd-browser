@@ -159,7 +159,7 @@
       "name": "Dashboard security tests",
       "type": "test",
       "phase": "B2",
-      "status": "in_progress",
+      "status": "done",
       "description": "Add tests for auth, nonce validation, rate limiting, telemetry script.",
       "references": [
         "docs/project_management/next/browser-integration/plan.md",
