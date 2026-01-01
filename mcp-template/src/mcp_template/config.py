@@ -62,7 +62,7 @@ def _build_env_mapping(env: Mapping[str, str] | None = None) -> dict[str, str]:
 
 
 def load_settings(
-    *, env: Mapping[str, str] | None = None, env_file: str | None = ".env", strict: bool = True
+    *, env: Mapping[str, str] | None = None, env_file: str | None = ".env", strict: bool = False
 ) -> Settings:
     """Load settings by merging .env (if present) and environment variables."""
     if env_file:
@@ -77,17 +77,19 @@ def load_settings(
     streaming_mode = normalize_streaming_mode(merged.get("STREAMING_MODE"))
     streaming_quality = normalize_streaming_quality(merged.get("STREAMING_QUALITY"))
     try:
-        return Settings.model_validate(
-            {
-                "ANTHROPIC_API_KEY": anthropic_api_key,
-                "MCP_TEMPLATE_MODEL": merged.get("MCP_TEMPLATE_MODEL"),
-                "LOG_LEVEL": merged.get("LOG_LEVEL"),
-                "MCP_TEMPLATE_JSON_LOGS": merged.get("MCP_TEMPLATE_JSON_LOGS"),
-                "STREAMING_MODE": streaming_mode,
-                "STREAMING_QUALITY": streaming_quality,
-            },
-            strict=strict,
-        )
+        payload: dict[str, object] = {
+            "ANTHROPIC_API_KEY": anthropic_api_key,
+            "STREAMING_MODE": streaming_mode,
+            "STREAMING_QUALITY": streaming_quality,
+        }
+        if merged.get("MCP_TEMPLATE_MODEL") is not None:
+            payload["MCP_TEMPLATE_MODEL"] = merged["MCP_TEMPLATE_MODEL"]
+        if merged.get("LOG_LEVEL") is not None:
+            payload["LOG_LEVEL"] = merged["LOG_LEVEL"]
+        if merged.get("MCP_TEMPLATE_JSON_LOGS") is not None:
+            payload["MCP_TEMPLATE_JSON_LOGS"] = merged["MCP_TEMPLATE_JSON_LOGS"]
+
+        return Settings.model_validate(payload, strict=strict)
     except ValidationError as exc:
         raise RuntimeError(f"Invalid MCP template configuration: {exc}") from exc
 

@@ -64,23 +64,23 @@ def test_streaming_env_defaults_and_invalid_input_fallback() -> None:
     if not hasattr(settings, "streaming_mode") or not hasattr(settings, "streaming_quality"):
         pytest.skip("Streaming settings not yet implemented in mcp_template.config.Settings")
 
-    default_mode = getattr(settings, "streaming_mode")
-    default_quality = getattr(settings, "streaming_quality")
+    default_mode = settings.streaming_mode
+    default_quality = settings.streaming_quality
 
     assert default_mode in {"cdp", "screenshot"}
     assert default_quality in {"low", "med", "high"}
 
     settings = load_settings(env={**base_env, "STREAMING_MODE": " CDP "}, env_file=None)
-    assert getattr(settings, "streaming_mode") == "cdp"
+    assert settings.streaming_mode == "cdp"
 
     settings = load_settings(env={**base_env, "STREAMING_QUALITY": " HIGH "}, env_file=None)
-    assert getattr(settings, "streaming_quality") == "high"
+    assert settings.streaming_quality == "high"
 
     settings = load_settings(env={**base_env, "STREAMING_MODE": "nope"}, env_file=None)
-    assert getattr(settings, "streaming_mode") == default_mode
+    assert settings.streaming_mode == default_mode
 
     settings = load_settings(env={**base_env, "STREAMING_QUALITY": "nope"}, env_file=None)
-    assert getattr(settings, "streaming_quality") == default_quality
+    assert settings.streaming_quality == default_quality
 
 
 def test_screenshot_manager_get_screenshots_filters() -> None:
@@ -137,12 +137,31 @@ def _healthz_payload() -> Mapping[str, Any]:
         "mcp_template.log_server",
         "mcp_template.server",
         "mcp_template.healthz",
+        "mcp_template.streaming.server",
     ]
     for module_name in candidates:
         try:
             module = importlib.import_module(module_name)
         except ImportError:
             continue
+
+        create_streaming_app = getattr(module, "create_streaming_app", None)
+        if callable(create_streaming_app):
+            from fastapi.testclient import TestClient
+
+            base_env = {
+                "ANTHROPIC_API_KEY": "test",
+                "MCP_TEMPLATE_MODEL": "claude-haiku-4-5",
+                "LOG_LEVEL": "INFO",
+                "MCP_TEMPLATE_JSON_LOGS": False,
+            }
+            runtime = create_streaming_app(settings=load_settings(env=base_env, env_file=None))
+            client = TestClient(runtime.api_app)
+            resp = client.get("/healthz")
+            assert resp.status_code == 200
+            data = resp.json()
+            assert isinstance(data, Mapping)
+            return data
 
         app = getattr(module, "app", None)
         if app is not None and hasattr(app, "test_client"):
@@ -172,7 +191,7 @@ def _healthz_payload() -> Mapping[str, Any]:
                 return data
 
     pytest.skip(
-        "No /healthz handler exposed yet (expected under mcp_template.log_server/server/healthz)"
+        "No /healthz handler exposed yet (expected under mcp_template.streaming.server or similar)"
     )
 
 
