@@ -1,4 +1,5 @@
 """Minimal placeholder MCP stdio server with structured logging."""
+
 from __future__ import annotations
 
 import logging

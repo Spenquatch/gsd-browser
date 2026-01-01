@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Print MCP configuration snippet for this template."""
+
 from __future__ import annotations
 
 import argparse
