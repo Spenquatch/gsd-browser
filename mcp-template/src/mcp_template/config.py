@@ -1,13 +1,21 @@
 """Configuration loader for the MCP template."""
+
 from __future__ import annotations
 
 import json
 import os
+from collections.abc import Mapping
 from pathlib import Path
-from typing import Mapping
 
 from dotenv import load_dotenv
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
+
+from .streaming.env import (
+    StreamingMode,
+    StreamingQuality,
+    normalize_streaming_mode,
+    normalize_streaming_quality,
+)
 
 
 class Settings(BaseModel):
@@ -17,6 +25,8 @@ class Settings(BaseModel):
     model: str = Field("claude-haiku-4-5", alias="MCP_TEMPLATE_MODEL")
     log_level: str = Field("INFO", alias="LOG_LEVEL")
     json_logs: bool = Field(False, alias="MCP_TEMPLATE_JSON_LOGS")
+    streaming_mode: StreamingMode = Field("cdp", alias="STREAMING_MODE")
+    streaming_quality: StreamingQuality = Field("med", alias="STREAMING_QUALITY")
 
     model_config = ConfigDict(populate_by_name=True)
 
@@ -61,13 +71,20 @@ def load_settings(
             load_dotenv(env_path, override=False)
 
     merged = _build_env_mapping(env)
+    anthropic_api_key = merged.get("ANTHROPIC_API_KEY")
+    if not anthropic_api_key and not strict:
+        anthropic_api_key = ""
+    streaming_mode = normalize_streaming_mode(merged.get("STREAMING_MODE"))
+    streaming_quality = normalize_streaming_quality(merged.get("STREAMING_QUALITY"))
     try:
         return Settings.model_validate(
             {
-                "ANTHROPIC_API_KEY": merged.get("ANTHROPIC_API_KEY"),
+                "ANTHROPIC_API_KEY": anthropic_api_key,
                 "MCP_TEMPLATE_MODEL": merged.get("MCP_TEMPLATE_MODEL"),
                 "LOG_LEVEL": merged.get("LOG_LEVEL"),
                 "MCP_TEMPLATE_JSON_LOGS": merged.get("MCP_TEMPLATE_JSON_LOGS"),
+                "STREAMING_MODE": streaming_mode,
+                "STREAMING_QUALITY": streaming_quality,
             },
             strict=strict,
         )

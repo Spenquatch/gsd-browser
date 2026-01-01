@@ -1,19 +1,21 @@
 """Logging helpers for the MCP template."""
+
 from __future__ import annotations
 
 import json
 import logging
 import sys
-from datetime import datetime, timezone
-from typing import Any, Dict
+from datetime import UTC, datetime
+from threading import Lock
+from typing import Any
 
 
 class JsonFormatter(logging.Formatter):
     """Simple JSON formatter for structured logs."""
 
     def format(self, record: logging.LogRecord) -> str:
-        payload: Dict[str, Any] = {
-            "ts": datetime.fromtimestamp(record.created, timezone.utc).isoformat(),
+        payload: dict[str, Any] = {
+            "ts": datetime.fromtimestamp(record.created, UTC).isoformat(),
             "level": record.levelname,
             "logger": record.name,
             "message": record.getMessage(),
@@ -60,13 +62,47 @@ def setup_logging(level: str = "INFO", *, json_logs: bool = False) -> None:
     if json_logs:
         handler.setFormatter(JsonFormatter())
     else:
-        handler.setFormatter(
-            logging.Formatter("[%(levelname)s] %(name)s: %(message)s")
-        )
+        handler.setFormatter(logging.Formatter("[%(levelname)s] %(name)s: %(message)s"))
     handlers.append(handler)
 
     normalized_level = getattr(logging, level.upper(), logging.INFO)
     logging.basicConfig(level=normalized_level, handlers=handlers, force=True)
 
 
-__all__ = ["setup_logging"]
+class Counter:
+    """In-memory counter placeholder (for /healthz style metrics)."""
+
+    def __init__(self, name: str) -> None:
+        self.name = name
+        self._lock = Lock()
+        self._value = 0
+
+    def inc(self, value: int = 1) -> int:
+        with self._lock:
+            self._value += value
+            return self._value
+
+    def get(self) -> int:
+        with self._lock:
+            return self._value
+
+
+class Gauge:
+    """In-memory gauge placeholder (for /healthz style metrics)."""
+
+    def __init__(self, name: str) -> None:
+        self.name = name
+        self._lock = Lock()
+        self._value: float | None = None
+
+    def set(self, value: float | None) -> float | None:
+        with self._lock:
+            self._value = value
+            return self._value
+
+    def get(self) -> float | None:
+        with self._lock:
+            return self._value
+
+
+__all__ = ["Counter", "Gauge", "setup_logging"]
