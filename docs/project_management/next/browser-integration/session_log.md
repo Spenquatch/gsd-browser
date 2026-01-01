@@ -63,3 +63,10 @@ Use this log for START/END entries only. Template:
 - Commands executed: (in gsd-browser) uv run ruff format --check (pass); uv run ruff check (pass); uv run pytest (pass; 4 passed); make smoke (pass)
 - Result: pass
 - Blockers/next steps: CDP start/stop + screenshot fallback core is implemented and /healthz returns 200 in both STREAMING_MODE=cdp and STREAMING_MODE=screenshot; end-to-end CDP screencast requires wiring a real Playwright Page into CdpScreencastStreamer.start (future triads).
+
+## B2-test START
+- Timestamp: 2026-01-01T23:30:49Z
+- Role: test
+- Worktree: wt/bi-b2-dashboard-test
+- Commands planned: uv run ruff format --check; uv run pytest tests/dashboard/test_security.py
+- Notes: Local repo has no upstream for feat/browser-integration (origin only has main), so git pull --ff-only cannot run as written.
