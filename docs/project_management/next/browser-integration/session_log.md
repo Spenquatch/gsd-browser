@@ -55,3 +55,11 @@ Use this log for START/END entries only. Template:
 - Worktree: wt/bi-b1-streaming-integ
 - Commands planned: uv run ruff format --check; uv run ruff check; uv run pytest; make smoke
 - Notes: Local repo has no upstream for feat/browser-integration (origin only has main), so git pull --ff-only cannot run as written.
+
+## B1-integ END
+- Timestamp: 2026-01-01T22:38:39Z
+- Role: integration
+- Worktree: wt/bi-b1-streaming-integ
+- Commands executed: (in mcp-template) uv run ruff format --check (pass); uv run ruff check (pass); uv run pytest (pass; 4 passed); make smoke (pass)
+- Result: pass
+- Blockers/next steps: CDP start/stop + screenshot fallback core is implemented and /healthz returns 200 in both STREAMING_MODE=cdp and STREAMING_MODE=screenshot; end-to-end CDP screencast requires wiring a real Playwright Page into CdpScreencastStreamer.start (future triads).
