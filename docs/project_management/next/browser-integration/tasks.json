@@ -5,7 +5,7 @@
       "name": "Streaming core implementation",
       "type": "code",
       "phase": "B1",
-      "status": "pending",
+      "status": "in_progress",
       "description": "Port CDP streaming + screenshot sampler + /healthz plumbing into mcp-template.",
       "references": [
         "docs/project_management/next/browser-integration/plan.md",
