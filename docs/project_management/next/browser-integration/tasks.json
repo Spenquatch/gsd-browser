@@ -197,7 +197,7 @@
       "name": "Dashboard integration",
       "type": "integration",
       "phase": "B2",
-      "status": "pending",
+      "status": "in_progress",
       "description": "Merge dashboard code/tests, verify auth + telemetry end-to-end.",
       "references": [
         "docs/project_management/next/browser-integration/plan.md",

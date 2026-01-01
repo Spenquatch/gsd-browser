@@ -93,3 +93,10 @@ Use this log for START/END entries only. Template:
 - Commands executed: (in gsd-browser) uv run ruff format --check (pass); uv run ruff check (pass)
 - Result: pass
 - Blockers/next steps: Merge bi-b2-dashboard-code with bi-b2-dashboard-test in B2-integ; run full suite and telemetry script.
+
+## B2-integ START
+- Timestamp: 2026-01-01T23:58:35Z
+- Role: integration
+- Worktree: wt/bi-b2-dashboard-integ
+- Commands planned: uv run ruff format --check; uv run ruff check; uv run pytest; make smoke; uv run python scripts/measure_stream_latency.py --duration 10 --mode cdp
+- Notes: Local repo has no upstream for feat/browser-integration (origin only has main), so git pull --ff-only cannot run as written.
