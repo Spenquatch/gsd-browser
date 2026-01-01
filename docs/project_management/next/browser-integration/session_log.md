@@ -48,3 +48,10 @@ Use this log for START/END entries only. Template:
 - Commands executed: uv run ruff format --check (13 files already formatted); uv run ruff check (All checks passed!)
 - Result: pass
 - Blockers/next steps: Merge with B1-test in B1-integ; wire CDP start/stop to a concrete Playwright session and validate end-to-end streaming.
+
+## B1-integ START
+- Timestamp: 2026-01-01T22:23:23Z
+- Role: integration
+- Worktree: wt/bi-b1-streaming-integ
+- Commands planned: uv run ruff format --check; uv run ruff check; uv run pytest; make smoke
+- Notes: Local repo has no upstream for feat/browser-integration (origin only has main), so git pull --ff-only cannot run as written.
