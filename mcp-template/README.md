@@ -21,6 +21,19 @@ make dev        # sets up .venv (uv-backed)
 ./scripts/run-local.sh
 ```
 
+## Browser Streaming
+The template includes a Socket.IO + FastAPI streaming server for browser frames and a `/healthz` endpoint.
+
+```bash
+# Serve Socket.IO at /stream and /healthz on the same port
+STREAMING_MODE=cdp STREAMING_QUALITY=med mcp-template serve-browser --host 127.0.0.1 --port 5009
+curl -sS http://127.0.0.1:5009/healthz
+```
+
+Environment toggles:
+- `STREAMING_MODE`: `cdp` or `screenshot` (default: `cdp`)
+- `STREAMING_QUALITY`: `low`, `med`, or `high` (default: `med`)
+
 ## pipx Installation
 ```bash
 ./tools/install.sh
