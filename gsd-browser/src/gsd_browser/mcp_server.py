@@ -95,7 +95,15 @@ async def web_eval_agent(
             context = await browser.new_context(storage_state=storage_state)
             page = await context.new_page()
 
+            streaming_runtime = runtime.dashboard().runtime if runtime.dashboard() else None
+            cdp_started = False
+            if streaming_runtime and streaming_runtime.stats.streaming_mode == "cdp":
+                await streaming_runtime.cdp_streamer.start(page=page, session_id=session_id)
+                cdp_started = True
+
             await page.goto(normalized_url, wait_until="domcontentloaded")
+            if cdp_started:
+                await page.wait_for_timeout(500)
             title = await page.title()
             screenshot_bytes = await page.screenshot(full_page=True, type="png")
 
@@ -109,6 +117,18 @@ async def web_eval_agent(
                 url=normalized_url,
                 step=1,
             )
+
+            if streaming_runtime and streaming_runtime.stats.streaming_mode == "screenshot":
+                await streaming_runtime.emit_browser_update(
+                    session_id=session_id,
+                    image_bytes=screenshot_bytes,
+                    mime_type="image/png",
+                    timestamp=datetime.now(UTC).timestamp(),
+                    metadata={"tool_call_id": tool_call_id, "title": title},
+                )
+
+            if cdp_started and streaming_runtime:
+                await streaming_runtime.cdp_streamer.stop()
 
             await context.close()
             await browser.close()
@@ -128,6 +148,12 @@ async def web_eval_agent(
         ]
     except Exception as exc:  # noqa: BLE001
         tb = traceback.format_exc()
+        streaming_runtime = runtime.dashboard().runtime if runtime.dashboard() else None
+        if streaming_runtime and streaming_runtime.stats.streaming_mode == "cdp":
+            try:
+                await streaming_runtime.cdp_streamer.stop()
+            except Exception:  # noqa: BLE001
+                logger.exception("Failed stopping CDP screencast after web_eval_agent error")
         runtime.screenshots.record_screenshot(
             screenshot_type="agent_step",
             image_bytes=None,
