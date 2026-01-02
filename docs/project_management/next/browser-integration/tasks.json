@@ -313,7 +313,7 @@
       "name": "MCP tooling integration",
       "type": "integration",
       "phase": "B3",
-      "status": "pending",
+      "status": "in_progress",
       "description": "Merge MCP tool code/tests, verify scripts and docs.",
       "references": [
         "docs/project_management/next/browser-integration/plan.md",
