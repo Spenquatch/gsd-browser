@@ -65,7 +65,7 @@ class StreamingStats:
                 "frames_received": self.frames_received,
                 "frames_emitted": self.frames_emitted,
                 "sampler_totals": {
-                    "frames_seen": self.sampler_frames_seen,
-                    "frames_stored": self.sampler_frames_stored,
+                    "seen": self.sampler_frames_seen,
+                    "stored": self.sampler_frames_stored,
                 },
             }
