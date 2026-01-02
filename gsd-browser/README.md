@@ -22,6 +22,9 @@ make dev        # sets up .venv (uv-backed)
 ./scripts/run-local.sh
 ```
 
+## .env Loading
+`gsd-browser` loads `.env` from the current working directory (if present) and then reads shell env vars (shell wins). If your MCP host starts the server from a different directory, set `GSD_BROWSER_ENV_FILE=/absolute/path/to/.env`.
+
 ## LLM Providers (browser-use)
 `gsd-browser` can run browser-use against either a cloud LLM (default: Anthropic) or a local OSS LLM (Ollama).
 
@@ -71,6 +74,12 @@ or use the helper script:
 ./scripts/print-mcp-config.py --format json
 ```
 Paste the output into your Claude MCP settings.
+
+Notes:
+- The MCP server is started via `gsd-browser serve` (the generated snippet includes `args: ["serve"]`).
+- If you’re running from a checkout and `gsd-browser` isn’t on your PATH, run `source .venv/bin/activate` or use `uv run gsd-browser mcp-config --format json`.
+- After updating `~/.claude.json` (or a project `.claude.json`), restart Claude so it picks up the new MCP server entry.
+- To sanity-check your config file, run `./scripts/check-mcp-config.sh`.
 
 ## MCP Tools
 Once configured as an MCP server, Claude can call:

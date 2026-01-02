@@ -3,7 +3,10 @@
     "gsd-browser": {
       "type": "stdio",
       "command": "gsd-browser",
+      "args": ["serve"],
       "env": {
+        "GSD_BROWSER_LLM_PROVIDER": "anthropic",
+        "GSD_BROWSER_MODEL": "claude-haiku-4-5",
         "ANTHROPIC_API_KEY": "${ANTHROPIC_API_KEY}"
       },
       "description": "GSD Browser MCP server"

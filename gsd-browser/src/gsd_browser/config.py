@@ -40,16 +40,18 @@ class Settings(BaseModel):
 
     def _mcp_env(self) -> dict[str, str]:
         env: dict[str, str] = {
-            "GSD_BROWSER_LLM_PROVIDER": "${GSD_BROWSER_LLM_PROVIDER}",
-            "GSD_BROWSER_MODEL": "${GSD_BROWSER_MODEL}",
+            "GSD_BROWSER_LLM_PROVIDER": self.llm_provider,
+            "GSD_BROWSER_MODEL": self.model,
         }
 
         if self.llm_provider == "ollama":
-            env["OLLAMA_HOST"] = "${OLLAMA_HOST}"
+            env["OLLAMA_HOST"] = self.ollama_host
         elif self.llm_provider == "openai":
             env["OPENAI_API_KEY"] = "${OPENAI_API_KEY}"
         elif self.llm_provider == "chatbrowseruse":
             env["BROWSER_USE_API_KEY"] = "${BROWSER_USE_API_KEY}"
+            if self.browser_use_llm_url:
+                env["BROWSER_USE_LLM_URL"] = self.browser_use_llm_url
         else:
             env["ANTHROPIC_API_KEY"] = "${ANTHROPIC_API_KEY}"
 
@@ -62,6 +64,7 @@ class Settings(BaseModel):
                 "gsd-browser": {
                     "type": "stdio",
                     "command": "gsd-browser",
+                    "args": ["serve"],
                     "env": self._mcp_env(),
                     "description": "GSD Browser MCP server",
                 }
@@ -75,6 +78,7 @@ class Settings(BaseModel):
         return (
             "[mcp_servers.gsd-browser]\n"
             'command = "gsd-browser"\n'
+            'args = ["serve"]\n'
             f"env = {{ {env_items} }}\n"
             'description = "GSD Browser MCP server"\n'
         )
@@ -94,8 +98,20 @@ def load_settings(
     strict: bool = False,
 ) -> Settings:
     """Load settings by merging .env (if present) and environment variables."""
-    if env_file:
-        env_path = Path(env_file)
+    selected_env_file = env_file
+    # Allow overriding the default ".env" location (useful when the server is launched from a
+    # different working directory, e.g. from an MCP host like Claude).
+    if env_file == ".env":
+        override_env_file = None
+        if env and env.get("GSD_BROWSER_ENV_FILE"):
+            override_env_file = env.get("GSD_BROWSER_ENV_FILE")
+        elif os.environ.get("GSD_BROWSER_ENV_FILE"):
+            override_env_file = os.environ.get("GSD_BROWSER_ENV_FILE")
+        if override_env_file:
+            selected_env_file = override_env_file
+
+    if selected_env_file:
+        env_path = Path(selected_env_file).expanduser()
         if env_path.exists():
             load_dotenv(env_path, override=False)
 

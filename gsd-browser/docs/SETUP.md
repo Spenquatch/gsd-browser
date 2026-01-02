@@ -16,6 +16,13 @@ cp .env.example .env
 vim .env          # set LLM provider + API keys, LOG_LEVEL, GSD_BROWSER_JSON_LOGS, etc.
 ./scripts/run-local.sh
 ```
+`./scripts/run-local.sh` runs the MCP stdio server (`serve`) from a checkout without a global install.
+
+## .env Loading
+By default, `gsd-browser` loads a `.env` file from the current working directory (if present), and then reads the process environment (shell env vars take precedence).
+
+If your MCP host starts the server from a different working directory (common), set:
+- `GSD_BROWSER_ENV_FILE=/absolute/path/to/your/.env`
 
 ## LLM Provider Configuration
 `gsd-browser` supports both cloud providers and a local OSS path via Ollama.
@@ -62,6 +69,11 @@ gsd-browser mcp-config --format json   # or toml
 ./scripts/print-mcp-config.py --format toml
 ```
 Copy the output into your Claude MCP settings file. The snippet is also stored at `config/mcp-config-example.json`.
+
+Notes:
+- The MCP server command is `gsd-browser serve` (the snippet includes `args: ["serve"]`).
+- If `gsd-browser` isn’t on your PATH yet, run `source .venv/bin/activate` or use `uv run gsd-browser mcp-config --format json`.
+- Restart Claude after editing `~/.claude.json` (or a project `.claude.json`).
 
 ## MCP Tools
 After Claude is connected to `gsd-browser`, it can call:
