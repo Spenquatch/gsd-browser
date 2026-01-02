@@ -155,7 +155,10 @@ class CdpScreencastStreamer:
             await self._sio.emit("frame", payload, namespace=self._namespace)
             self._stats.note_frame_emitted(emitted_ts=emitted_ts, latency_ms=latency_ms)
 
-            if frame.seq % self._sample_every_n == 0 and frame.data_base64:
+            should_sample = bool(frame.data_base64) and (
+                frame.seq == 1 or frame.seq % self._sample_every_n == 0
+            )
+            if should_sample:
                 self._stats.note_sampler_seen()
                 try:
                     image_bytes = base64.b64decode(frame.data_base64)
