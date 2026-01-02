@@ -132,6 +132,10 @@ def test_mcp_get_screenshots_enforces_last_n_max_20_and_metadata_only_mode(
 def test_cli_diagnostics_smoke_messages() -> None:
     runner = CliRunner()
 
+    result = runner.invoke(app, ["--version"], env={"ANTHROPIC_API_KEY": "x"})
+    assert result.exit_code == 0
+    assert "gsd-browser v" in result.stdout
+
     result = runner.invoke(app, ["mcp-config", "--format", "json"], env={"ANTHROPIC_API_KEY": "x"})
     assert result.exit_code == 0
     assert '"mcpServers"' in result.stdout

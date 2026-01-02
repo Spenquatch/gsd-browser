@@ -65,9 +65,9 @@ PY
 python3 - <<PY
 from pathlib import Path
 import json
-from datetime import datetime
+from datetime import UTC, datetime
 manifest = {
-    "installed_at": datetime.utcnow().isoformat() + "Z",
+    "installed_at": datetime.now(UTC).isoformat(),
     "version": "$VERSION",
     "source": "$ROOT_DIR",
     "pipx_venv": "$PIPX_ENV",

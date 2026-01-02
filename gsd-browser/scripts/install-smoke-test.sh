@@ -35,7 +35,8 @@ if [ -x "$HOME/.local/bin/playwright" ]; then
 fi
 
 TMP_DIR="$(mktemp -d)"
-REPORT_PATH="$TMP_DIR/gsd-browser-install-smoke-report.json"
+STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
+REPORT_PATH="${GSD_BROWSER_INSTALL_SMOKE_REPORT:-/tmp/gsd-browser-install-smoke-report.${STAMP}.json}"
 
 cleanup() {
   rm -rf "$TMP_DIR"
@@ -91,4 +92,3 @@ req(sv.get("agent_step_png_ok") is True, f"expected valid PNG agent_step screens
 print("[install-smoke] PASS")
 print(f"[install-smoke] Report: {path}")
 PY
-

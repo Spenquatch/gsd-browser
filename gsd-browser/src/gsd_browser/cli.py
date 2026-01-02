@@ -11,7 +11,7 @@ from .logging_utils import setup_logging
 from .main import serve_stdio
 
 console = Console()
-app = typer.Typer(help="GSD Browser MCP server CLI")
+app = typer.Typer(help="GSD Browser MCP server CLI", invoke_without_command=True)
 
 
 @app.callback()
