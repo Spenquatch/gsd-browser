@@ -39,8 +39,17 @@ def get_browser_use_llm(
     merged = dict(env or {})
     if llm_provider is not None:
         merged["GSD_BROWSER_LLM_PROVIDER"] = llm_provider
+    if (
+        "GSD_BROWSER_MODEL" not in merged
+        and merged.get("GSD_BROWSER_LLM_PROVIDER") == "chatbrowseruse"
+    ):
+        # Ensure CLI provider overrides don't inherit an incompatible model from the
+        # ambient environment.
+        merged["GSD_BROWSER_MODEL"] = "bu-latest"
 
-    settings = load_settings(env=merged, strict=False)
+    # This helper is used by tests and CLI override plumbing; keep it deterministic by
+    # honoring the provided env mapping only (do not load a local ".env" file).
+    settings = load_settings(env=merged, env_file=None, strict=False)
     try:
         validate_llm_settings(settings)
     except ValueError as exc:

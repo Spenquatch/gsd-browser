@@ -16,7 +16,10 @@ fi
 
 if ! command -v pipx >/dev/null 2>&1; then
   echo "pipx not found; installing via pip --user"
-  python3 -m pip install --user pipx
+  if ! python3 -m pip install --user pipx; then
+    echo "pipx install failed; retrying with --break-system-packages (PEP 668 environments)"
+    python3 -m pip install --user --break-system-packages pipx
+  fi
   export PATH="$HOME/.local/bin:$PATH"
 fi
 
