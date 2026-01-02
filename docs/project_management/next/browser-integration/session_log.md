@@ -100,3 +100,11 @@ Use this log for START/END entries only. Template:
 - Worktree: wt/bi-b2-dashboard-integ
 - Commands planned: uv run ruff format --check; uv run ruff check; uv run pytest; make smoke; uv run python scripts/measure_stream_latency.py --duration 10 --mode cdp
 - Notes: Local repo has no upstream for feat/browser-integration (origin only has main), so git pull --ff-only cannot run as written.
+
+## B2-integ END
+- Timestamp: 2026-01-02T00:08:09Z
+- Role: integration
+- Worktree: wt/bi-b2-dashboard-integ
+- Commands executed: (in gsd-browser) uv run ruff format --check (pass); uv run ruff check (pass); uv run pytest (pass; 12 passed); make smoke (pass); uv run python scripts/measure_stream_latency.py --duration 10 --mode cdp --api-key integration-test-key (pass; report in gsd-browser/reports/stream_latency_cdp.json; no CDP frames emitted yet so count=0)
+- Result: pass
+- Blockers/next steps: Manual spot-check of dashboard canvas/control UI still recommended once CDP streamer is wired to a real Playwright Page.
