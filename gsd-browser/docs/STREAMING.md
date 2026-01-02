@@ -8,6 +8,21 @@ STREAMING_MODE=cdp STREAMING_QUALITY=med gsd-browser serve-browser --host 127.0.
 - Health check: `curl -sS http://127.0.0.1:5009/healthz`
 - Dashboard UI: open `http://127.0.0.1:5009/`
 
+## Manual verification: Pause/Resume gating
+`/ctrl` Pause/Resume is wired into `web_eval_agent` so you can pause tool execution between steps.
+
+1. Start the dashboard server:
+   ```bash
+   STREAMING_MODE=cdp STREAMING_QUALITY=med gsd-browser serve-browser --host 127.0.0.1 --port 5009
+   ```
+2. Open `http://127.0.0.1:5009/`, click **Take Control**, then **Pause Agent**.
+3. In another terminal, run:
+   ```bash
+   gsd-browser mcp-tool-smoke --url https://example.com --expect-streaming-mode cdp
+   ```
+4. Confirm the command blocks while paused, then click **Resume Agent** to let it continue.
+5. Optional: while paused, click **Release** — releasing control clears the pause and allows the tool to continue.
+
 ## Security controls
 The streaming server can enforce a nonce + HMAC handshake for both `/stream` and `/ctrl`.
 
@@ -27,4 +42,3 @@ Security logging:
 ```bash
 uv run python scripts/measure_stream_latency.py --duration 10 --mode cdp --api-key "$STREAMING_API_KEY"
 ```
-

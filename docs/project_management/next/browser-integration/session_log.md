@@ -220,3 +220,11 @@ Use this log for START/END entries only. Template:
 - Worktree: wt/bi-b6-ctrlpause-integ
 - Commands planned: uv run ruff format --check; uv run ruff check; uv run pytest; make smoke
 - Notes: Merge bi-b6-ctrlpause-code + bi-b6-ctrlpause-test, then document minimal manual pause/resume verification steps (not from the worktree).
+
+## B6-integ END
+- Timestamp: 2026-01-02T12:28:17Z
+- Role: integration
+- Worktree: wt/bi-b6-ctrlpause-integ
+- Commands executed: (prep) make dev (pass); (in gsd-browser) uv run ruff format --check (pass); uv run ruff check (pass); uv run pytest (pass; 31 passed); make smoke (pass)
+- Result: pass
+- Blockers/next steps: None.

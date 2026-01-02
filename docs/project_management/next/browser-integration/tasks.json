@@ -583,7 +583,7 @@
       "name": "Control channel pause gate",
       "type": "code",
       "phase": "B6",
-      "status": "pending",
+      "status": "done",
       "description": "Expose control state from StreamingRuntime and wire pause/resume into web_eval_agent execution.",
       "references": [
         "docs/project_management/next/browser-integration/plan.md",
@@ -620,7 +620,7 @@
       "name": "Control pause unit tests",
       "type": "test",
       "phase": "B6",
-      "status": "pending",
+      "status": "done",
       "description": "Add unit tests for control state transitions and pause gating helper.",
       "references": [
         "docs/project_management/next/browser-integration/plan.md",
@@ -657,7 +657,7 @@
       "name": "Control pause integration",
       "type": "integration",
       "phase": "B6",
-      "status": "in_progress",
+      "status": "done",
       "description": "Merge pause wiring code/tests, run full suite, and document manual verification steps.",
       "references": [
         "docs/project_management/next/browser-integration/plan.md",
