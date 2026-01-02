@@ -11,6 +11,11 @@ if ! command -v pipx >/dev/null 2>&1; then
   exit 1
 fi
 
+if command -v uv >/dev/null 2>&1 && [ -z "${PIPX_DEFAULT_PYTHON:-}" ]; then
+  PIPX_DEFAULT_PYTHON="$(uv python find 3.11 2>/dev/null || true)"
+  export PIPX_DEFAULT_PYTHON
+fi
+
 echo "Upgrading $PACKAGE from $ROOT_DIR"
 pipx install --force "$ROOT_DIR"
 

@@ -23,6 +23,11 @@ if ! command -v pipx >/dev/null 2>&1; then
   export PATH="$HOME/.local/bin:$PATH"
 fi
 
+if command -v uv >/dev/null 2>&1 && [ -z "${PIPX_DEFAULT_PYTHON:-}" ]; then
+  PIPX_DEFAULT_PYTHON="$(uv python find 3.11 2>/dev/null || true)"
+  export PIPX_DEFAULT_PYTHON
+fi
+
 VERSION=$(python3 - <<'PY'
 import tomllib
 from pathlib import Path
@@ -40,10 +45,16 @@ import json
 import sys
 PACKAGE = "gsd-browser"
 data = json.load(sys.stdin)
-for entry in data.get('venvs', []):
-    if entry.get('package_name') == PACKAGE:
-        print(entry.get('venv_dir'))
-        break
+venvs = data.get("venvs", {})
+if isinstance(venvs, dict):
+    entry = venvs.get(PACKAGE) or {}
+    if isinstance(entry, dict):
+        print(entry.get("venv_dir") or "")
+elif isinstance(venvs, list):
+    for entry in venvs:
+        if entry.get("package_name") == PACKAGE:
+            print(entry.get("venv_dir") or "")
+            break
 PY
 )
 
