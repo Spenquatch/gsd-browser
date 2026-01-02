@@ -26,11 +26,19 @@ def callback(
 
 @app.command()
 def serve(
-    disable_echo: bool = typer.Option(
-        False, "--no-echo", is_flag=True, help="Disable echoing stdin back to stdout"
+    _unused_disable_echo: bool = typer.Option(
+        False,
+        "--no-echo",
+        is_flag=True,
+        help="(deprecated) Placeholder echo mode is now `serve-echo`",
+        hidden=True,
     ),
-    once: bool = typer.Option(
-        False, "--once", is_flag=True, help="Process a single message then exit"
+    _unused_once: bool = typer.Option(
+        False,
+        "--once",
+        is_flag=True,
+        help="(deprecated) Placeholder echo mode is now `serve-echo --once`",
+        hidden=True,
     ),
     log_level: str | None = typer.Option(
         None, "--log-level", help="Override log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)"
@@ -42,7 +50,7 @@ def serve(
         False, "--text-logs", is_flag=True, help="Force human-friendly logs"
     ),
 ) -> None:
-    """Start the placeholder stdio MCP server."""
+    """Start the FastMCP stdio server."""
     settings = load_settings()
 
     desired_level = log_level or settings.log_level
@@ -61,6 +69,22 @@ def serve(
         f"[green]Config loaded[/green]: model={settings.model}, "
         f"log_level={desired_level}, json_logs={desired_json}"
     )
+    from .mcp_server import run_stdio
+
+    run_stdio()
+
+
+@app.command("serve-echo")
+def serve_echo(
+    disable_echo: bool = typer.Option(
+        False, "--no-echo", is_flag=True, help="Disable echoing stdin back to stdout"
+    ),
+    once: bool = typer.Option(
+        False, "--once", is_flag=True, help="Process a single message then exit"
+    ),
+) -> None:
+    """Start a tiny echo loop (debugging only)."""
+    setup_logging("INFO", json_logs=False)
     serve_stdio(echo=not disable_echo, once=once)
 
 
@@ -101,14 +125,90 @@ def serve_browser(
 
 @app.command()
 def diagnose() -> None:
-    """Run lightweight diagnostics placeholder."""
-    console.print("[yellow]Diagnostics placeholder[/yellow] — detailed checks coming in T6/T7.")
+    """Run lightweight environment diagnostics."""
+    import os
+    import platform
+    import shutil
+
+    settings = load_settings(strict=False)
+
+    console.print(f"[bold]System[/bold]: {platform.platform()}")
+    console.print(f"[bold]Python[/bold]: {platform.python_version()}")
+    for tool in ("uv", "poetry", "pipx", "gsd-browser"):
+        path = shutil.which(tool)
+        console.print(f"[bold]{tool}[/bold]: {path or '(not found)'}")
+
+    console.print("[bold]Environment[/bold]:")
+    for key in ("ANTHROPIC_API_KEY", "GSD_BROWSER_MODEL", "LOG_LEVEL", "GSD_BROWSER_JSON_LOGS"):
+        present = "set" if os.environ.get(key) else "unset"
+        console.print(f"- {key}: {present}")
+
+    console.print(
+        f"[bold]Config[/bold]: model={settings.model}, "
+        f"streaming={settings.streaming_mode}/{settings.streaming_quality}"
+    )
+    console.print("[bold]MCP snippet[/bold]:")
+    console.print(settings.to_mcp_snippet())
 
 
 @app.command()
 def smoke() -> None:
-    """Run placeholder smoke test."""
-    console.print("[yellow]Smoke test placeholder[/yellow] — will call scripts in T6/T9.")
+    """Run a minimal runtime smoke (dashboard + screenshot storage)."""
+    import json
+    import urllib.request
+
+    from .runtime import DEFAULT_DASHBOARD_HOST, DEFAULT_DASHBOARD_PORT, get_runtime
+
+    settings = load_settings(strict=False)
+    runtime = get_runtime()
+    dashboard = runtime.ensure_dashboard_running(
+        settings=settings, host=DEFAULT_DASHBOARD_HOST, port=DEFAULT_DASHBOARD_PORT
+    )
+    url = f"http://{dashboard.host}:{dashboard.port}/healthz"
+    with urllib.request.urlopen(url, timeout=5) as resp:  # noqa: S310
+        payload = json.loads(resp.read().decode("utf-8"))
+    console.print("[green]Dashboard healthy[/green]")
+    console.print(payload)
+
+
+@app.command("mcp-tool-smoke")
+def mcp_tool_smoke(
+    url: str | None = typer.Option(None, "--url", help="Target URL for the web_eval_agent tool"),
+    task: str | None = typer.Option(None, "--task", help="Task description for the evaluation"),
+    host: str = typer.Option("127.0.0.1", "--host", help="Dashboard host (default 127.0.0.1)"),
+    port: int = typer.Option(5009, "--port", help="Dashboard port (default 5009)"),
+    timeout: float = typer.Option(20.0, "--timeout", help="Seconds to wait for dashboard startup"),
+    headless: bool = typer.Option(
+        True, "--headless/--no-headless", help="Run Playwright in headless mode"
+    ),
+    skip_browser_task: bool = typer.Option(
+        False, "--skip-browser-task", help="Skip Playwright navigation (infra-only checks)"
+    ),
+    expect_streaming_mode: str = typer.Option(
+        "cdp", "--expect-streaming-mode", help="Assert /healthz reports this mode"
+    ),
+    output: str | None = typer.Option(None, "--output", help="Optional path to write JSON report"),
+    verbose: bool = typer.Option(False, "--verbose", help="Print verbose JSON report"),
+) -> None:
+    """Run the MCP tool + dashboard smoke check."""
+    from . import mcp_tool_smoke as smoke_mod
+
+    argv: list[str] = []
+    argv += ["--url", url or smoke_mod.DEFAULT_URL]
+    argv += ["--task", task or smoke_mod.DEFAULT_TASK]
+    argv += ["--host", host]
+    argv += ["--port", str(port)]
+    argv += ["--timeout", str(timeout)]
+    argv += ["--headless" if headless else "--no-headless"]
+    if skip_browser_task:
+        argv += ["--skip-browser-task"]
+    argv += ["--expect-streaming-mode", expect_streaming_mode]
+    if output:
+        argv += ["--output", output]
+    if verbose:
+        argv += ["--verbose"]
+
+    smoke_mod.main(argv)
 
 
 @app.command("mcp-config")

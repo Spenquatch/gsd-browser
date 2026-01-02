@@ -45,6 +45,7 @@ class ScreenshotManager:
     SAMPLING_RATE = 10
 
     def __init__(self, *, max_screenshots: int = 500) -> None:
+        self._max_screenshots = max_screenshots
         self._items: deque[Screenshot] = deque(maxlen=max_screenshots)
         self._lock = Lock()
 
@@ -158,6 +159,9 @@ class ScreenshotManager:
         if last_n <= 0:
             return []
 
+        if screenshot_type == "all":
+            screenshot_type = None
+
         with self._lock:
             items = list(self._items)
 
@@ -174,3 +178,20 @@ class ScreenshotManager:
             filtered.append(shot)
 
         return [shot.to_dict(include_images=include_images) for shot in filtered[-last_n:]]
+
+    def get_stats(self) -> dict[str, Any]:
+        with self._lock:
+            total = len(self._items)
+            size_bytes = self.total_size_bytes
+            current_session_id = self.current_session_id
+            current_session_start = self.current_session_start
+
+        return {
+            "total_screenshots": total,
+            "max_screenshots": self._max_screenshots,
+            "total_size_bytes": size_bytes,
+            "sampling_rate": self.SAMPLING_RATE,
+            "stream_counter": self.stream_counter,
+            "current_session_id": current_session_id,
+            "current_session_start": current_session_start,
+        }
