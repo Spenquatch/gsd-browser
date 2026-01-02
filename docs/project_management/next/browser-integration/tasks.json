@@ -468,7 +468,7 @@
       "name": "CDP streaming wiring (Playwright → /stream)",
       "type": "code",
       "phase": "B5",
-      "status": "pending",
+      "status": "done",
       "description": "Wire CdpScreencastStreamer to a real Playwright Page and align dashboard health metrics.",
       "references": [
         "docs/project_management/next/browser-integration/plan.md",
@@ -506,7 +506,7 @@
       "name": "CDP wiring unit tests",
       "type": "test",
       "phase": "B5",
-      "status": "pending",
+      "status": "done",
       "description": "Add unit tests that simulate CDP streamer wiring and validate /healthz sampler totals behavior.",
       "references": [
         "docs/project_management/next/browser-integration/plan.md",
@@ -543,7 +543,7 @@
       "name": "CDP wiring integration",
       "type": "integration",
       "phase": "B5",
-      "status": "in_progress",
+      "status": "done",
       "description": "Merge CDP wiring code/tests, run full suite, and verify end-to-end frame generation via smoke/telemetry.",
       "references": [
         "docs/project_management/next/browser-integration/plan.md",
