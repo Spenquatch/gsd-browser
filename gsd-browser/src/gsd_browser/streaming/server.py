@@ -62,7 +62,7 @@ class StreamingRuntime:
         }
         await self.sio.emit("browser_update", payload, namespace=DEFAULT_STREAM_NAMESPACE)
         self.screenshots.record_screenshot(
-            screenshot_type="browser_update",
+            screenshot_type="stream_sample",
             image_bytes=image_bytes,
             mime_type=mime_type,
             session_id=session_id,
@@ -85,13 +85,17 @@ class ControlState:
         }
 
 
-def create_streaming_app(*, settings: Settings) -> StreamingRuntime:
+def create_streaming_app(
+    *,
+    settings: Settings,
+    screenshots: ScreenshotManager | None = None,
+) -> StreamingRuntime:
     streaming_mode = normalize_streaming_mode(settings.streaming_mode)
     streaming_quality = normalize_streaming_quality(settings.streaming_quality)
 
     frame_queue_max = 2
     stats = StreamingStats(streaming_mode=streaming_mode, frame_queue_max=frame_queue_max)
-    screenshots = ScreenshotManager()
+    screenshot_manager = screenshots or ScreenshotManager()
 
     auth_config = load_streaming_auth_config()
     cors_allowed_origins: list[str] | str = auth_config.allowed_origins or "*"
@@ -107,7 +111,7 @@ def create_streaming_app(*, settings: Settings) -> StreamingRuntime:
     cdp_streamer = CdpScreencastStreamer(
         sio=sio,
         stats=stats,
-        screenshot_manager=screenshots,
+        screenshot_manager=screenshot_manager,
         quality=streaming_quality,
         namespace=DEFAULT_STREAM_NAMESPACE,
         frame_queue_max=frame_queue_max,
@@ -281,7 +285,7 @@ def create_streaming_app(*, settings: Settings) -> StreamingRuntime:
         api_app=api_app,
         sio=sio,
         stats=stats,
-        screenshots=screenshots,
+        screenshots=screenshot_manager,
         cdp_streamer=cdp_streamer,
     )
 

@@ -17,4 +17,4 @@ else
 fi
 
 printf '\n[smoke] CLI round trip...\n'
-printf 'hello\n' | "$PY_BIN" -m gsd_browser.cli serve --once
+printf 'hello\n' | "$PY_BIN" -m gsd_browser.cli serve-echo --once

@@ -44,4 +44,4 @@ headline "MCP config snippet"
 $PY_BIN "$ROOT_DIR/scripts/print-mcp-config.py"
 
 headline "Placeholder smoke"
-printf 'ping\n' | "$PY_BIN" -m gsd_browser.cli serve --once || true
+printf 'ping\n' | "$PY_BIN" -m gsd_browser.cli serve-echo --once || true
