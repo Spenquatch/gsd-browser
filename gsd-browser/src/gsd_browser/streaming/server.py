@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import logging
+import threading
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -42,6 +44,7 @@ class StreamingRuntime:
     stats: StreamingStats
     screenshots: ScreenshotManager
     cdp_streamer: CdpScreencastStreamer
+    control_state: ControlState
 
     async def emit_browser_update(
         self,
@@ -71,18 +74,83 @@ class StreamingRuntime:
         )
 
 
-@dataclass
 class ControlState:
-    holder_sid: str | None = None
-    held_since_ts: float | None = None
-    paused: bool = False
+    """Thread-safe control state shared across the dashboard thread and tool runtime."""
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._unpaused = threading.Event()
+        self._unpaused.set()
+
+        self.holder_sid: str | None = None
+        self.held_since_ts: float | None = None
+        self.paused: bool = False
 
     def snapshot(self) -> dict[str, Any]:
-        return {
-            "holder_sid": self.holder_sid,
-            "held_since_ts": self.held_since_ts,
-            "paused": self.paused,
-        }
+        with self._lock:
+            return {
+                "holder_sid": self.holder_sid,
+                "held_since_ts": self.held_since_ts,
+                "paused": self.paused,
+            }
+
+    def current_holder_sid(self) -> str | None:
+        with self._lock:
+            return self.holder_sid
+
+    def is_holder(self, *, sid: str) -> bool:
+        with self._lock:
+            return self.holder_sid == sid
+
+    def is_paused(self) -> bool:
+        with self._lock:
+            return self.paused
+
+    def _set_paused_locked(self, paused: bool) -> None:
+        self.paused = paused
+        if paused:
+            self._unpaused.clear()
+        else:
+            self._unpaused.set()
+
+    def clear(self) -> None:
+        with self._lock:
+            self.holder_sid = None
+            self.held_since_ts = None
+            self._set_paused_locked(False)
+
+    def take_control(self, *, sid: str) -> None:
+        with self._lock:
+            if self.holder_sid is None:
+                self.holder_sid = sid
+                self.held_since_ts = time.time()
+                self._set_paused_locked(False)
+
+    def release_control(self, *, sid: str) -> None:
+        with self._lock:
+            if self.holder_sid == sid:
+                self.holder_sid = None
+                self.held_since_ts = None
+                self._set_paused_locked(False)
+
+    def pause_if_holder(self, *, sid: str) -> bool:
+        with self._lock:
+            if self.holder_sid != sid:
+                return False
+            self._set_paused_locked(True)
+            return True
+
+    def resume_if_holder(self, *, sid: str) -> bool:
+        with self._lock:
+            if self.holder_sid != sid:
+                return False
+            self._set_paused_locked(False)
+            return True
+
+    async def wait_until_unpaused(self) -> None:
+        if not self.is_paused():
+            return
+        await asyncio.to_thread(self._unpaused.wait)
 
 
 def create_streaming_app(
@@ -197,28 +265,25 @@ def create_streaming_app(
     @sio.event(namespace=DEFAULT_CTRL_NAMESPACE)
     async def disconnect_ctrl(sid: str) -> None:
         logger.info("Client disconnected", extra={"sid": sid, "namespace": DEFAULT_CTRL_NAMESPACE})
-        if control_state.holder_sid == sid:
-            control_state.holder_sid = None
-            control_state.held_since_ts = None
-            control_state.paused = False
+        if control_state.is_holder(sid=sid):
+            control_state.clear()
             await _emit_control_state()
 
     @sio.on("take_control", namespace=DEFAULT_CTRL_NAMESPACE)
     async def take_control(sid: str, _: Any) -> None:
         if not _allow_ctrl_event(sid=sid, event="take_control"):
             return
-        if control_state.holder_sid is None:
-            control_state.holder_sid = sid
-            control_state.held_since_ts = time.time()
-            control_state.paused = False
-        elif control_state.holder_sid != sid:
+        holder_sid = control_state.current_holder_sid()
+        if holder_sid is None:
+            control_state.take_control(sid=sid)
+        elif holder_sid != sid:
             get_security_logger().info(
                 "ctrl_already_held",
                 extra={
                     "namespace": DEFAULT_CTRL_NAMESPACE,
                     "sid": sid,
                     "event": "take_control",
-                    "holder_sid": control_state.holder_sid,
+                    "holder_sid": holder_sid,
                 },
             )
         await _emit_control_state()
@@ -227,10 +292,9 @@ def create_streaming_app(
     async def release_control(sid: str, _: Any) -> None:
         if not _allow_ctrl_event(sid=sid, event="release_control"):
             return
-        if control_state.holder_sid == sid:
-            control_state.holder_sid = None
-            control_state.held_since_ts = None
-            control_state.paused = False
+        holder_sid = control_state.current_holder_sid()
+        if holder_sid == sid:
+            control_state.release_control(sid=sid)
         else:
             get_security_logger().info(
                 "ctrl_not_holder",
@@ -238,7 +302,7 @@ def create_streaming_app(
                     "namespace": DEFAULT_CTRL_NAMESPACE,
                     "sid": sid,
                     "event": "release_control",
-                    "holder_sid": control_state.holder_sid,
+                    "holder_sid": holder_sid,
                 },
             )
         await _emit_control_state()
@@ -247,16 +311,15 @@ def create_streaming_app(
     async def pause_agent(sid: str, _: Any) -> None:
         if not _allow_ctrl_event(sid=sid, event="pause_agent"):
             return
-        if control_state.holder_sid == sid:
-            control_state.paused = True
-        else:
+        if not control_state.pause_if_holder(sid=sid):
+            holder_sid = control_state.current_holder_sid()
             get_security_logger().info(
                 "ctrl_not_holder",
                 extra={
                     "namespace": DEFAULT_CTRL_NAMESPACE,
                     "sid": sid,
                     "event": "pause_agent",
-                    "holder_sid": control_state.holder_sid,
+                    "holder_sid": holder_sid,
                 },
             )
         await _emit_control_state()
@@ -265,16 +328,15 @@ def create_streaming_app(
     async def resume_agent(sid: str, _: Any) -> None:
         if not _allow_ctrl_event(sid=sid, event="resume_agent"):
             return
-        if control_state.holder_sid == sid:
-            control_state.paused = False
-        else:
+        if not control_state.resume_if_holder(sid=sid):
+            holder_sid = control_state.current_holder_sid()
             get_security_logger().info(
                 "ctrl_not_holder",
                 extra={
                     "namespace": DEFAULT_CTRL_NAMESPACE,
                     "sid": sid,
                     "event": "resume_agent",
-                    "holder_sid": control_state.holder_sid,
+                    "holder_sid": holder_sid,
                 },
             )
         await _emit_control_state()
@@ -287,6 +349,7 @@ def create_streaming_app(
         stats=stats,
         screenshots=screenshot_manager,
         cdp_streamer=cdp_streamer,
+        control_state=control_state,
     )
 
 

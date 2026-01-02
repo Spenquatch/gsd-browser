@@ -96,15 +96,24 @@ async def web_eval_agent(
             page = await context.new_page()
 
             streaming_runtime = runtime.dashboard().runtime if runtime.dashboard() else None
+
+            async def _pause_gate() -> None:
+                if streaming_runtime is None:
+                    return
+                await streaming_runtime.control_state.wait_until_unpaused()
+
             cdp_started = False
             if streaming_runtime and streaming_runtime.stats.streaming_mode == "cdp":
                 await streaming_runtime.cdp_streamer.start(page=page, session_id=session_id)
                 cdp_started = True
 
+            await _pause_gate()
             await page.goto(normalized_url, wait_until="domcontentloaded")
             if cdp_started:
                 await page.wait_for_timeout(500)
             title = await page.title()
+
+            await _pause_gate()
             screenshot_bytes = await page.screenshot(full_page=True, type="png")
 
             runtime.screenshots.record_screenshot(
@@ -119,6 +128,7 @@ async def web_eval_agent(
             )
 
             if streaming_runtime and streaming_runtime.stats.streaming_mode == "screenshot":
+                await _pause_gate()
                 await streaming_runtime.emit_browser_update(
                     session_id=session_id,
                     image_bytes=screenshot_bytes,
