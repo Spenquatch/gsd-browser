@@ -213,3 +213,10 @@ Use this log for START/END entries only. Template:
 - Commands executed: (prep) uv run playwright install chromium (pass); (in gsd-browser) uv run ruff format --check (pass); uv run ruff check (pass); uv run pytest (pass; 25 passed); make smoke (pass); uv run python scripts/measure_stream_latency.py --duration 10 --mode cdp (pass; summary.count=2; healthz shows frames_received/emitted=2 and sampler_totals seen/stored=1/1)
 - Result: pass
 - Blockers/next steps: None.
+
+## B6-integ START
+- Timestamp: 2026-01-02T12:22:46Z
+- Role: integration
+- Worktree: wt/bi-b6-ctrlpause-integ
+- Commands planned: uv run ruff format --check; uv run ruff check; uv run pytest; make smoke
+- Notes: Merge bi-b6-ctrlpause-code + bi-b6-ctrlpause-test, then document minimal manual pause/resume verification steps (not from the worktree).

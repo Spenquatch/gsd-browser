@@ -657,7 +657,7 @@
       "name": "Control pause integration",
       "type": "integration",
       "phase": "B6",
-      "status": "pending",
+      "status": "in_progress",
       "description": "Merge pause wiring code/tests, run full suite, and document manual verification steps.",
       "references": [
         "docs/project_management/next/browser-integration/plan.md",
