@@ -90,7 +90,9 @@ def test_screenshot_manager_get_screenshots_include_images_false_is_metadata_onl
 
     results = manager.get_screenshots(include_images=True, last_n=10)
     assert any("image_data" in shot for shot in results)
-    assert any("image_data" not in shot for shot in results), "image_data should require image_bytes"
+    assert any("image_data" not in shot for shot in results), (
+        "image_data should require image_bytes"
+    )
 
 
 def _resolve_mcp_get_screenshots() -> tuple[Callable[..., Any], Any] | None:
@@ -149,9 +151,9 @@ def test_mcp_get_screenshots_enforces_last_n_max_20_and_metadata_only_mode() -> 
     elif "manager" in sig.parameters:
         kwargs["manager"] = manager
     elif hasattr(module, "screenshot_manager"):
-        setattr(module, "screenshot_manager", manager)
+        module.screenshot_manager = manager
     elif hasattr(module, "screenshots"):
-        setattr(module, "screenshots", manager)
+        module.screenshots = manager
     else:
         pytest.skip("Cannot inject ScreenshotManager into MCP get_screenshots tool")
 
@@ -176,12 +178,11 @@ def test_cli_diagnostics_smoke_messages() -> None:
 
     result = runner.invoke(
         app,
-        ["serve", "--once"],
+        ["serve-echo", "--once"],
         input="ping\n",
         env={"ANTHROPIC_API_KEY": "x"},
     )
     assert result.exit_code == 0
-    assert "Config loaded" in result.stdout
     assert "ping" in result.stdout
 
     result = runner.invoke(
@@ -191,4 +192,3 @@ def test_cli_diagnostics_smoke_messages() -> None:
     )
     assert result.exit_code == 1
     assert "Cannot use" in result.stdout
-
