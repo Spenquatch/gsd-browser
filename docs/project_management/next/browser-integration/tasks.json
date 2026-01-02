@@ -352,7 +352,7 @@
       "name": "browser-use upgrade & provider plumbing",
       "type": "code",
       "phase": "B4",
-      "status": "pending",
+      "status": "in_progress",
       "description": "Upgrade browser-use dependency and add provider selection (cloud vs OSS).",
       "references": [
         "docs/project_management/next/browser-integration/plan.md",

@@ -153,3 +153,10 @@ Use this log for START/END entries only. Template:
 - Commands executed: (prep) make dev (installed dev tools into worktree .venv); (in gsd-browser) uv run ruff format --check (pass); uv run ruff check (pass); uv run pytest (pass; 16 passed); make smoke (pass)
 - Result: pass
 - Blockers/next steps: Proceed to B4-code/B4-test.
+
+## B4-code START
+- Timestamp: 2026-01-02T01:10:03Z
+- Role: code
+- Worktree: wt/bi-b4-browseruse-code
+- Commands planned: uv run ruff format --check; uv run ruff check
+- Notes: Upgrade browser-use and add provider selection/validation per B4 spec; do not edit docs from worktree.
