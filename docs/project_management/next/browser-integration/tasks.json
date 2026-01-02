@@ -237,7 +237,7 @@
       "name": "MCP tools implementation",
       "type": "code",
       "phase": "B3",
-      "status": "pending",
+      "status": "done",
       "description": "Add MCP tools (web_eval_agent, setup_browser_state, get_screenshots) + screenshot manager plumbing + scripts.",
       "references": [
         "docs/project_management/next/browser-integration/plan.md",
@@ -275,7 +275,7 @@
       "name": "MCP tools tests",
       "type": "test",
       "phase": "B3",
-      "status": "pending",
+      "status": "done",
       "description": "Write pytest coverage for screenshot filters and MCP handler envelopes.",
       "references": [
         "docs/project_management/next/browser-integration/plan.md",
@@ -313,7 +313,7 @@
       "name": "MCP tooling integration",
       "type": "integration",
       "phase": "B3",
-      "status": "in_progress",
+      "status": "done",
       "description": "Merge MCP tool code/tests, verify scripts and docs.",
       "references": [
         "docs/project_management/next/browser-integration/plan.md",

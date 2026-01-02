@@ -109,9 +109,47 @@ Use this log for START/END entries only. Template:
 - Result: pass
 - Blockers/next steps: Manual spot-check of dashboard canvas/control UI still recommended once CDP streamer is wired to a real Playwright Page.
 
+## B3-test START
+- Timestamp: 2026-01-02T00:42:40Z
+- Role: test
+- Worktree: wt/bi-b3-mcp-test
+- Commands planned: uv run ruff format --check; uv run pytest tests/mcp/test_screenshot_tool.py
+- Notes: Backfilled during B3-integ; branch bi-b3-mcp-test contained authored tests and was validated during integration.
+
+## B3-test END
+- Timestamp: 2026-01-02T01:07:12Z
+- Role: test
+- Worktree: wt/bi-b3-mcp-test
+- Commands executed: Validated during B3-integ via uv run ruff format --check (pass); uv run ruff check (pass); uv run pytest (pass; 16 passed); make smoke (pass)
+- Result: pass
+- Blockers/next steps: None.
+
+## B3-code START
+- Timestamp: 2026-01-02T00:51:27Z
+- Role: code
+- Worktree: wt/bi-b3-mcp-code
+- Commands planned: uv run ruff format --check; uv run ruff check
+- Notes: Backfilled during B3-integ; branch bi-b3-mcp-code contained MCP tool + runtime changes and was validated during integration.
+
+## B3-code END
+- Timestamp: 2026-01-02T01:07:12Z
+- Role: code
+- Worktree: wt/bi-b3-mcp-code
+- Commands executed: Validated during B3-integ via uv run ruff format --check (pass); uv run ruff check (pass); uv run pytest (pass; 16 passed); make smoke (pass)
+- Result: pass
+- Blockers/next steps: None.
+
 ## B3-integ START
 - Timestamp: 2026-01-02T00:54:59Z
 - Role: integration
 - Worktree: wt/bi-b3-mcp-integ
 - Commands planned: uv run ruff format --check; uv run ruff check; uv run pytest; make smoke
 - Notes: Local repo has no upstream for feat/browser-integration (origin only has main), so git pull --ff-only cannot run as written.
+
+## B3-integ END
+- Timestamp: 2026-01-02T01:07:12Z
+- Role: integration
+- Worktree: wt/bi-b3-mcp-integ
+- Commands executed: (prep) make dev (installed dev tools into worktree .venv); (in gsd-browser) uv run ruff format --check (pass); uv run ruff check (pass); uv run pytest (pass; 16 passed); make smoke (pass)
+- Result: pass
+- Blockers/next steps: Proceed to B4-code/B4-test.
