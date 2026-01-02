@@ -121,6 +121,8 @@ def load_settings(
             payload["OLLAMA_HOST"] = merged["OLLAMA_HOST"]
         if merged.get("GSD_BROWSER_MODEL") is not None:
             payload["GSD_BROWSER_MODEL"] = merged["GSD_BROWSER_MODEL"]
+        elif llm_provider == "chatbrowseruse":
+            payload["GSD_BROWSER_MODEL"] = "bu-latest"
         if merged.get("LOG_LEVEL") is not None:
             payload["LOG_LEVEL"] = merged["LOG_LEVEL"]
         if merged.get("GSD_BROWSER_JSON_LOGS") is not None:

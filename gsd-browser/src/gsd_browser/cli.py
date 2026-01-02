@@ -252,8 +252,9 @@ def mcp_tool_smoke(
     host: str = typer.Option("127.0.0.1", "--host", help="Dashboard host (default 127.0.0.1)"),
     port: int = typer.Option(5009, "--port", help="Dashboard port (default 5009)"),
     timeout: float = typer.Option(20.0, "--timeout", help="Seconds to wait for dashboard startup"),
-    headless: bool = typer.Option(
-        True, "--headless/--no-headless", help="Run Playwright in headless mode"
+    headless: bool = typer.Option(True, "--headless", is_flag=True, help="Run Playwright headless"),
+    no_headless: bool = typer.Option(
+        False, "--no-headless", is_flag=True, help="Run Playwright with a visible browser"
     ),
     skip_browser_task: bool = typer.Option(
         False, "--skip-browser-task", help="Skip Playwright navigation (infra-only checks)"
@@ -266,6 +267,9 @@ def mcp_tool_smoke(
 ) -> None:
     """Run the MCP tool + dashboard smoke check."""
     from . import mcp_tool_smoke as smoke_mod
+
+    if no_headless:
+        headless = False
 
     argv: list[str] = []
     argv += ["--url", url or smoke_mod.DEFAULT_URL]
