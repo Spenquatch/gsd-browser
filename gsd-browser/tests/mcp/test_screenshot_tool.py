@@ -2,13 +2,15 @@ from __future__ import annotations
 
 import asyncio
 import inspect
-from collections.abc import Callable, Mapping
+import re
 from typing import Any
 
 import pytest
 from typer.testing import CliRunner
 
+from gsd_browser import mcp_server as mcp_server_mod
 from gsd_browser.cli import app
+from gsd_browser.mcp_server import get_screenshots as mcp_get_screenshots
 from gsd_browser.screenshot_manager import ScreenshotManager
 
 
@@ -95,44 +97,9 @@ def test_screenshot_manager_get_screenshots_include_images_false_is_metadata_onl
     )
 
 
-def _resolve_mcp_get_screenshots() -> tuple[Callable[..., Any], Any] | None:
-    candidates = (
-        "gsd_browser.mcp",
-        "gsd_browser.mcp_server",
-        "gsd_browser.mcp.tools",
-        "gsd_browser.tools.mcp",
-        "gsd_browser.server",
-    )
-    for module_name in candidates:
-        try:
-            module = __import__(module_name, fromlist=["*"])
-        except ImportError:
-            continue
-        fn = getattr(module, "get_screenshots", None)
-        if callable(fn):
-            return fn, module
-    return None
-
-
-def _extract_screenshot_payload(result: Any) -> list[Mapping[str, Any]]:
-    if isinstance(result, list):
-        if all(isinstance(item, Mapping) for item in result):
-            return list(result)
-        raise AssertionError("Expected list[Mapping] from get_screenshots")
-    if isinstance(result, Mapping):
-        for key in ("screenshots", "results", "data"):
-            value = result.get(key)
-            if isinstance(value, list) and all(isinstance(item, Mapping) for item in value):
-                return value
-    raise AssertionError("Unsupported get_screenshots response shape")
-
-
-def test_mcp_get_screenshots_enforces_last_n_max_20_and_metadata_only_mode() -> None:
-    resolved = _resolve_mcp_get_screenshots()
-    if resolved is None:
-        pytest.skip("MCP get_screenshots tool not yet implemented in gsd_browser")
-
-    get_screenshots, module = resolved
+def test_mcp_get_screenshots_enforces_last_n_max_20_and_metadata_only_mode(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     manager = ScreenshotManager()
     for i in range(30):
         _add(
@@ -143,29 +110,23 @@ def test_mcp_get_screenshots_enforces_last_n_max_20_and_metadata_only_mode() -> 
             image_bytes=b"img",
         )
 
-    sig = inspect.signature(get_screenshots)
-    kwargs: dict[str, Any] = {"last_n": 25, "include_images": False}
+    class DummyRuntime:
+        def __init__(self, screenshots: ScreenshotManager) -> None:
+            self.screenshots = screenshots
 
-    if "screenshot_manager" in sig.parameters:
-        kwargs["screenshot_manager"] = manager
-    elif "manager" in sig.parameters:
-        kwargs["manager"] = manager
-    elif hasattr(module, "screenshot_manager"):
-        module.screenshot_manager = manager
-    elif hasattr(module, "screenshots"):
-        module.screenshots = manager
-    else:
-        pytest.skip("Cannot inject ScreenshotManager into MCP get_screenshots tool")
+    monkeypatch.setattr(mcp_server_mod, "get_runtime", lambda: DummyRuntime(manager))
 
-    try:
-        result = _run(get_screenshots(**kwargs))
-    except Exception:
-        # Raising is acceptable as long as last_n is enforced via validation.
-        return
+    result = _run(mcp_get_screenshots(last_n=25, include_images=False))
+    assert isinstance(result, list)
+    assert all(getattr(item, "type", None) != "image" for item in result)
 
-    shots = _extract_screenshot_payload(result)
-    assert len(shots) <= 20
-    assert all("image_data" not in shot for shot in shots)
+    summary_text = next(
+        (getattr(item, "text", "") for item in result if getattr(item, "type", None) == "text"),
+        "",
+    )
+    match = re.search(r"Retrieved (\d+) screenshots", summary_text)
+    assert match, f"Expected summary line with count; got: {summary_text!r}"
+    assert int(match.group(1)) == 20
 
 
 def test_cli_diagnostics_smoke_messages() -> None:
