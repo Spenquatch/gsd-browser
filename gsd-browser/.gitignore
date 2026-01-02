@@ -25,6 +25,9 @@ uv.lock
 # Runtime logs
 security.log
 
+# Local reports
+reports/
+
 # OS/editor
 .DS_Store
 Thumbs.db
