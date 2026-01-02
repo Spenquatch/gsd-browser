@@ -391,7 +391,7 @@
       "name": "browser-use provider tests",
       "type": "test",
       "phase": "B4",
-      "status": "pending",
+      "status": "done",
       "description": "Add smoke tests for cloud vs OSS provider instantiation and config validation.",
       "references": [
         "docs/project_management/next/browser-integration/plan.md",
@@ -429,7 +429,7 @@
       "name": "browser-use upgrade integration",
       "type": "integration",
       "phase": "B4",
-      "status": "in_progress",
+      "status": "done",
       "description": "Merge provider code/tests, verify dependency upgrade, finalize docs.",
       "references": [
         "docs/project_management/next/browser-integration/plan.md",

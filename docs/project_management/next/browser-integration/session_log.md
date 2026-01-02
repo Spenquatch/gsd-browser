@@ -169,9 +169,32 @@ Use this log for START/END entries only. Template:
 - Result: pass
 - Blockers/next steps: Proceed to B4-test and B4-integ.
 
+## B4-test START
+- Timestamp: 2026-01-02T01:28:00Z
+- Role: test
+- Worktree: wt/bi-b4-browseruse-test
+- Commands planned: uv run ruff format --check; uv run pytest tests/llm/test_browseruse_providers.py
+- Notes: Backfilled during B4-integ; branch bi-b4-browseruse-test existed with authored tests.
+
+## B4-test END
+- Timestamp: 2026-01-02T01:42:25Z
+- Role: test
+- Worktree: wt/bi-b4-browseruse-test
+- Commands executed: Validated during B4-integ via uv run ruff format --check (pass); uv run pytest (pass; 20 passed, includes tests/llm/test_browseruse_providers.py)
+- Result: pass
+- Blockers/next steps: None.
+
 ## B4-integ START
 - Timestamp: 2026-01-02T01:31:55Z
 - Role: integration
 - Worktree: wt/bi-b4-browseruse-integ
 - Commands planned: uv run ruff format --check; uv run ruff check; uv run pytest; make smoke
 - Notes: Merge bi-b4-browseruse-code + bi-b4-browseruse-test, ensure browser-use upgrade installs cleanly, then finalize provider-selection docs on feat/browser-integration (not from the worktree).
+
+## B4-integ END
+- Timestamp: 2026-01-02T01:42:25Z
+- Role: integration
+- Worktree: wt/bi-b4-browseruse-integ
+- Commands executed: (prep) make dev (pass; pinned click to 8.1.8 for Typer compatibility); (in gsd-browser) uv run ruff format --check (pass); uv run ruff check (pass); uv run pytest (pass; 20 passed); make smoke (pass)
+- Result: pass
+- Blockers/next steps: None.

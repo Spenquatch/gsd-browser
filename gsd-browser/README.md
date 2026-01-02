@@ -6,6 +6,7 @@ GSD Browser MCP server (Python). The broader project docs live in `../GSD_BROWSE
 - **UV-first dev workflow** (Makefile uses `uv` for venv + installs, with venv fallback)
 - **Python package + CLI** (`gsd-browser`) powered by Typer
 - **Config loader** with `.env` + env var precedence and MCP snippet helper
+- **browser-use LLM provider selection** (Anthropic, OpenAI, ChatBrowserUse, Ollama)
 - **Structured logging** with `--log-level`, `--json-logs/--text-logs`, and `LOG_LEVEL` / `GSD_BROWSER_JSON_LOGS`
 - **Developer scripts** (`run-local`, `diagnose`, `smoke-test`, `check-mcp-config`, `print-mcp-config`)
 - **pipx installers** for system-wide installation (`tools/install.sh`, `upgrade.sh`, `uninstall.sh`)
@@ -19,6 +20,25 @@ cd gsd-browser/gsd-browser
 curl -LsSf https://astral.sh/uv/install.sh | sh   # install uv once if not present
 make dev        # sets up .venv (uv-backed)
 ./scripts/run-local.sh
+```
+
+## LLM Providers (browser-use)
+`gsd-browser` can run browser-use against either a cloud LLM (default: Anthropic) or a local OSS LLM (Ollama).
+
+Provider selection:
+- `GSD_BROWSER_LLM_PROVIDER`: `anthropic` (default), `openai`, `chatbrowseruse`, `ollama`
+- `GSD_BROWSER_MODEL`: provider-specific model name (defaults to `claude-haiku-4-5`, or `bu-latest` for `chatbrowseruse`)
+
+Required env vars:
+- `anthropic`: `ANTHROPIC_API_KEY`
+- `openai`: `OPENAI_API_KEY`
+- `chatbrowseruse`: `BROWSER_USE_API_KEY` (optional `BROWSER_USE_LLM_URL`)
+- `ollama`: `OLLAMA_HOST` (defaults to `http://localhost:11434`)
+
+CLI overrides (useful for quick testing):
+```bash
+gsd-browser validate-llm --llm-provider ollama --llm-model llama3.2
+gsd-browser serve --llm-provider ollama --llm-model llama3.2
 ```
 
 ## Browser Streaming

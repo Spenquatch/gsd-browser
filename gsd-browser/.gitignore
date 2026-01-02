@@ -17,6 +17,7 @@ htmlcov/
 venv/
 .env
 .env.*
+!.env.example
 
 # Tooling
 .poetry/

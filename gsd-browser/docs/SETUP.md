@@ -13,8 +13,27 @@ cd gsd-browser/gsd-browser
 curl -LsSf https://astral.sh/uv/install.sh | sh   # install uv if needed
 make dev          # creates .venv via uv (or stdlib fallback)
 cp .env.example .env
-vim .env          # set ANTHROPIC_API_KEY, LOG_LEVEL, GSD_BROWSER_JSON_LOGS, etc.
+vim .env          # set LLM provider + API keys, LOG_LEVEL, GSD_BROWSER_JSON_LOGS, etc.
 ./scripts/run-local.sh
+```
+
+## LLM Provider Configuration
+`gsd-browser` supports both cloud providers and a local OSS path via Ollama.
+
+Core variables:
+- `GSD_BROWSER_LLM_PROVIDER`: `anthropic` (default), `openai`, `chatbrowseruse`, `ollama`
+- `GSD_BROWSER_MODEL`: provider-specific model name (defaults to `claude-haiku-4-5`, or `bu-latest` for `chatbrowseruse`)
+
+Required variables by provider:
+- `anthropic`: `ANTHROPIC_API_KEY`
+- `openai`: `OPENAI_API_KEY`
+- `chatbrowseruse`: `BROWSER_USE_API_KEY` (optional `BROWSER_USE_LLM_URL`)
+- `ollama`: `OLLAMA_HOST` (defaults to `http://localhost:11434`)
+
+Quick validation:
+```bash
+gsd-browser validate-llm
+gsd-browser validate-llm --llm-provider ollama --llm-model llama3.2
 ```
 
 ## pipx Installation
