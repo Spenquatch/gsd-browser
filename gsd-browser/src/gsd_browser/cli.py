@@ -49,9 +49,24 @@ def serve(
     text_logs: bool = typer.Option(
         False, "--text-logs", is_flag=True, help="Force human-friendly logs"
     ),
+    llm_provider: str | None = typer.Option(
+        None,
+        "--llm-provider",
+        help="LLM provider (anthropic, chatbrowseruse, openai, ollama)",
+    ),
+    llm_model: str | None = typer.Option(None, "--llm-model", help="Override LLM model name"),
+    ollama_host: str | None = typer.Option(None, "--ollama-host", help="Override OLLAMA_HOST"),
 ) -> None:
     """Start the FastMCP stdio server."""
-    settings = load_settings()
+    overrides: dict[str, str] = {}
+    if llm_provider is not None:
+        overrides["GSD_BROWSER_LLM_PROVIDER"] = llm_provider
+    if llm_model is not None:
+        overrides["GSD_BROWSER_MODEL"] = llm_model
+    if ollama_host is not None:
+        overrides["OLLAMA_HOST"] = ollama_host
+
+    settings = load_settings(env=overrides or None)
 
     desired_level = log_level or settings.log_level
     if json_logs and text_logs:
@@ -66,7 +81,8 @@ def serve(
 
     setup_logging(desired_level, json_logs=desired_json)
     console.print(
-        f"[green]Config loaded[/green]: model={settings.model}, "
+        "[green]Config loaded[/green]: "
+        f"llm_provider={settings.llm_provider}, model={settings.model}, "
         f"log_level={desired_level}, json_logs={desired_json}"
     )
     from .mcp_server import run_stdio
@@ -101,9 +117,24 @@ def serve_browser(
     text_logs: bool = typer.Option(
         False, "--text-logs", is_flag=True, help="Force human-friendly logs"
     ),
+    llm_provider: str | None = typer.Option(
+        None,
+        "--llm-provider",
+        help="LLM provider (anthropic, chatbrowseruse, openai, ollama)",
+    ),
+    llm_model: str | None = typer.Option(None, "--llm-model", help="Override LLM model name"),
+    ollama_host: str | None = typer.Option(None, "--ollama-host", help="Override OLLAMA_HOST"),
 ) -> None:
     """Start the browser streaming server (Socket.IO + /healthz)."""
-    settings = load_settings(strict=False)
+    overrides: dict[str, str] = {}
+    if llm_provider is not None:
+        overrides["GSD_BROWSER_LLM_PROVIDER"] = llm_provider
+    if llm_model is not None:
+        overrides["GSD_BROWSER_MODEL"] = llm_model
+    if ollama_host is not None:
+        overrides["OLLAMA_HOST"] = ollama_host
+
+    settings = load_settings(env=overrides or None, strict=False)
 
     desired_level = log_level or settings.log_level
     if json_logs and text_logs:
@@ -139,16 +170,59 @@ def diagnose() -> None:
         console.print(f"[bold]{tool}[/bold]: {path or '(not found)'}")
 
     console.print("[bold]Environment[/bold]:")
-    for key in ("ANTHROPIC_API_KEY", "GSD_BROWSER_MODEL", "LOG_LEVEL", "GSD_BROWSER_JSON_LOGS"):
+    for key in (
+        "GSD_BROWSER_LLM_PROVIDER",
+        "ANTHROPIC_API_KEY",
+        "OPENAI_API_KEY",
+        "BROWSER_USE_API_KEY",
+        "OLLAMA_HOST",
+        "GSD_BROWSER_MODEL",
+        "LOG_LEVEL",
+        "GSD_BROWSER_JSON_LOGS",
+    ):
         present = "set" if os.environ.get(key) else "unset"
         console.print(f"- {key}: {present}")
 
     console.print(
-        f"[bold]Config[/bold]: model={settings.model}, "
+        f"[bold]Config[/bold]: llm_provider={settings.llm_provider}, model={settings.model}, "
         f"streaming={settings.streaming_mode}/{settings.streaming_quality}"
     )
     console.print("[bold]MCP snippet[/bold]:")
     console.print(settings.to_mcp_snippet())
+
+
+@app.command("validate-llm")
+def validate_llm(
+    llm_provider: str | None = typer.Option(
+        None,
+        "--llm-provider",
+        help="LLM provider (anthropic, chatbrowseruse, openai, ollama)",
+    ),
+    llm_model: str | None = typer.Option(None, "--llm-model", help="Override LLM model name"),
+    ollama_host: str | None = typer.Option(None, "--ollama-host", help="Override OLLAMA_HOST"),
+) -> None:
+    """Validate LLM provider configuration for browser-use."""
+    overrides: dict[str, str] = {}
+    if llm_provider is not None:
+        overrides["GSD_BROWSER_LLM_PROVIDER"] = llm_provider
+    if llm_model is not None:
+        overrides["GSD_BROWSER_MODEL"] = llm_model
+    if ollama_host is not None:
+        overrides["OLLAMA_HOST"] = ollama_host
+
+    settings = load_settings(env=overrides or None, strict=False)
+    from .llm.browser_use import validate_llm_settings
+
+    try:
+        validate_llm_settings(settings)
+    except ValueError as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(code=1) from exc
+
+    console.print(
+        "[green]LLM config valid[/green]: "
+        f"llm_provider={settings.llm_provider}, model={settings.model}"
+    )
 
 
 @app.command()
