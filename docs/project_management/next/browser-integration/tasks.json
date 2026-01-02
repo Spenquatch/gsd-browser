@@ -429,7 +429,7 @@
       "name": "browser-use upgrade integration",
       "type": "integration",
       "phase": "B4",
-      "status": "pending",
+      "status": "in_progress",
       "description": "Merge provider code/tests, verify dependency upgrade, finalize docs.",
       "references": [
         "docs/project_management/next/browser-integration/plan.md",

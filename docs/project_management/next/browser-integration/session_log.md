@@ -168,3 +168,10 @@ Use this log for START/END entries only. Template:
 - Commands executed: (in gsd-browser) uv run ruff format --check (pass); uv run ruff check (pass)
 - Result: pass
 - Blockers/next steps: Proceed to B4-test and B4-integ.
+
+## B4-integ START
+- Timestamp: 2026-01-02T01:31:55Z
+- Role: integration
+- Worktree: wt/bi-b4-browseruse-integ
+- Commands planned: uv run ruff format --check; uv run ruff check; uv run pytest; make smoke
+- Notes: Merge bi-b4-browseruse-code + bi-b4-browseruse-test, ensure browser-use upgrade installs cleanly, then finalize provider-selection docs on feat/browser-integration (not from the worktree).
