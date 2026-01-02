@@ -44,5 +44,11 @@ gsd-browser mcp-config --format json   # or toml
 ```
 Copy the output into your Claude MCP settings file. The snippet is also stored at `config/mcp-config-example.json`.
 
+## MCP Tools
+After Claude is connected to `gsd-browser`, it can call:
+- `web_eval_agent` (runs a Playwright navigation + captures screenshots)
+- `get_screenshots` (retrieves recent screenshots; set `include_images=False` for metadata-only)
+- `setup_browser_state` (interactive login + saves browser state)
+
 ## Browser Streaming
 See `docs/STREAMING.md` for running the streaming server, the dashboard UI, and auth configuration.

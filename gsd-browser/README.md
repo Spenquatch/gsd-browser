@@ -52,6 +52,17 @@ or use the helper script:
 ```
 Paste the output into your Claude MCP settings.
 
+## MCP Tools
+Once configured as an MCP server, Claude can call:
+- `web_eval_agent(url, task, headless_browser=False)` – runs a short Playwright evaluation and records screenshots.
+- `setup_browser_state(url=None)` – opens a non-headless browser so you can log in, then saves state to `~/.operative/browser_state/state.json`.
+- `get_screenshots(last_n=5, screenshot_type="agent_step", session_id=None, from_timestamp=None, has_error=None, include_images=True)` – retrieves recent screenshots (max `last_n=20`); set `include_images=False` for metadata-only.
+
+For a quick end-to-end check:
+```bash
+gsd-browser mcp-tool-smoke --skip-browser-task
+```
+
 ## Docker
 ```bash
 docker build -t gsd-browser:dev -f docker/Dockerfile .

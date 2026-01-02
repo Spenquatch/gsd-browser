@@ -9,7 +9,7 @@ This script prints:
 - Exposed environment variables
 - Configuration validation (using `gsd_browser.config`)
 - MCP config snippet
-- A smoke round-trip using `gsd-browser serve --once`
+- A smoke round-trip using `gsd-browser serve-echo --once`
 
 ## Common Issues
 - **Missing API key**: Ensure `ANTHROPIC_API_KEY` exists in `.env` or shell. Diagnose output will show `(none set)`.
@@ -17,5 +17,10 @@ This script prints:
 - **Claude config entry not present**: Use `./scripts/check-mcp-config.sh` to inspect `~/.claude.json` and project `.claude.json`.
 - **Log format surprises**: Export `LOG_LEVEL=DEBUG` or `GSD_BROWSER_JSON_LOGS=true` (or pass `--log-level DEBUG`, `--json-logs`, `--text-logs`) to control output.
 - **Docker runtime errors**: Verify `docker/entrypoint.sh` has execute permissions (`chmod +x`) and that `ANTHROPIC_API_KEY` is passed via `docker run -e`.
+
+If MCP tools are behaving oddly, run:
+```bash
+gsd-browser mcp-tool-smoke --skip-browser-task
+```
 
 If diagnosing remote environments, run `./scripts/collect-support-bundle.sh` once implemented (future work).
