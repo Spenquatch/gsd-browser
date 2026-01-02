@@ -462,6 +462,234 @@
       "kickoff_prompt": "docs/project_management/next/browser-integration/kickoff_prompts/B4-integ.md",
       "depends_on": ["B4-code", "B4-test"],
       "concurrent_with": []
+    },
+    {
+      "id": "B5-code",
+      "name": "CDP streaming wiring (Playwright → /stream)",
+      "type": "code",
+      "phase": "B5",
+      "status": "pending",
+      "description": "Wire CdpScreencastStreamer to a real Playwright Page and align dashboard health metrics.",
+      "references": [
+        "docs/project_management/next/browser-integration/plan.md",
+        "docs/project_management/next/browser-integration/B5-spec.md"
+      ],
+      "acceptance_criteria": [
+        "CDP mode produces frame events during a real Playwright session.",
+        "Screenshot mode emits browser_update events via StreamingRuntime.emit_browser_update.",
+        "sampler_totals keys align with dashboard HUD expectations."
+      ],
+      "start_checklist": [
+        "git checkout feat/browser-integration && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, B5-spec.md, kickoff_prompts/B5-code.md",
+        "Set B5-code status to in_progress",
+        "Add START entry; commit docs (docs: start B5-code)",
+        "git branch bi-b5-cdpwire-code feat/browser-integration",
+        "git worktree add wt/bi-b5-cdpwire-code bi-b5-cdpwire-code",
+        "No docs/tasks/session log edits inside worktree"
+      ],
+      "end_checklist": [
+        "uv run ruff format --check",
+        "uv run ruff check",
+        "Commit changes",
+        "Update tasks/session log (docs: finish B5-code)",
+        "git worktree remove wt/bi-b5-cdpwire-code"
+      ],
+      "worktree": "wt/bi-b5-cdpwire-code",
+      "integration_task": "B5-integ",
+      "kickoff_prompt": "docs/project_management/next/browser-integration/kickoff_prompts/B5-code.md",
+      "depends_on": ["B4-integ"],
+      "concurrent_with": ["B5-test"]
+    },
+    {
+      "id": "B5-test",
+      "name": "CDP wiring unit tests",
+      "type": "test",
+      "phase": "B5",
+      "status": "pending",
+      "description": "Add unit tests that simulate CDP streamer wiring and validate /healthz sampler totals behavior.",
+      "references": [
+        "docs/project_management/next/browser-integration/plan.md",
+        "docs/project_management/next/browser-integration/B5-spec.md"
+      ],
+      "acceptance_criteria": [
+        "Tests cover mocked CDP frame flow (stats updates + sampled screenshot storage).",
+        "Tests cover screenshot-mode browser_update emission path (no real browser needed)."
+      ],
+      "start_checklist": [
+        "git checkout feat/browser-integration && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, B5-spec.md, kickoff_prompts/B5-test.md",
+        "Set B5-test status to in_progress",
+        "Add START entry; commit docs (docs: start B5-test)",
+        "git branch bi-b5-cdpwire-test feat/browser-integration",
+        "git worktree add wt/bi-b5-cdpwire-test bi-b5-cdpwire-test",
+        "Avoid docs/tasks/log edits in worktree"
+      ],
+      "end_checklist": [
+        "uv run ruff format --check",
+        "uv run pytest tests/streaming/test_cdp_wiring.py",
+        "Commit tests",
+        "Update tasks/session log (docs: finish B5-test)",
+        "git worktree remove wt/bi-b5-cdpwire-test"
+      ],
+      "worktree": "wt/bi-b5-cdpwire-test",
+      "integration_task": "B5-integ",
+      "kickoff_prompt": "docs/project_management/next/browser-integration/kickoff_prompts/B5-test.md",
+      "depends_on": ["B4-integ"],
+      "concurrent_with": ["B5-code"]
+    },
+    {
+      "id": "B5-integ",
+      "name": "CDP wiring integration",
+      "type": "integration",
+      "phase": "B5",
+      "status": "pending",
+      "description": "Merge CDP wiring code/tests, run full suite, and verify end-to-end frame generation via smoke/telemetry.",
+      "references": [
+        "docs/project_management/next/browser-integration/plan.md",
+        "docs/project_management/next/browser-integration/B5-spec.md"
+      ],
+      "acceptance_criteria": [
+        "uv run pytest and make smoke pass.",
+        "Telemetry script reports non-zero frame count in CDP mode (manual).",
+        "Dashboard HUD shows sampler totals incrementing after CDP run (manual)."
+      ],
+      "start_checklist": [
+        "git checkout feat/browser-integration && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, B5-spec.md, kickoff_prompts/B5-integ.md",
+        "Set B5-integ status to in_progress",
+        "Add START entry; commit docs (docs: start B5-integ)",
+        "git branch bi-b5-cdpwire-integ feat/browser-integration",
+        "git worktree add wt/bi-b5-cdpwire-integ bi-b5-cdpwire-integ",
+        "No docs/tasks/log edits in worktree"
+      ],
+      "end_checklist": [
+        "uv run ruff format --check",
+        "uv run ruff check",
+        "uv run pytest",
+        "make smoke",
+        "uv run python scripts/measure_stream_latency.py --duration 10 --mode cdp",
+        "Commit + merge, update docs/session log (docs: finish B5-integ)",
+        "git worktree remove wt/bi-b5-cdpwire-integ"
+      ],
+      "worktree": "wt/bi-b5-cdpwire-integ",
+      "integration_task": "B5-integ",
+      "kickoff_prompt": "docs/project_management/next/browser-integration/kickoff_prompts/B5-integ.md",
+      "depends_on": ["B5-code", "B5-test"],
+      "concurrent_with": []
+    },
+    {
+      "id": "B6-code",
+      "name": "Control channel pause gate",
+      "type": "code",
+      "phase": "B6",
+      "status": "pending",
+      "description": "Expose control state from StreamingRuntime and wire pause/resume into web_eval_agent execution.",
+      "references": [
+        "docs/project_management/next/browser-integration/plan.md",
+        "docs/project_management/next/browser-integration/B6-spec.md"
+      ],
+      "acceptance_criteria": [
+        "Pause/resume has observable effect on web_eval_agent execution.",
+        "Control lock holder semantics remain enforced."
+      ],
+      "start_checklist": [
+        "git checkout feat/browser-integration && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, B6-spec.md, kickoff_prompts/B6-code.md",
+        "Set B6-code status to in_progress",
+        "Add START entry; commit docs (docs: start B6-code)",
+        "git branch bi-b6-ctrlpause-code feat/browser-integration",
+        "git worktree add wt/bi-b6-ctrlpause-code bi-b6-ctrlpause-code",
+        "No docs/tasks/session log edits inside worktree"
+      ],
+      "end_checklist": [
+        "uv run ruff format --check",
+        "uv run ruff check",
+        "Commit changes",
+        "Update tasks/session log (docs: finish B6-code)",
+        "git worktree remove wt/bi-b6-ctrlpause-code"
+      ],
+      "worktree": "wt/bi-b6-ctrlpause-code",
+      "integration_task": "B6-integ",
+      "kickoff_prompt": "docs/project_management/next/browser-integration/kickoff_prompts/B6-code.md",
+      "depends_on": ["B5-integ"],
+      "concurrent_with": ["B6-test"]
+    },
+    {
+      "id": "B6-test",
+      "name": "Control pause unit tests",
+      "type": "test",
+      "phase": "B6",
+      "status": "pending",
+      "description": "Add unit tests for control state transitions and pause gating helper.",
+      "references": [
+        "docs/project_management/next/browser-integration/plan.md",
+        "docs/project_management/next/browser-integration/B6-spec.md"
+      ],
+      "acceptance_criteria": [
+        "Tests cover pause blocks until resume and holder-only semantics.",
+        "No live Socket.IO server required."
+      ],
+      "start_checklist": [
+        "git checkout feat/browser-integration && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, B6-spec.md, kickoff_prompts/B6-test.md",
+        "Set B6-test status to in_progress",
+        "Add START entry; commit docs (docs: start B6-test)",
+        "git branch bi-b6-ctrlpause-test feat/browser-integration",
+        "git worktree add wt/bi-b6-ctrlpause-test bi-b6-ctrlpause-test",
+        "Avoid docs/tasks/log edits in worktree"
+      ],
+      "end_checklist": [
+        "uv run ruff format --check",
+        "uv run pytest tests/streaming/test_control_pause.py",
+        "Commit tests",
+        "Update tasks/session log (docs: finish B6-test)",
+        "git worktree remove wt/bi-b6-ctrlpause-test"
+      ],
+      "worktree": "wt/bi-b6-ctrlpause-test",
+      "integration_task": "B6-integ",
+      "kickoff_prompt": "docs/project_management/next/browser-integration/kickoff_prompts/B6-test.md",
+      "depends_on": ["B5-integ"],
+      "concurrent_with": ["B6-code"]
+    },
+    {
+      "id": "B6-integ",
+      "name": "Control pause integration",
+      "type": "integration",
+      "phase": "B6",
+      "status": "pending",
+      "description": "Merge pause wiring code/tests, run full suite, and document manual verification steps.",
+      "references": [
+        "docs/project_management/next/browser-integration/plan.md",
+        "docs/project_management/next/browser-integration/B6-spec.md"
+      ],
+      "acceptance_criteria": [
+        "uv run pytest and make smoke pass.",
+        "Manual repro demonstrates pause blocks web_eval_agent until resumed.",
+        "Docs updated with verification snippet."
+      ],
+      "start_checklist": [
+        "git checkout feat/browser-integration && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, B6-spec.md, kickoff_prompts/B6-integ.md",
+        "Set B6-integ status to in_progress",
+        "Add START entry; commit docs (docs: start B6-integ)",
+        "git branch bi-b6-ctrlpause-integ feat/browser-integration",
+        "git worktree add wt/bi-b6-ctrlpause-integ bi-b6-ctrlpause-integ",
+        "No docs/tasks/log edits in worktree"
+      ],
+      "end_checklist": [
+        "uv run ruff format --check",
+        "uv run ruff check",
+        "uv run pytest",
+        "make smoke",
+        "Commit + merge, update docs/session log (docs: finish B6-integ)",
+        "git worktree remove wt/bi-b6-ctrlpause-integ"
+      ],
+      "worktree": "wt/bi-b6-ctrlpause-integ",
+      "integration_task": "B6-integ",
+      "kickoff_prompt": "docs/project_management/next/browser-integration/kickoff_prompts/B6-integ.md",
+      "depends_on": ["B6-code", "B6-test"],
+      "concurrent_with": []
     }
   ]
 }

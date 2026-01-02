@@ -21,6 +21,8 @@ Land the WebEval Agent browser-streaming/dashboard stack inside `gsd-browser`. T
 2. **B2 – Dashboard Control & Security**: Bring over the dashboard UI/Socket.IO control channel, auth (API key, nonce, rate limiter), HUD, telemetry scripts, and takeover UX.
 3. **B3 – MCP Tooling & Screenshot Services**: Wire MCP tools (`web_eval_agent`, `setup_browser_state`, `get_screenshots`), log plumbing, and diagnostics/smoke scripts that rely on screenshot sampling.
 4. **B4 – browser-use Upgrade & OSS LLM Path**: Upgrade to the latest `browser-use` (≥0.11.x), expose configuration for ChatBrowserUse/Ollama/local OSS models, and document the dual stack.
+5. **B5 – CDP Streaming Wiring & Metrics**: Wire `CdpScreencastStreamer` to a real Playwright session so CDP mode emits frames end-to-end; align `/healthz` sampler totals with the dashboard HUD.
+6. **B6 – Control Hooks (Pause/Resume)**: Make `/ctrl` Pause/Resume affect runtime behavior (initial target: `web_eval_agent`) with holder-only semantics, without requiring a new full agent runner.
 
 Each triad has its own spec (`B*-spec.md`) and code/test/integration kickoff prompts.
 
