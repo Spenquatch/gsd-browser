@@ -9,7 +9,7 @@ from typing import Any
 
 from gsd_browser.screenshot_manager import ScreenshotManager
 from gsd_browser.streaming.cdp_screencast import CdpScreencastStreamer
-from gsd_browser.streaming.server import DEFAULT_STREAM_NAMESPACE, StreamingRuntime
+from gsd_browser.streaming.server import DEFAULT_STREAM_NAMESPACE, ControlState, StreamingRuntime
 from gsd_browser.streaming.stats import StreamingStats
 
 
@@ -261,6 +261,7 @@ def test_emit_browser_update_emits_and_records_stream_sample() -> None:
             stats=stats,
             screenshots=screenshots,
             cdp_streamer=None,  # type: ignore[arg-type]
+            control_state=ControlState(),
         )
 
         image_bytes = b"pngbytes"
