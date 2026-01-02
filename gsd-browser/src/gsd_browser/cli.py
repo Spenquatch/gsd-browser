@@ -70,7 +70,7 @@ def serve(
 
     desired_level = log_level or settings.log_level
     if json_logs and text_logs:
-        console.print("[red]Cannot use --json-logs and --text-logs together[/red]")
+        typer.echo("Cannot use --json-logs and --text-logs together", err=True)
         raise typer.Exit(code=1)
     if json_logs:
         desired_json = True
@@ -80,10 +80,12 @@ def serve(
         desired_json = settings.json_logs
 
     setup_logging(desired_level, json_logs=desired_json)
-    console.print(
-        "[green]Config loaded[/green]: "
+    # IMPORTANT: MCP stdio transport uses stdout for JSON-RPC. Do not print to stdout here.
+    typer.echo(
+        "Starting MCP stdio server: "
         f"llm_provider={settings.llm_provider}, model={settings.model}, "
-        f"log_level={desired_level}, json_logs={desired_json}"
+        f"log_level={desired_level}, json_logs={desired_json}",
+        err=True,
     )
     from .mcp_server import run_stdio
 
