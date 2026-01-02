@@ -38,13 +38,17 @@ PY
 echo "Installing $PACKAGE v$VERSION via pipx..."
 pipx install --force "$ROOT_DIR"
 
-pipx run "$PACKAGE" --version || true
+if command -v "$PACKAGE" >/dev/null 2>&1; then
+  "$PACKAGE" --version || true
+fi
 
-PIPX_ENV=$(pipx list --json | python3 - <<'PY'
+PIPX_ENV=$(python3 - <<'PY'
 import json
-import sys
+import subprocess
+
 PACKAGE = "gsd-browser"
-data = json.load(sys.stdin)
+raw = subprocess.check_output(["pipx", "list", "--json"], text=True)
+data = json.loads(raw)
 venvs = data.get("venvs", {})
 if isinstance(venvs, dict):
     entry = venvs.get(PACKAGE) or {}
