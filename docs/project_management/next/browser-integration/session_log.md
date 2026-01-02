@@ -160,3 +160,11 @@ Use this log for START/END entries only. Template:
 - Worktree: wt/bi-b4-browseruse-code
 - Commands planned: uv run ruff format --check; uv run ruff check
 - Notes: Upgrade browser-use and add provider selection/validation per B4 spec; do not edit docs from worktree.
+
+## B4-code END
+- Timestamp: 2026-01-02T01:27:48Z
+- Role: code
+- Worktree: wt/bi-b4-browseruse-code
+- Commands executed: (in gsd-browser) uv run ruff format --check (pass); uv run ruff check (pass)
+- Result: pass
+- Blockers/next steps: Proceed to B4-test and B4-integ.
