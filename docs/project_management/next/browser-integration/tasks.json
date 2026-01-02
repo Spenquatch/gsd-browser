@@ -543,7 +543,7 @@
       "name": "CDP wiring integration",
       "type": "integration",
       "phase": "B5",
-      "status": "pending",
+      "status": "in_progress",
       "description": "Merge CDP wiring code/tests, run full suite, and verify end-to-end frame generation via smoke/telemetry.",
       "references": [
         "docs/project_management/next/browser-integration/plan.md",
