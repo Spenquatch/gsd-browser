@@ -85,6 +85,7 @@ class ControlState:
         self.holder_sid: str | None = None
         self.held_since_ts: float | None = None
         self.paused: bool = False
+        self.active_session_id: str | None = None
         self._input_events: list[dict[str, Any]] = []
         self._input_events_max = 1000
         self._input_seq = 0
@@ -95,7 +96,25 @@ class ControlState:
                 "holder_sid": self.holder_sid,
                 "held_since_ts": self.held_since_ts,
                 "paused": self.paused,
+                "active_session_id": self.active_session_id,
             }
+
+    def set_active_session(self, *, session_id: str) -> None:
+        session_id_value = str(session_id).strip()
+        if not session_id_value:
+            return
+        with self._lock:
+            self.active_session_id = session_id_value
+
+    def clear_active_session(self, *, session_id: str | None = None) -> None:
+        with self._lock:
+            if session_id is not None and self.active_session_id != session_id:
+                return
+            self.active_session_id = None
+
+    def has_active_session(self) -> bool:
+        with self._lock:
+            return self.active_session_id is not None
 
     def enqueue_input_event(
         self, *, sid: str, event: str, payload: dict[str, Any]
@@ -358,12 +377,19 @@ def create_streaming_app(
         if not isinstance(payload, dict):
             return None, "invalid_payload"
 
+        def _maybe_add_modifiers(out: dict[str, Any]) -> None:
+            for key in ("altKey", "ctrlKey", "metaKey", "shiftKey"):
+                value = payload.get(key)
+                if isinstance(value, bool):
+                    out[key] = value
+
         if event in {"input_click", "input_move", "input_wheel"}:
             x = _normalize_float(payload.get("x"))
             y = _normalize_float(payload.get("y"))
             if x is None or y is None:
                 return None, "invalid_coordinates"
             out: dict[str, Any] = {"x": x, "y": y}
+            _maybe_add_modifiers(out)
 
             if event == "input_wheel":
                 dx = _normalize_float(payload.get("delta_x"))
@@ -391,6 +417,7 @@ def create_streaming_app(
             if not key:
                 return None, "invalid_key"
             out = {"key": key}
+            _maybe_add_modifiers(out)
             code = _normalize_str(payload.get("code"))
             if code:
                 out["code"] = code
@@ -436,6 +463,15 @@ def create_streaming_app(
                 event=event,
                 log_message="ctrl_invalid_payload",
                 reason=error,
+                payload=payload,
+            )
+
+        if not control_state.has_active_session():
+            return _reject_input_event(
+                sid=sid,
+                event=event,
+                log_message="ctrl_no_active_session",
+                reason="no_active_session",
                 payload=payload,
             )
 

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import inspect
 import json
@@ -23,6 +24,7 @@ from .llm.browser_use import create_browser_use_llm
 from .run_event_capture import CDPRunEventCapture
 from .run_event_store import RunEventStore
 from .runtime import DEFAULT_DASHBOARD_HOST, DEFAULT_DASHBOARD_PORT, get_runtime
+from .streaming.cdp_input_dispatch import dispatch_ctrl_input_event
 
 logger = logging.getLogger("gsd_browser.mcp")
 
@@ -456,19 +458,65 @@ async def web_eval_agent(
             except Exception:  # noqa: BLE001
                 logger.debug("Failed to record agent step event", exc_info=True)
 
-        async def pause_gate(*_: Any, **__: Any) -> None:
-            if control_state is None:
-                return
-            await control_state.wait_until_unpaused()
-
         llm = create_browser_use_llm(settings)
         browser_session = BrowserSession(headless=headless_browser, storage_state=storage_state)
 
+        active_session_set = False
         try:
             await browser_session.start()
+            if control_state is not None:
+                set_active_session = getattr(control_state, "set_active_session", None)
+                if callable(set_active_session):
+                    set_active_session(session_id=session_id)
+                    active_session_set = True
             cdp_capture.attach(browser_session.cdp_client)
         except Exception:  # noqa: BLE001
             logger.debug("Failed to attach CDP event capture", exc_info=True)
+
+        async def pause_gate(*_: Any, **__: Any) -> None:
+            if control_state is None or not control_state.is_paused():
+                return
+
+            cdp_client = getattr(browser_session, "cdp_client", None)
+            if cdp_client is None:
+                logger.info(
+                    "ctrl_input_not_dispatched",
+                    extra={"session_id": session_id, "reason": "no_cdp_client"},
+                )
+                await control_state.wait_until_unpaused()
+                return
+
+            while control_state.is_paused():
+                drained = control_state.drain_input_events(max_items=100)
+                for record in drained:
+                    event = record.get("event")
+                    payload = record.get("payload")
+                    if not isinstance(event, str) or not isinstance(payload, dict):
+                        continue
+                    try:
+                        await dispatch_ctrl_input_event(
+                            cdp_client=cdp_client, event=event, payload=payload
+                        )
+                    except Exception:  # noqa: BLE001
+                        logger.debug(
+                            "Failed to dispatch ctrl input event",
+                            exc_info=True,
+                            extra={"session_id": session_id, "event": event},
+                        )
+
+                if not drained:
+                    await asyncio.sleep(0.05)
+
+            leftover = control_state.drain_input_events()
+            if leftover:
+                logger.info(
+                    "ctrl_input_dropped",
+                    extra={
+                        "session_id": session_id,
+                        "dropped": len(leftover),
+                        "reason": "resumed",
+                    },
+                )
 
         agent_task = f"{task}\n\nURL: {normalized_url}"
         agent_kwargs: dict[str, Any] = {
@@ -512,6 +560,10 @@ async def web_eval_agent(
                 cdp_capture.detach(browser_session.cdp_client)
             except Exception:  # noqa: BLE001
                 logger.debug("Failed to detach CDP event capture", exc_info=True)
+            if control_state is not None and active_session_set:
+                clear_active_session = getattr(control_state, "clear_active_session", None)
+                if callable(clear_active_session):
+                    clear_active_session(session_id=session_id)
 
         result = _history_final_result(history)
         error_count = _history_error_count(history)
