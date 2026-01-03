@@ -5,7 +5,7 @@
       "name": "Minimal orchestrated web_eval_agent + JSON contract",
       "type": "code",
       "phase": "O1a",
-      "status": "in_progress",
+      "status": "done",
       "description": "Run browser-use Agent in web_eval_agent, extract AgentHistoryList.final_result(), and return a single JSON TextContent response (no inline images).",
       "references": [
         "docs/adr/ADR-0001-agent-orchestration-and-answer-contract.md",
