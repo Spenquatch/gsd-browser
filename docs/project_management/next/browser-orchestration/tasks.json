@@ -508,7 +508,7 @@
       "name": "O3a take-control gating tests",
       "type": "test",
       "phase": "O3a",
-      "status": "pending",
+      "status": "in_progress",
       "description": "Unit tests for holder-only + paused-only gating, validation, and rate limiting of input events.",
       "references": [
         "docs/project_management/next/browser-orchestration/plan.md",

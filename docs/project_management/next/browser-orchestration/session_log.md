@@ -177,3 +177,10 @@ Only START/END entries. Docs edits happen on the orchestration branch only.
 - Worktree: wt/bo-o3a-input-api-code
 - Commands planned: uv run ruff format --check; uv run ruff check
 - Notes: No git remote is configured in this repo, so git pull --ff-only cannot run as written.
+
+## O3a-test START
+- Timestamp: 2026-01-03T22:12:17Z
+- Role: test
+- Worktree: wt/bo-o3a-input-api-test
+- Commands planned: uv run ruff format --check; uv run pytest gsd-browser/tests -k o3a
+- Notes: No git remote is configured in this repo, so git pull --ff-only cannot run as written.
