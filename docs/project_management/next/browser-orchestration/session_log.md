@@ -49,3 +49,10 @@ Only START/END entries. Docs edits happen on the orchestration branch only.
 - Commands executed: (in wt/bo-o1b-callbacks-code/gsd-browser) make dev (pass); uv run ruff format --check (pass; 32 files already formatted); uv run ruff check (pass)
 - Result: pass
 - Blockers/next steps: Run O1b-test and merge in O1b-integ.
+
+## O1b-test START
+- Timestamp: 2026-01-03T16:03:34Z
+- Role: test
+- Worktree: wt/bo-o1b-callbacks-test
+- Commands planned: uv run ruff format --check; uv run pytest gsd-browser/tests -k o1b
+- Notes: Local repo has no upstream for feat/browser-orchestration (origin only has main), so git pull --ff-only cannot run as written.
