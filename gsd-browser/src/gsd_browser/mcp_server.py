@@ -20,6 +20,7 @@ from playwright.async_api import async_playwright
 from .config import load_settings
 from .llm.browser_use import create_browser_use_llm
 from .run_event_capture import CDPRunEventCapture
+from .run_event_store import RunEventStore
 from .runtime import DEFAULT_DASHBOARD_HOST, DEFAULT_DASHBOARD_PORT, get_runtime
 
 logger = logging.getLogger("gsd_browser.mcp")
@@ -184,7 +185,12 @@ async def web_eval_agent(
     tool_call_id = str(uuid.uuid4())
     session_id = str(uuid.uuid4())
     started = datetime.now(UTC).timestamp()
-    runtime.run_events.ensure_session(session_id, created_at=started)
+    run_events = getattr(runtime, "run_events", None)
+    if run_events is None:
+        run_events = RunEventStore()
+    ensure_session = getattr(run_events, "ensure_session", None)
+    if callable(ensure_session):
+        ensure_session(session_id, created_at=started)
 
     if hasattr(runtime, "screenshots"):
         try:
@@ -210,7 +216,7 @@ async def web_eval_agent(
         Agent, BrowserSession = _load_browser_use_classes()
 
         step_screenshot_count = 0
-        cdp_capture = CDPRunEventCapture(store=runtime.run_events, session_id=session_id)
+        cdp_capture = CDPRunEventCapture(store=run_events, session_id=session_id)
 
         async def record_step_screenshot(*args: Any, **kwargs: Any) -> None:
             nonlocal step_screenshot_count
@@ -323,14 +329,16 @@ async def web_eval_agent(
                     except Exception:  # noqa: BLE001
                         page_title = None
 
-            runtime.run_events.record_agent_event(
-                session_id,
-                captured_at=datetime.now(UTC).timestamp(),
-                step=int(step) if isinstance(step, int) else None,
-                url=str(page_url) if page_url else None,
-                title=str(page_title) if page_title else None,
-                summary=summary,
-            )
+            record_agent_event = getattr(run_events, "record_agent_event", None)
+            if callable(record_agent_event):
+                record_agent_event(
+                    session_id,
+                    captured_at=datetime.now(UTC).timestamp(),
+                    step=int(step) if isinstance(step, int) else None,
+                    url=str(page_url) if page_url else None,
+                    title=str(page_title) if page_title else None,
+                    summary=summary,
+                )
 
         async def on_new_step(*args: Any, **kwargs: Any) -> None:
             try:
@@ -426,7 +434,13 @@ async def web_eval_agent(
             "artifacts": {
                 "screenshots": step_screenshot_count,
                 "stream_samples": 0,
-                "run_events": runtime.run_events.get_counts(session_id)["total"],
+                "run_events": (
+                    getattr(run_events, "get_counts", lambda _sid: {"total": 0})(session_id).get(
+                        "total", 0
+                    )
+                    if run_events is not None
+                    else 0
+                ),
             },
             "next_actions": [
                 (
