@@ -12,6 +12,7 @@ import uuid
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
 from mcp.server.fastmcp import Context, FastMCP
 from mcp.types import ImageContent, TextContent
@@ -29,6 +30,9 @@ mcp = FastMCP("gsd-browser")
 
 os.environ.setdefault("BROWSER_USE_SETUP_LOGGING", "false")
 
+_WEB_EVAL_AGENT_MODES = {"compact", "dev"}
+_RUN_EVENT_TYPES = {"agent", "console", "network"}
+
 
 def _normalize_url(url: str) -> str:
     if url.startswith(("http://", "https://", "file://", "data:", "chrome:", "javascript:")):
@@ -44,6 +48,81 @@ def _truncate(text: str, *, max_len: int) -> str:
     if len(text) <= max_len:
         return text
     return text[: max(0, max_len - 1)] + "…"
+
+
+def _parse_timestamp(value: Any) -> float | None:
+    if value is None:
+        return None
+    if isinstance(value, (int, float)):
+        return float(value)
+
+    text = str(value).strip()
+    if not text:
+        return None
+
+    try:
+        return float(text)
+    except ValueError:
+        pass
+
+    try:
+        if text.endswith("Z"):
+            text = text[:-1] + "+00:00"
+        parsed = datetime.fromisoformat(text)
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=UTC)
+        return parsed.timestamp()
+    except ValueError:
+        return None
+
+
+def _select_web_eval_agent_mode(*, normalized_url: str, explicit: str | None) -> str:
+    if explicit is not None:
+        candidate = str(explicit).strip().lower()
+        if candidate not in _WEB_EVAL_AGENT_MODES:
+            raise ValueError(
+                f"Invalid mode={explicit!r}. Expected one of {sorted(_WEB_EVAL_AGENT_MODES)}."
+            )
+        return candidate
+
+    hostname = urlparse(normalized_url).hostname
+    if hostname in {"localhost", "127.0.0.1", "::1"}:
+        return "dev"
+    return "compact"
+
+
+def _dev_run_event_excerpts(
+    run_events: RunEventStore | None, *, session_id: str, max_per_type: int = 5
+) -> dict[str, Any]:
+    max_value = min(max(int(max_per_type), 0), 10)
+    if run_events is None or max_value <= 0:
+        return {"console_errors": [], "network_errors": []}
+
+    get_events = getattr(run_events, "get_events", None)
+    if not callable(get_events):
+        return {"console_errors": [], "network_errors": []}
+
+    events: list[dict[str, Any]] = get_events(
+        session_id=session_id,
+        last_n=100,
+        event_types=["console", "network"],
+        from_timestamp=None,
+        has_error=True,
+        include_details=True,
+    )
+
+    console_errors: list[dict[str, Any]] = []
+    network_errors: list[dict[str, Any]] = []
+    for event in events:
+        event_type = event.get("event_type") or event.get("type")
+        if event_type == "console" and len(console_errors) < max_value:
+            console_errors.append(event)
+        elif event_type == "network" and len(network_errors) < max_value:
+            network_errors.append(event)
+        if len(console_errors) >= max_value and len(network_errors) >= max_value:
+            break
+
+    return {"console_errors": console_errors, "network_errors": network_errors}
 
 
 def _load_browser_use_classes() -> tuple[type[Any], type[Any]]:
@@ -141,7 +220,11 @@ def _agent_output_summary(agent_output: Any) -> str | None:
 
 @mcp.tool(name="web_eval_agent")
 async def web_eval_agent(
-    url: str, task: str, ctx: Context, headless_browser: bool = False
+    url: str,
+    task: str,
+    ctx: Context,
+    headless_browser: bool = False,
+    mode: str | None = None,
 ) -> list[TextContent]:
     """Evaluate the user experience / interface of a web application.
 
@@ -162,6 +245,9 @@ async def web_eval_agent(
         headless_browser: Optional. Whether to hide the browser window popup during evaluation.
         If headless_browser is True, only the operative control center browser will show, and no
         popup browser will be shown.
+        mode: Optional. Response mode:
+          - "compact": minimal summary + references (default for non-localhost)
+          - "dev": includes bounded console/network excerpts (default for localhost/127.0.0.1)
 
     Returns:
         list[TextContent]: A single JSON payload encoded as text (no inline images).
@@ -181,10 +267,30 @@ async def web_eval_agent(
         getattr(getattr(dashboard, "runtime", None), "control_state", None) if dashboard else None
     )
 
-    normalized_url = _normalize_url(url)
     tool_call_id = str(uuid.uuid4())
     session_id = str(uuid.uuid4())
     started = datetime.now(UTC).timestamp()
+    normalized_url = _normalize_url(url)
+    try:
+        selected_mode = _select_web_eval_agent_mode(normalized_url=normalized_url, explicit=mode)
+    except ValueError as exc:
+        payload = {
+            "version": "gsd-browser.web_eval_agent.v1",
+            "session_id": session_id,
+            "tool_call_id": tool_call_id,
+            "url": normalized_url,
+            "task": task,
+            "mode": str(mode) if mode is not None else None,
+            "status": "failed",
+            "result": None,
+            "summary": _truncate(str(exc), max_len=2000),
+            "artifacts": {"screenshots": 0, "stream_samples": 0, "run_events": 0},
+            "next_actions": [
+                "Use mode='compact' or mode='dev' to override response behavior.",
+                f"Open dashboard: http://{DEFAULT_DASHBOARD_HOST}:{DEFAULT_DASHBOARD_PORT}",
+            ],
+        }
+        return [TextContent(type="text", text=json.dumps(payload, ensure_ascii=False))]
     run_events = getattr(runtime, "run_events", None)
     if run_events is None:
         run_events = RunEventStore()
@@ -427,7 +533,7 @@ async def web_eval_agent(
             "tool_call_id": tool_call_id,
             "url": normalized_url,
             "task": task,
-            "mode": "compact",
+            "mode": selected_mode,
             "status": status,
             "result": result,
             "summary": _truncate(summary, max_len=2000),
@@ -451,9 +557,17 @@ async def web_eval_agent(
                     "Use get_screenshots(session_id="
                     f"'{session_id}', screenshot_type='agent_step', include_images=false)"
                 ),
+                (
+                    "Use get_run_events(session_id="
+                    f"'{session_id}', event_types=['console','network'], has_error=true, last_n=50)"
+                ),
                 f"Open dashboard: http://{DEFAULT_DASHBOARD_HOST}:{DEFAULT_DASHBOARD_PORT}",
             ],
         }
+        if selected_mode == "dev":
+            payload["dev_excerpts"] = _dev_run_event_excerpts(
+                run_events, session_id=session_id, max_per_type=5
+            )
 
         logger.info(
             "web_eval_agent completed",
@@ -484,7 +598,7 @@ async def web_eval_agent(
             "tool_call_id": tool_call_id,
             "url": normalized_url,
             "task": task,
-            "mode": "compact",
+            "mode": selected_mode,
             "status": "failed",
             "result": None,
             "summary": _truncate(f"{type(exc).__name__}: {exc}", max_len=2000),
@@ -495,6 +609,103 @@ async def web_eval_agent(
             ],
         }
         return [TextContent(type="text", text=json.dumps(payload, ensure_ascii=False))]
+
+
+@mcp.tool(name="get_run_events")
+async def get_run_events(
+    session_id: str | None = None,
+    last_n: int = 50,
+    event_types: list[str] | None = None,
+    from_timestamp: Any | None = None,
+    has_error: bool | None = None,
+    include_details: bool = False,
+    ctx: Context | None = None,
+) -> list[TextContent]:
+    """Retrieve stored run events for web_eval_agent sessions as a JSON payload.
+
+    This tool is designed to keep web_eval_agent responses compact while still allowing
+    clients to fetch detailed console/network/agent events on demand.
+
+    Args:
+        session_id: Filter to a single session_id (optional).
+        last_n: Max number of events to return (default 50, max 200).
+        event_types: Optional list of event types ("agent", "console", "network").
+        from_timestamp: Only include events after this timestamp (epoch seconds or ISO-8601).
+        has_error: Filter for events marked as errors (optional).
+        include_details: Whether to include event details payloads (default false).
+
+    Returns:
+        list[TextContent]: A single JSON payload encoded as text.
+    """
+    _ = ctx
+    runtime = get_runtime()
+    run_events = getattr(runtime, "run_events", None)
+
+    last_n_value = min(max(int(last_n), 0), 200)
+
+    normalized_types: list[str] | None = None
+    error: str | None = None
+    if event_types is not None:
+        normalized: list[str] = []
+        invalid: set[str] = set()
+        for item in event_types:
+            candidate = str(item).strip().lower()
+            if not candidate:
+                continue
+            if candidate not in _RUN_EVENT_TYPES:
+                invalid.add(candidate)
+                continue
+            if candidate not in normalized:
+                normalized.append(candidate)
+        if invalid:
+            error = (
+                f"Invalid event_types={sorted(invalid)}. "
+                f"Expected subset of {sorted(_RUN_EVENT_TYPES)}."
+            )
+        else:
+            normalized_types = normalized or None
+
+    parsed_from_timestamp = _parse_timestamp(from_timestamp)
+    if error is None and from_timestamp is not None and parsed_from_timestamp is None:
+        error = "from_timestamp must be epoch seconds or ISO-8601 timestamp."
+
+    get_events = getattr(run_events, "get_events", None) if run_events is not None else None
+    events: list[dict[str, Any]]
+    if error is None and callable(get_events):
+        events = get_events(
+            session_id=session_id,
+            last_n=last_n_value,
+            event_types=normalized_types,
+            from_timestamp=parsed_from_timestamp,
+            has_error=has_error,
+            include_details=bool(include_details),
+        )
+    else:
+        events = []
+
+    counts: dict[str, int] = {"agent": 0, "console": 0, "network": 0, "total": len(events)}
+    timestamps: list[float] = []
+    for event in events:
+        event_type_value = event.get("event_type") or event.get("type")
+        if isinstance(event_type_value, str) and event_type_value in counts:
+            counts[event_type_value] += 1
+        timestamp_value = event.get("timestamp") or event.get("captured_at")
+        if isinstance(timestamp_value, (int, float)):
+            timestamps.append(float(timestamp_value))
+
+    payload = {
+        "version": "gsd-browser.get_run_events.v1",
+        "session_id": session_id,
+        "events": events,
+        "stats": {
+            "counts": counts,
+            "oldest_timestamp": min(timestamps) if timestamps else None,
+            "newest_timestamp": max(timestamps) if timestamps else None,
+        },
+        "error": error,
+    }
+
+    return [TextContent(type="text", text=json.dumps(payload, ensure_ascii=False))]
 
 
 @mcp.tool(name="setup_browser_state")
