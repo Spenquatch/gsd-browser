@@ -85,6 +85,9 @@ class ControlState:
         self.holder_sid: str | None = None
         self.held_since_ts: float | None = None
         self.paused: bool = False
+        self._input_events: list[dict[str, Any]] = []
+        self._input_events_max = 1000
+        self._input_seq = 0
 
     def snapshot(self) -> dict[str, Any]:
         with self._lock:
@@ -93,6 +96,47 @@ class ControlState:
                 "held_since_ts": self.held_since_ts,
                 "paused": self.paused,
             }
+
+    def enqueue_input_event(
+        self, *, sid: str, event: str, payload: dict[str, Any]
+    ) -> dict[str, Any]:
+        with self._lock:
+            self._input_seq += 1
+            record = {
+                "seq": self._input_seq,
+                "received_at": time.time(),
+                "sid": sid,
+                "event": event,
+                "payload": payload,
+            }
+            self._input_events.append(record)
+            dropped: dict[str, Any] | None = None
+            if len(self._input_events) > self._input_events_max:
+                dropped = self._input_events.pop(0)
+            if dropped is not None:
+                get_security_logger().info(
+                    "ctrl_input_dropped",
+                    extra={
+                        "namespace": DEFAULT_CTRL_NAMESPACE,
+                        "sid": sid,
+                        "event": event,
+                        "dropped_seq": dropped.get("seq"),
+                        "dropped_event": dropped.get("event"),
+                        "queued": len(self._input_events),
+                        "reason": "buffer_full",
+                    },
+                )
+            return {"queued": len(self._input_events), "dropped": dropped is not None}
+
+    def drain_input_events(self, *, max_items: int | None = None) -> list[dict[str, Any]]:
+        with self._lock:
+            if max_items is None or max_items <= 0:
+                drained = list(self._input_events)
+                self._input_events.clear()
+                return drained
+            drained = self._input_events[:max_items]
+            del self._input_events[:max_items]
+            return drained
 
     def current_holder_sid(self) -> str | None:
         with self._lock:
@@ -118,6 +162,7 @@ class ControlState:
             self.holder_sid = None
             self.held_since_ts = None
             self._set_paused_locked(False)
+            self._input_events.clear()
 
     def take_control(self, *, sid: str) -> None:
         with self._lock:
@@ -247,6 +292,138 @@ def create_streaming_app(
             )
         return allowed
 
+    def _normalize_float(value: Any) -> float | None:
+        if isinstance(value, bool):
+            return None
+        if isinstance(value, (int, float)):
+            return float(value)
+        if isinstance(value, str):
+            try:
+                return float(value)
+            except ValueError:
+                return None
+        return None
+
+    def _normalize_int(value: Any) -> int | None:
+        if isinstance(value, bool):
+            return None
+        if isinstance(value, int):
+            return value
+        if isinstance(value, float) and value.is_integer():
+            return int(value)
+        if isinstance(value, str):
+            try:
+                return int(value)
+            except ValueError:
+                return None
+        return None
+
+    def _normalize_str(value: Any) -> str | None:
+        if isinstance(value, str):
+            return value
+        return None
+
+    def _redacted_payload_meta(*, event: str, payload: Any) -> dict[str, Any]:
+        if not isinstance(payload, dict):
+            return {"payload_type": type(payload).__name__}
+        meta: dict[str, Any] = {"payload_keys": sorted(payload.keys())}
+        if event == "input_type":
+            text = payload.get("text")
+            if isinstance(text, str):
+                meta["text_len"] = len(text)
+        return meta
+
+    def _reject_input_event(*, sid: str, event: str, reason: str, payload: Any) -> dict[str, Any]:
+        holder_sid = control_state.current_holder_sid()
+        paused = control_state.is_paused()
+        get_security_logger().info(
+            "ctrl_input_rejected",
+            extra={
+                "namespace": DEFAULT_CTRL_NAMESPACE,
+                "sid": sid,
+                "event": event,
+                "reason": reason,
+                "holder_sid": holder_sid,
+                "paused": paused,
+                **_redacted_payload_meta(event=event, payload=payload),
+            },
+        )
+        return {"ok": False, "error": reason}
+
+    def _validate_input_payload(
+        *, event: str, payload: Any
+    ) -> tuple[dict[str, Any] | None, str | None]:
+        if not isinstance(payload, dict):
+            return None, "invalid_payload"
+
+        if event in {"input_click", "input_move", "input_wheel"}:
+            x = _normalize_float(payload.get("x"))
+            y = _normalize_float(payload.get("y"))
+            if x is None or y is None:
+                return None, "invalid_coordinates"
+            out: dict[str, Any] = {"x": x, "y": y}
+
+            if event == "input_wheel":
+                dx = _normalize_float(payload.get("delta_x"))
+                dy = _normalize_float(payload.get("delta_y"))
+                if dx is None or dy is None:
+                    return None, "invalid_wheel_delta"
+                out["delta_x"] = dx
+                out["delta_y"] = dy
+
+            if event == "input_click":
+                button = _normalize_str(payload.get("button")) or "left"
+                if button not in {"left", "middle", "right"}:
+                    return None, "invalid_button"
+                out["button"] = button
+                click_count = _normalize_int(payload.get("click_count"))
+                if click_count is not None:
+                    if click_count < 1 or click_count > 10:
+                        return None, "invalid_click_count"
+                    out["click_count"] = click_count
+
+            return out, None
+
+        if event in {"input_keydown", "input_keyup"}:
+            key = _normalize_str(payload.get("key"))
+            if not key:
+                return None, "invalid_key"
+            out = {"key": key}
+            code = _normalize_str(payload.get("code"))
+            if code:
+                out["code"] = code
+            repeat = payload.get("repeat")
+            if isinstance(repeat, bool):
+                out["repeat"] = repeat
+            return out, None
+
+        if event == "input_type":
+            text = _normalize_str(payload.get("text"))
+            if text is None:
+                return None, "invalid_text"
+            if len(text) > 2000:
+                return None, "text_too_long"
+            return {"text": text}, None
+
+        return None, "unknown_event"
+
+    async def _handle_ctrl_input_event(*, sid: str, event: str, payload: Any) -> dict[str, Any]:
+        if not _allow_ctrl_event(sid=sid, event=event):
+            return {"ok": False, "error": "rate_limited"}
+        if not control_state.is_holder(sid=sid):
+            return _reject_input_event(sid=sid, event=event, reason="not_holder", payload=payload)
+        if not control_state.is_paused():
+            return _reject_input_event(sid=sid, event=event, reason="not_paused", payload=payload)
+
+        validated, error = _validate_input_payload(event=event, payload=payload)
+        if error is not None:
+            return _reject_input_event(sid=sid, event=event, reason=error, payload=payload)
+
+        queue_result = control_state.enqueue_input_event(
+            sid=sid, event=event, payload=validated or {}
+        )
+        return {"ok": True, **queue_result}
+
     @sio.event(namespace=DEFAULT_CTRL_NAMESPACE)
     async def connect_ctrl(sid: str, environ: dict[str, Any], auth: dict[str, Any] | None) -> None:
         if not authorize_socket_connection(
@@ -340,6 +517,30 @@ def create_streaming_app(
                 },
             )
         await _emit_control_state()
+
+    @sio.on("input_click", namespace=DEFAULT_CTRL_NAMESPACE)
+    async def input_click(sid: str, payload: Any) -> dict[str, Any]:
+        return await _handle_ctrl_input_event(sid=sid, event="input_click", payload=payload)
+
+    @sio.on("input_move", namespace=DEFAULT_CTRL_NAMESPACE)
+    async def input_move(sid: str, payload: Any) -> dict[str, Any]:
+        return await _handle_ctrl_input_event(sid=sid, event="input_move", payload=payload)
+
+    @sio.on("input_wheel", namespace=DEFAULT_CTRL_NAMESPACE)
+    async def input_wheel(sid: str, payload: Any) -> dict[str, Any]:
+        return await _handle_ctrl_input_event(sid=sid, event="input_wheel", payload=payload)
+
+    @sio.on("input_keydown", namespace=DEFAULT_CTRL_NAMESPACE)
+    async def input_keydown(sid: str, payload: Any) -> dict[str, Any]:
+        return await _handle_ctrl_input_event(sid=sid, event="input_keydown", payload=payload)
+
+    @sio.on("input_keyup", namespace=DEFAULT_CTRL_NAMESPACE)
+    async def input_keyup(sid: str, payload: Any) -> dict[str, Any]:
+        return await _handle_ctrl_input_event(sid=sid, event="input_keyup", payload=payload)
+
+    @sio.on("input_type", namespace=DEFAULT_CTRL_NAMESPACE)
+    async def input_type(sid: str, payload: Any) -> dict[str, Any]:
+        return await _handle_ctrl_input_event(sid=sid, event="input_type", payload=payload)
 
     asgi_app = socketio.ASGIApp(sio, other_asgi_app=api_app)
     return StreamingRuntime(
