@@ -121,7 +121,7 @@
       "name": "Step callbacks + screenshots + pause gating",
       "type": "code",
       "phase": "O1b",
-      "status": "pending",
+      "status": "in_progress",
       "description": "Add step hooks to record agent_step screenshots and enforce pause gating between steps; keep responses compact and text-only.",
       "references": [
         "docs/adr/ADR-0001-agent-orchestration-and-answer-contract.md",
