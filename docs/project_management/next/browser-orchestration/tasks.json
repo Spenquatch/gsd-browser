@@ -237,7 +237,7 @@
       "name": "In-memory run event store + capture pipeline",
       "type": "code",
       "phase": "O2a",
-      "status": "in_progress",
+      "status": "done",
       "description": "Add an in-memory run event store keyed by session_id and record agent/console/network events with strict bounds and truncation.",
       "references": [
         "docs/project_management/next/browser-orchestration/plan.md",
