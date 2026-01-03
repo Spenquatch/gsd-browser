@@ -586,7 +586,7 @@
       "name": "CDP input dispatch (keyboard correctness)",
       "type": "code",
       "phase": "O3b",
-      "status": "in_progress",
+      "status": "done",
       "description": "Implement CDP Input.dispatch* routing for input events, focusing on keyboard correctness and modifiers using mocked CDP clients in tests.",
       "references": [
         "docs/project_management/next/browser-orchestration/plan.md",
@@ -624,7 +624,7 @@
       "name": "O3b CDP mapping tests",
       "type": "test",
       "phase": "O3b",
-      "status": "in_progress",
+      "status": "done",
       "description": "Unit tests for CDP dispatch parameter mapping, Enter sequence, and typing behavior using mocked CDP clients.",
       "references": [
         "docs/project_management/next/browser-orchestration/plan.md",
