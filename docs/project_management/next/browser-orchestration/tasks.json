@@ -197,7 +197,7 @@
       "name": "Integrate O1b",
       "type": "integration",
       "phase": "O1b",
-      "status": "in_progress",
+      "status": "done",
       "description": "Merge O1b code+tests, reconcile to spec, and run full suite + smoke.",
       "references": [
         "docs/project_management/next/browser-orchestration/plan.md",

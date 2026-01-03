@@ -71,3 +71,12 @@ Only START/END entries. Docs edits happen on the orchestration branch only.
 - Worktree: wt/bo-o1b-callbacks-integ
 - Commands planned: uv run ruff format --check; uv run ruff check; uv run pytest; make smoke
 - Notes: `feat/browser-orchestration` now tracks `origin/feat/browser-orchestration` (local remote); `git pull --ff-only` runs cleanly.
+
+## O1b-integ END
+- Timestamp: 2026-01-03T16:34:12Z
+- Role: integration
+- Worktree: wt/bo-o1b-callbacks-integ
+- Merged branches: bo-o1b-callbacks-code; bo-o1b-callbacks-test
+- Commands executed: (in wt/bo-o1b-callbacks-integ/gsd-browser) make dev (pass); uv run ruff format --check (pass; 33 files already formatted); uv run ruff check (pass); uv run pytest (pass; 35 passed); make smoke (pass; 7 passed + CLI round trip)
+- Result: pass
+- Blockers/next steps: None.
