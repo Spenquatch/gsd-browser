@@ -313,7 +313,7 @@
       "name": "Integrate O2a",
       "type": "integration",
       "phase": "O2a",
-      "status": "in_progress",
+      "status": "done",
       "description": "Merge O2a code+tests, reconcile to spec, and run full suite + smoke.",
       "references": [
         "docs/project_management/next/browser-orchestration/plan.md",

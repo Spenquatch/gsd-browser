@@ -115,3 +115,12 @@ Only START/END entries. Docs edits happen on the orchestration branch only.
 - Worktree: wt/bo-o2a-events-store-integ
 - Commands planned: uv run ruff format --check; uv run ruff check; uv run pytest; make smoke
 - Notes: Local repo has no upstream for feat/browser-orchestration, so git pull --ff-only cannot run as written.
+
+## O2a-integ END
+- Timestamp: 2026-01-03T21:30:50Z
+- Role: integration
+- Worktree: wt/bo-o2a-events-store-integ
+- Merged branches: bo-o2a-events-store-code; bo-o2a-events-store-test
+- Commands executed: (in wt/bo-o2a-events-store-integ/gsd-browser) make dev (pass); uv run ruff format --check (pass; 36 files already formatted); uv run ruff check (pass); uv run pytest (pass; 39 passed); make smoke (pass; 7 passed + CLI round trip)
+- Result: pass
+- Blockers/next steps: None.
