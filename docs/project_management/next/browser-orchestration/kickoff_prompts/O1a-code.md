@@ -1,31 +1,36 @@
-# O1a-code Kickoff (Code)
+# Kickoff – O1a-code (Orchestrated `web_eval_agent` + JSON response contract)
 
-## Scope
-Implement O1a production code only: orchestrated `web_eval_agent` that runs browser-use and returns a single JSON `TextContent` response with explicit `final_result()` extraction. No screenshots and no pause gating in this triad.
+## Role
+Code agent: production code only. No tests. Do not edit docs/tasks/session logs from the worktree.
 
-## Role Boundaries
-- Production code only. No tests. No docs/tasks edits in the worktree.
+## Goal
+Implement `O1a-spec`: run browser-use inside `web_eval_agent`, extract `final_result()`, and return a single JSON `TextContent` response (no inline images; MCP stdio-safe).
 
-## Start Checklist
-1. Checkout/pull orchestration branch `feat/browser-orchestration`.
-2. Read `plan.md`, `tasks.json`, `session_log.md`, `O1a-spec.md`, and this prompt.
-3. Set status to `in_progress`; log START; commit docs (`docs: start O1a-code`).
-4. Create branch/worktree `bo-o1a-orchestrator-code` / `wt/bo-o1a-orchestrator-code`.
-5. Keep docs/tasks/log edits off the worktree.
+## Read first
+- `docs/project_management/next/browser-orchestration/plan.md`
+- `docs/project_management/next/browser-orchestration/tasks.json`
+- `docs/project_management/next/browser-orchestration/session_log.md`
+- `docs/project_management/next/browser-orchestration/O1a-spec.md`
 
-## Requirements
-- Use browser-use ≥0.11: `Agent.run()` returns `AgentHistoryList`; extract via `final_result()`.
-- Response must be JSON per `O1a-spec.md` (single `TextContent`, no images).
-- Normalize URLs and include `session_id` + `tool_call_id`.
-- Ensure MCP stdio safety: no stdout output once `serve` starts (stderr-only logging).
+## Start checklist (must follow)
+1. `git checkout feat/browser-orchestration && git pull --ff-only`
+2. Set `O1a-code` to `in_progress` in `tasks.json` (orchestration branch only).
+3. Add START entry to `session_log.md`; commit docs (`docs: start O1a-code`).
+4. Create branch `bo-o1a-orchestrator-code`, then worktree: `git worktree add wt/bo-o1a-orchestrator-code bo-o1a-orchestrator-code`.
+5. Do not edit docs/tasks/session_log from the worktree.
 
-## Commands
+## Constraints / guardrails
+- Use browser-use ≥0.11; extract the answer via `AgentHistoryList.final_result()`.
+- Response must be JSON per `O1a-spec.md` (single `TextContent`, text-only).
+- Include `session_id` and `tool_call_id`; normalize URLs.
+- Ensure MCP stdio safety: no stdout output once `serve` starts (logs to stderr only).
+
+## Required commands (record output in END entry)
 - `uv run ruff format --check`
 - `uv run ruff check`
 
-## End Checklist
-1. Ensure commands succeed.
-2. Commit worktree changes.
-3. Update docs on orchestration branch (`docs: finish O1a-code`).
-4. Remove worktree.
-
+## End checklist
+1. Run required commands and capture outputs.
+2. Commit changes inside `wt/bo-o1a-orchestrator-code` (no docs edits).
+3. Switch back to `feat/browser-orchestration`; mark task completed; add END entry; commit docs (`docs: finish O1a-code`). Do not merge this branch into `feat/browser-orchestration`.
+4. Remove worktree `wt/bo-o1a-orchestrator-code`.
