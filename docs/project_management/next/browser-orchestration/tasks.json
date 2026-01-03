@@ -160,7 +160,7 @@
       "name": "O1b pause + screenshots tests",
       "type": "test",
       "phase": "O1b",
-      "status": "in_progress",
+      "status": "done",
       "description": "Unit tests for pause gating and screenshot recording hooks using mocks/stubs.",
       "references": [
         "docs/project_management/next/browser-orchestration/plan.md",
