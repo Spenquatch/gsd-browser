@@ -192,3 +192,11 @@ Only START/END entries. Docs edits happen on the orchestration branch only.
 - Worktree: wt/bo-o3a-input-api-test
 - Commands planned: uv run ruff format --check; uv run pytest gsd-browser/tests -k o3a
 - Notes: No git remote is configured in this repo, so git pull --ff-only cannot run as written.
+
+## O3a-test END
+- Timestamp: 2026-01-03T22:16:54Z
+- Role: test
+- Worktree: wt/bo-o3a-input-api-test
+- Commands executed: (in wt/bo-o3a-input-api-test) uv run --project gsd-browser ruff format --check (pass; 38 files already formatted); uv run --project gsd-browser pytest gsd-browser/tests -k o3a (pass; 4 skipped, 45 deselected)
+- Result: pass (skipped until O3a input handlers land)
+- Blockers/next steps: Implement `/ctrl` input handlers (`input_click`/`move`/`wheel`/`keydown`/`keyup`/`type`) so these tests enforce gating/logging rather than skipping.
