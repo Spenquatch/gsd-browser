@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 import json
 import logging
 import os
@@ -90,6 +91,18 @@ def _history_step_count(history: Any) -> int:
         return 0
 
 
+def _decode_base64_image(data: str) -> bytes | None:
+    if not data:
+        return None
+    payload = data.strip()
+    if payload.startswith("data:") and "," in payload:
+        payload = payload.split(",", 1)[1].strip()
+    try:
+        return base64.b64decode(payload)
+    except Exception:  # noqa: BLE001
+        return None
+
+
 @mcp.tool(name="web_eval_agent")
 async def web_eval_agent(
     url: str, task: str, ctx: Context, headless_browser: bool = False
@@ -120,6 +133,11 @@ async def web_eval_agent(
     _ = ctx
     runtime = get_runtime()
     settings = load_settings(strict=False)
+    runtime.ensure_dashboard_running(
+        settings=settings, host=DEFAULT_DASHBOARD_HOST, port=DEFAULT_DASHBOARD_PORT
+    )
+    dashboard = runtime.dashboard()
+    control_state = dashboard.runtime.control_state if dashboard else None
 
     normalized_url = _normalize_url(url)
     tool_call_id = str(uuid.uuid4())
@@ -149,12 +167,52 @@ async def web_eval_agent(
     try:
         Agent, BrowserSession = _load_browser_use_classes()
 
+        step_screenshot_count = 0
+
+        async def record_step_screenshot(browser_state_summary: Any, _: Any, step: int) -> None:
+            nonlocal step_screenshot_count
+            screenshot_base64 = getattr(browser_state_summary, "screenshot", None)
+            image_bytes = (
+                _decode_base64_image(screenshot_base64)
+                if isinstance(screenshot_base64, str)
+                else None
+            )
+            if not image_bytes:
+                return
+
+            page_url = str(getattr(browser_state_summary, "url", "") or "")
+            page_title = str(getattr(browser_state_summary, "title", "") or "")
+            browser_errors = getattr(browser_state_summary, "browser_errors", None)
+            has_error = bool(browser_errors)
+            runtime.screenshots.record_screenshot(
+                screenshot_type="agent_step",
+                image_bytes=image_bytes,
+                mime_type="image/png",
+                session_id=session_id,
+                captured_at=datetime.now(UTC).timestamp(),
+                has_error=has_error,
+                metadata={"title": page_title, "browser_errors": browser_errors or []},
+                url=page_url or None,
+                step=step,
+            )
+            step_screenshot_count += 1
+
+        async def pause_gate(_: Any) -> None:
+            if control_state is None:
+                return
+            await control_state.wait_until_unpaused()
+
         llm = create_browser_use_llm(settings)
         browser_session = BrowserSession(headless=headless_browser, storage_state=storage_state)
 
         agent_task = f"{task}\n\nURL: {normalized_url}"
-        agent = Agent(task=agent_task, llm=llm, browser_session=browser_session)
-        history = await agent.run()
+        agent = Agent(
+            task=agent_task,
+            llm=llm,
+            browser_session=browser_session,
+            register_new_step_callback=record_step_screenshot,
+        )
+        history = await agent.run(on_step_end=pause_gate)
 
         result = _history_final_result(history)
         error_count = _history_error_count(history)
@@ -180,8 +238,22 @@ async def web_eval_agent(
             "status": status,
             "result": result,
             "summary": _truncate(summary, max_len=2000),
-            "artifacts": {"screenshots": 0, "stream_samples": 0, "run_events": 0},
-            "next_actions": [],
+            "artifacts": {
+                "screenshots": step_screenshot_count,
+                "stream_samples": 0,
+                "run_events": 0,
+            },
+            "next_actions": [
+                (
+                    "Use get_screenshots(session_id="
+                    f"'{session_id}', screenshot_type='agent_step', last_n=5)"
+                ),
+                (
+                    "Use get_screenshots(session_id="
+                    f"'{session_id}', screenshot_type='agent_step', include_images=false)"
+                ),
+                f"Open dashboard: http://{DEFAULT_DASHBOARD_HOST}:{DEFAULT_DASHBOARD_PORT}",
+            ],
         }
 
         logger.info(
@@ -218,7 +290,10 @@ async def web_eval_agent(
             "result": None,
             "summary": _truncate(f"{type(exc).__name__}: {exc}", max_len=2000),
             "artifacts": {"screenshots": 0, "stream_samples": 0, "run_events": 0},
-            "next_actions": [],
+            "next_actions": [
+                "Use get_screenshots(screenshot_type='agent_step', last_n=5, include_images=false)",
+                f"Open dashboard: http://{DEFAULT_DASHBOARD_HOST}:{DEFAULT_DASHBOARD_PORT}",
+            ],
         }
         return [TextContent(type="text", text=json.dumps(payload, ensure_ascii=False))]
 
