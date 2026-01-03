@@ -391,7 +391,7 @@
       "name": "O2b get_run_events + mode tests",
       "type": "test",
       "phase": "O2b",
-      "status": "pending",
+      "status": "in_progress",
       "description": "Unit tests for get_run_events filtering/limits and compact/dev default selection.",
       "references": [
         "docs/project_management/next/browser-orchestration/plan.md",
