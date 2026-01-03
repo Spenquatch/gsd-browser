@@ -161,3 +161,12 @@ Only START/END entries. Docs edits happen on the orchestration branch only.
 - Worktree: wt/bo-o2b-run-events-tool-integ
 - Commands planned: uv run ruff format --check; uv run ruff check; uv run pytest; make smoke
 - Notes: No git remote is configured in this repo, so git pull --ff-only cannot run as written.
+
+## O2b-integ END
+- Timestamp: 2026-01-03T22:01:10Z
+- Role: integration
+- Worktree: wt/bo-o2b-run-events-tool-integ
+- Merged branches: bo-o2b-run-events-tool-code; bo-o2b-run-events-tool-test
+- Commands executed: (in wt/bo-o2b-run-events-tool-integ/gsd-browser) make dev (pass); uv run ruff format --check (pass; 37 files already formatted); uv run ruff check (pass); uv run pytest (pass; 45 passed); make smoke (pass; 7 passed + CLI round trip)
+- Result: pass
+- Blockers/next steps: None.
