@@ -138,3 +138,11 @@ Only START/END entries. Docs edits happen on the orchestration branch only.
 - Worktree: wt/bo-o2b-run-events-tool-test
 - Commands planned: uv run ruff format --check; uv run pytest gsd-browser/tests -k o2b
 - Notes: No git remote is configured in this repo, so git pull --ff-only cannot run as written.
+
+## O2b-test END
+- Timestamp: 2026-01-03T21:45:51Z
+- Role: test
+- Worktree: wt/bo-o2b-run-events-tool-test
+- Commands executed: (in wt/bo-o2b-run-events-tool-test/gsd-browser) make dev (pass); uv run --project gsd-browser --extra dev ruff format --check (pass; 37 files already formatted); uv run --project gsd-browser --extra dev pytest gsd-browser/tests -k o2b (pass; 6 skipped, 39 deselected)
+- Result: pass (skipped until O2b get_run_events + mode selection lands)
+- Blockers/next steps: Merge O2b-code into O2b-integ so these tests enforce assertions instead of skipping.
