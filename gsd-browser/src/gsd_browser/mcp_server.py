@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 import traceback
@@ -14,11 +15,14 @@ from mcp.types import ImageContent, TextContent
 from playwright.async_api import async_playwright
 
 from .config import load_settings
+from .llm.browser_use import create_browser_use_llm
 from .runtime import DEFAULT_DASHBOARD_HOST, DEFAULT_DASHBOARD_PORT, get_runtime
 
 logger = logging.getLogger("gsd_browser.mcp")
 
 mcp = FastMCP("gsd-browser")
+
+os.environ.setdefault("BROWSER_USE_SETUP_LOGGING", "false")
 
 
 def _normalize_url(url: str) -> str:
@@ -29,6 +33,12 @@ def _normalize_url(url: str) -> str:
 
 def _browser_state_path() -> Path:
     return Path(os.path.expanduser("~/.operative/browser_state/state.json"))
+
+
+def _truncate(text: str, *, max_len: int) -> str:
+    if len(text) <= max_len:
+        return text
+    return text[: max(0, max_len - 1)] + "…"
 
 
 @mcp.tool(name="web_eval_agent")
@@ -56,17 +66,11 @@ async def web_eval_agent(
         popup browser will be shown.
 
     Returns:
-        list[TextContent]: A detailed evaluation of the web application's UX/UI, including
-        observations, issues found, and recommendations for improvement.
-        Note: Screenshots are captured during evaluation and streamed to the dashboard.
-        Use the get_screenshots tool to retrieve them if needed.
+        list[TextContent]: A single JSON payload encoded as text (no inline images).
     """
     _ = ctx
     runtime = get_runtime()
     settings = load_settings(strict=False)
-    runtime.ensure_dashboard_running(
-        settings=settings, host=DEFAULT_DASHBOARD_HOST, port=DEFAULT_DASHBOARD_PORT
-    )
 
     normalized_url = _normalize_url(url)
     tool_call_id = str(uuid.uuid4())
@@ -90,97 +94,79 @@ async def web_eval_agent(
     storage_state: str | None = str(state_path) if state_path.exists() else None
 
     try:
-        async with async_playwright() as playwright:
-            browser = await playwright.chromium.launch(headless=headless_browser)
-            context = await browser.new_context(storage_state=storage_state)
-            page = await context.new_page()
+        from browser_use import Agent, BrowserSession
 
-            streaming_runtime = runtime.dashboard().runtime if runtime.dashboard() else None
+        llm = create_browser_use_llm(settings)
+        browser_session = BrowserSession(headless=headless_browser, storage_state=storage_state)
 
-            async def _pause_gate() -> None:
-                if streaming_runtime is None:
-                    return
-                await streaming_runtime.control_state.wait_until_unpaused()
+        agent_task = f"{task}\n\nURL: {normalized_url}"
+        agent = Agent(task=agent_task, llm=llm, browser_session=browser_session)
+        history = await agent.run()
 
-            cdp_started = False
-            if streaming_runtime and streaming_runtime.stats.streaming_mode == "cdp":
-                await streaming_runtime.cdp_streamer.start(page=page, session_id=session_id)
-                cdp_started = True
+        result = history.final_result()
+        error_count = sum(1 for err in history.errors() if err)
 
-            await _pause_gate()
-            await page.goto(normalized_url, wait_until="domcontentloaded")
-            if cdp_started:
-                await page.wait_for_timeout(500)
-            title = await page.title()
+        if result is not None:
+            status = "partial" if history.has_errors() else "success"
+        else:
+            status = "failed" if history.has_errors() else "partial"
 
-            await _pause_gate()
-            screenshot_bytes = await page.screenshot(full_page=True, type="png")
-
-            runtime.screenshots.record_screenshot(
-                screenshot_type="agent_step",
-                image_bytes=screenshot_bytes,
-                mime_type="image/png",
-                session_id=session_id,
-                captured_at=datetime.now(UTC).timestamp(),
-                metadata={"tool_call_id": tool_call_id, "title": title},
-                url=normalized_url,
-                step=1,
-            )
-
-            if streaming_runtime and streaming_runtime.stats.streaming_mode == "screenshot":
-                await _pause_gate()
-                await streaming_runtime.emit_browser_update(
-                    session_id=session_id,
-                    image_bytes=screenshot_bytes,
-                    mime_type="image/png",
-                    timestamp=datetime.now(UTC).timestamp(),
-                    metadata={"tool_call_id": tool_call_id, "title": title},
-                )
-
-            if cdp_started and streaming_runtime:
-                await streaming_runtime.cdp_streamer.stop()
-
-            await context.close()
-            await browser.close()
-
-        return [
-            TextContent(
-                type="text",
-                text=(
-                    "Captured an initial page snapshot for UX review.\n"
-                    f"- url: {normalized_url}\n"
-                    f"- title: {title or '(no title)'}\n"
-                    f"- session_id: {session_id}\n"
-                    "Use get_screenshots(session_id=..., screenshot_type='agent_step') "
-                    "to retrieve screenshots."
-                ),
-            )
-        ]
-    except Exception as exc:  # noqa: BLE001
-        tb = traceback.format_exc()
-        streaming_runtime = runtime.dashboard().runtime if runtime.dashboard() else None
-        if streaming_runtime and streaming_runtime.stats.streaming_mode == "cdp":
-            try:
-                await streaming_runtime.cdp_streamer.stop()
-            except Exception:  # noqa: BLE001
-                logger.exception("Failed stopping CDP screencast after web_eval_agent error")
-        runtime.screenshots.record_screenshot(
-            screenshot_type="agent_step",
-            image_bytes=None,
-            mime_type=None,
-            session_id=session_id,
-            captured_at=datetime.now(UTC).timestamp(),
-            has_error=True,
-            metadata={"tool_call_id": tool_call_id, "error": str(exc)},
-            url=normalized_url,
-            step=1,
+        summary = (
+            f"browser_use_steps={len(history.history)} "
+            f"errors={error_count} "
+            f"result_present={bool(result)}"
         )
-        return [
-            TextContent(
-                type="text",
-                text=f"Error executing web_eval_agent: {exc}\n\nTraceback:\n{tb}",
-            )
-        ]
+        payload = {
+            "version": "gsd-browser.web_eval_agent.v1",
+            "session_id": session_id,
+            "tool_call_id": tool_call_id,
+            "url": normalized_url,
+            "task": task,
+            "mode": "compact",
+            "status": status,
+            "result": result,
+            "summary": _truncate(summary, max_len=2000),
+            "artifacts": {"screenshots": 0, "stream_samples": 0, "run_events": 0},
+            "next_actions": [],
+        }
+
+        logger.info(
+            "web_eval_agent completed",
+            extra={
+                "tool_call_id": tool_call_id,
+                "session_id": session_id,
+                "status": status,
+                "duration_s": max(0.0, datetime.now(UTC).timestamp() - started),
+                "result_present": result is not None,
+                "errors": error_count,
+            },
+        )
+
+        return [TextContent(type="text", text=json.dumps(payload, ensure_ascii=False))]
+    except Exception as exc:  # noqa: BLE001
+        logger.exception(
+            "web_eval_agent failed",
+            extra={
+                "tool_call_id": tool_call_id,
+                "session_id": session_id,
+                "url": normalized_url,
+                "duration_s": max(0.0, datetime.now(UTC).timestamp() - started),
+            },
+        )
+        payload = {
+            "version": "gsd-browser.web_eval_agent.v1",
+            "session_id": session_id,
+            "tool_call_id": tool_call_id,
+            "url": normalized_url,
+            "task": task,
+            "mode": "compact",
+            "status": "failed",
+            "result": None,
+            "summary": _truncate(f"{type(exc).__name__}: {exc}", max_len=2000),
+            "artifacts": {"screenshots": 0, "stream_samples": 0, "run_events": 0},
+            "next_actions": [],
+        }
+        return [TextContent(type="text", text=json.dumps(payload, ensure_ascii=False))]
 
 
 @mcp.tool(name="setup_browser_state")
