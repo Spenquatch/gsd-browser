@@ -429,7 +429,7 @@
       "name": "Integrate O2b",
       "type": "integration",
       "phase": "O2b",
-      "status": "pending",
+      "status": "in_progress",
       "description": "Merge O2b code+tests, reconcile to spec, and run full suite + smoke.",
       "references": [
         "docs/project_management/next/browser-orchestration/plan.md",
