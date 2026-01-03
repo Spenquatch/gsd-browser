@@ -30,31 +30,76 @@ def test_control_state_holder_semantics(monkeypatch: pytest.MonkeyPatch) -> None
     monkeypatch.setattr("gsd_browser.streaming.server.time.time", lambda: 123.0)
 
     state = ControlState()
-    assert state.snapshot() == {"holder_sid": None, "held_since_ts": None, "paused": False}
+    assert state.snapshot() == {
+        "holder_sid": None,
+        "held_since_ts": None,
+        "paused": False,
+        "active_session_id": None,
+    }
 
     state.take_control(sid="sid-1")
-    assert state.snapshot() == {"holder_sid": "sid-1", "held_since_ts": 123.0, "paused": False}
+    assert state.snapshot() == {
+        "holder_sid": "sid-1",
+        "held_since_ts": 123.0,
+        "paused": False,
+        "active_session_id": None,
+    }
 
     state.take_control(sid="sid-2")
-    assert state.snapshot() == {"holder_sid": "sid-1", "held_since_ts": 123.0, "paused": False}
+    assert state.snapshot() == {
+        "holder_sid": "sid-1",
+        "held_since_ts": 123.0,
+        "paused": False,
+        "active_session_id": None,
+    }
 
     assert state.pause_if_holder(sid="sid-2") is False
-    assert state.snapshot() == {"holder_sid": "sid-1", "held_since_ts": 123.0, "paused": False}
+    assert state.snapshot() == {
+        "holder_sid": "sid-1",
+        "held_since_ts": 123.0,
+        "paused": False,
+        "active_session_id": None,
+    }
 
     assert state.pause_if_holder(sid="sid-1") is True
-    assert state.snapshot() == {"holder_sid": "sid-1", "held_since_ts": 123.0, "paused": True}
+    assert state.snapshot() == {
+        "holder_sid": "sid-1",
+        "held_since_ts": 123.0,
+        "paused": True,
+        "active_session_id": None,
+    }
 
     assert state.resume_if_holder(sid="sid-2") is False
-    assert state.snapshot() == {"holder_sid": "sid-1", "held_since_ts": 123.0, "paused": True}
+    assert state.snapshot() == {
+        "holder_sid": "sid-1",
+        "held_since_ts": 123.0,
+        "paused": True,
+        "active_session_id": None,
+    }
 
     assert state.resume_if_holder(sid="sid-1") is True
-    assert state.snapshot() == {"holder_sid": "sid-1", "held_since_ts": 123.0, "paused": False}
+    assert state.snapshot() == {
+        "holder_sid": "sid-1",
+        "held_since_ts": 123.0,
+        "paused": False,
+        "active_session_id": None,
+    }
 
     state.release_control(sid="sid-2")
-    assert state.snapshot() == {"holder_sid": "sid-1", "held_since_ts": 123.0, "paused": False}
+    assert state.snapshot() == {
+        "holder_sid": "sid-1",
+        "held_since_ts": 123.0,
+        "paused": False,
+        "active_session_id": None,
+    }
 
     state.release_control(sid="sid-1")
-    assert state.snapshot() == {"holder_sid": None, "held_since_ts": None, "paused": False}
+    assert state.snapshot() == {
+        "holder_sid": None,
+        "held_since_ts": None,
+        "paused": False,
+        "active_session_id": None,
+    }
 
 
 def test_control_state_clear_unpauses(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -66,7 +111,12 @@ def test_control_state_clear_unpauses(monkeypatch: pytest.MonkeyPatch) -> None:
     assert state.snapshot()["paused"] is True
 
     state.clear()
-    assert state.snapshot() == {"holder_sid": None, "held_since_ts": None, "paused": False}
+    assert state.snapshot() == {
+        "holder_sid": None,
+        "held_since_ts": None,
+        "paused": False,
+        "active_session_id": None,
+    }
 
 
 def test_control_state_wait_until_unpaused_noop_when_running() -> None:
@@ -142,7 +192,12 @@ def test_ctrl_socket_handlers_enforce_holder_and_publish_state(
         await handlers["connect_ctrl"]("sid-1", {}, None)
         assert capture.emits[-1] == {
             "event": "control_state",
-            "payload": {"holder_sid": None, "held_since_ts": None, "paused": False},
+            "payload": {
+                "holder_sid": None,
+                "held_since_ts": None,
+                "paused": False,
+                "active_session_id": None,
+            },
             "namespace": DEFAULT_CTRL_NAMESPACE,
             "to": "sid-1",
         }
@@ -152,6 +207,7 @@ def test_ctrl_socket_handlers_enforce_holder_and_publish_state(
             "holder_sid": "sid-1",
             "held_since_ts": 123.0,
             "paused": False,
+            "active_session_id": None,
         }
 
         await handlers["pause_agent"]("sid-2", {})
@@ -165,6 +221,7 @@ def test_ctrl_socket_handlers_enforce_holder_and_publish_state(
             "holder_sid": None,
             "held_since_ts": None,
             "paused": False,
+            "active_session_id": None,
         }
 
     _run(_exercise())
@@ -197,6 +254,7 @@ def test_ctrl_disconnect_clears_pause(monkeypatch: pytest.MonkeyPatch) -> None:
             "holder_sid": None,
             "held_since_ts": None,
             "paused": False,
+            "active_session_id": None,
         }
 
     _run(_exercise())

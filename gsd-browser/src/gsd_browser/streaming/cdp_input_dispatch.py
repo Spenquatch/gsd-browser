@@ -21,6 +21,9 @@ def _payload_bool(payload: dict[str, Any], *keys: str) -> bool:
 
 
 def _modifiers_from_payload(payload: dict[str, Any]) -> int:
+    explicit = payload.get("modifiers")
+    if isinstance(explicit, int):
+        return explicit
     modifiers = 0
     if _payload_bool(payload, "alt", "altKey"):
         modifiers |= _MODIFIER_BITS["alt"]
@@ -105,6 +108,57 @@ def _mouse_button(button: str) -> str:
     if button == "middle":
         return "middle"
     return "left"
+
+
+def _modifier_bit_for_key(*, key: str, code: str | None = None) -> int:
+    normalized_key = key.strip()
+    normalized_code = (code or "").strip()
+    if normalized_key in {"Shift"} or normalized_code.startswith("Shift"):
+        return _MODIFIER_BITS["shift"]
+    if normalized_key in {"Control", "Ctrl"} or normalized_code.startswith("Control"):
+        return _MODIFIER_BITS["ctrl"]
+    if normalized_key in {"Alt"} or normalized_code.startswith("Alt"):
+        return _MODIFIER_BITS["alt"]
+    if normalized_key in {"Meta"} or normalized_code.startswith(("Meta", "OS")):
+        return _MODIFIER_BITS["meta"]
+    return 0
+
+
+class CDPInputDispatcher:
+    """Stateful CDP input dispatcher to preserve modifier semantics across events."""
+
+    def __init__(self, *, cdp_client: Any) -> None:
+        self._cdp_client = cdp_client
+        self._held_modifiers = 0
+
+    async def dispatch(self, event: str, payload: dict[str, Any]) -> None:
+        if not isinstance(payload, dict):
+            payload = {}
+
+        key = str(payload.get("key") or "")
+        code = payload.get("code")
+        code_str = str(code) if isinstance(code, str) else ""
+        modifier_bit = _modifier_bit_for_key(key=key, code=code_str)
+
+        if event == "input_keydown" and modifier_bit:
+            self._held_modifiers |= modifier_bit
+        elif event == "input_keyup" and modifier_bit:
+            self._held_modifiers &= ~modifier_bit
+
+        combined_modifiers = self._held_modifiers | _modifiers_from_payload(payload)
+        if event == "input_keyup" and modifier_bit:
+            combined_modifiers &= ~modifier_bit
+        elif event == "input_keydown" and modifier_bit:
+            combined_modifiers |= modifier_bit
+
+        merged_payload = dict(payload)
+        merged_payload["modifiers"] = combined_modifiers
+        await dispatch_ctrl_input_event(
+            cdp_client=self._cdp_client, event=event, payload=merged_payload
+        )
+
+    async def dispatch_input(self, event: str, payload: dict[str, Any]) -> None:
+        await self.dispatch(event, payload)
 
 
 async def dispatch_ctrl_input_event(
@@ -201,10 +255,22 @@ async def dispatch_ctrl_input_event(
                 cdp_client,
                 "Input.dispatchKeyEvent",
                 {
-                    "type": "keyDown",
+                    "type": "rawKeyDown",
                     **base,
+                },
+            )
+            await _cdp_send(
+                cdp_client,
+                "Input.dispatchKeyEvent",
+                {
+                    "type": "char",
                     "text": "\r",
                     "unmodifiedText": "\r",
+                    "modifiers": modifiers,
+                    "windowsVirtualKeyCode": base["windowsVirtualKeyCode"],
+                    "nativeVirtualKeyCode": base["nativeVirtualKeyCode"],
+                    "key": key,
+                    "code": code,
                 },
             )
             return
@@ -221,10 +287,14 @@ async def dispatch_ctrl_input_event(
         for char in text:
             if char in {"\n", "\r"}:
                 await dispatch_ctrl_input_event(
-                    cdp_client=cdp_client, event="input_keydown", payload={"key": "Enter"}
+                    cdp_client=cdp_client,
+                    event="input_keydown",
+                    payload={"key": "Enter", "modifiers": modifiers},
                 )
                 await dispatch_ctrl_input_event(
-                    cdp_client=cdp_client, event="input_keyup", payload={"key": "Enter"}
+                    cdp_client=cdp_client,
+                    event="input_keyup",
+                    payload={"key": "Enter", "modifiers": modifiers},
                 )
                 continue
 

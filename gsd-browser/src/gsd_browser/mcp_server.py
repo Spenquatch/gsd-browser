@@ -24,7 +24,7 @@ from .llm.browser_use import create_browser_use_llm
 from .run_event_capture import CDPRunEventCapture
 from .run_event_store import RunEventStore
 from .runtime import DEFAULT_DASHBOARD_HOST, DEFAULT_DASHBOARD_PORT, get_runtime
-from .streaming.cdp_input_dispatch import dispatch_ctrl_input_event
+from .streaming.cdp_input_dispatch import CDPInputDispatcher
 
 logger = logging.getLogger("gsd_browser.mcp")
 
@@ -462,6 +462,7 @@ async def web_eval_agent(
         browser_session = BrowserSession(headless=headless_browser, storage_state=storage_state)
 
         active_session_set = False
+        cdp_dispatcher: CDPInputDispatcher | None = None
         try:
             await browser_session.start()
             if control_state is not None:
@@ -469,34 +470,44 @@ async def web_eval_agent(
                 if callable(set_active_session):
                     set_active_session(session_id=session_id)
                     active_session_set = True
+            cdp_client = getattr(browser_session, "cdp_client", None)
+            if cdp_client is not None:
+                cdp_dispatcher = CDPInputDispatcher(cdp_client=cdp_client)
             cdp_capture.attach(browser_session.cdp_client)
         except Exception:  # noqa: BLE001
             logger.debug("Failed to attach CDP event capture", exc_info=True)
 
         async def pause_gate(*_: Any, **__: Any) -> None:
-            if control_state is None or not control_state.is_paused():
+            if control_state is None:
                 return
 
-            cdp_client = getattr(browser_session, "cdp_client", None)
-            if cdp_client is None:
-                logger.info(
-                    "ctrl_input_not_dispatched",
-                    extra={"session_id": session_id, "reason": "no_cdp_client"},
-                )
-                await control_state.wait_until_unpaused()
+            is_paused = getattr(control_state, "is_paused", None)
+
+            def _paused() -> bool:
+                if callable(is_paused):
+                    return bool(is_paused())
+                return bool(getattr(control_state, "paused", False))
+
+            if not _paused():
                 return
 
-            while control_state.is_paused():
-                drained = control_state.drain_input_events(max_items=100)
+            wait_until_unpaused = getattr(control_state, "wait_until_unpaused", None)
+            drain_input_events = getattr(control_state, "drain_input_events", None)
+
+            if cdp_dispatcher is None or not callable(drain_input_events):
+                if callable(wait_until_unpaused):
+                    await wait_until_unpaused()
+                return
+
+            while _paused():
+                drained = drain_input_events(max_items=100)
                 for record in drained:
                     event = record.get("event")
                     payload = record.get("payload")
                     if not isinstance(event, str) or not isinstance(payload, dict):
                         continue
                     try:
-                        await dispatch_ctrl_input_event(
-                            cdp_client=cdp_client, event=event, payload=payload
-                        )
+                        await cdp_dispatcher.dispatch(event, payload)
                     except Exception:  # noqa: BLE001
                         logger.debug(
                             "Failed to dispatch ctrl input event",
@@ -507,7 +518,7 @@ async def web_eval_agent(
                 if not drained:
                     await asyncio.sleep(0.05)
 
-            leftover = control_state.drain_input_events()
+            leftover = drain_input_events()
             if leftover:
                 logger.info(
                     "ctrl_input_dropped",
