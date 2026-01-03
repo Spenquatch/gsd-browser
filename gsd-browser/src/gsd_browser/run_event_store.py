@@ -196,7 +196,9 @@ class RunEventStore:
                     event_type_value = entry.get("event_type") or entry.get("type")
                     if normalized_types and event_type_value not in normalized_types:
                         continue
-                    timestamp_value = entry.get("timestamp") or entry.get("captured_at")
+                    timestamp_value = entry.get("timestamp")
+                    if timestamp_value is None:
+                        timestamp_value = entry.get("captured_at")
                     if from_timestamp is not None and isinstance(timestamp_value, (int, float)):
                         if float(timestamp_value) < float(from_timestamp):
                             continue
@@ -214,7 +216,11 @@ class RunEventStore:
                     events.append(item)
 
         def sort_key(item: dict[str, Any]) -> float:
-            value = item.get("timestamp") or item.get("captured_at") or 0.0
+            value = item.get("timestamp")
+            if value is None:
+                value = item.get("captured_at")
+            if value is None:
+                value = 0.0
             try:
                 return float(value)
             except Exception:  # noqa: BLE001

@@ -689,7 +689,9 @@ async def get_run_events(
         event_type_value = event.get("event_type") or event.get("type")
         if isinstance(event_type_value, str) and event_type_value in counts:
             counts[event_type_value] += 1
-        timestamp_value = event.get("timestamp") or event.get("captured_at")
+        timestamp_value = event.get("timestamp")
+        if timestamp_value is None:
+            timestamp_value = event.get("captured_at")
         if isinstance(timestamp_value, (int, float)):
             timestamps.append(float(timestamp_value))
 
