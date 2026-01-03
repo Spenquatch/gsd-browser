@@ -208,3 +208,12 @@ Only START/END entries. Docs edits happen on the orchestration branch only.
 - Merged branches (planned): bo-o3a-input-api-code; bo-o3a-input-api-test
 - Commands planned: uv run ruff format --check; uv run ruff check; uv run pytest; make smoke
 - Notes: No git remote is configured in this repo, so git pull --ff-only cannot run as written.
+
+## O3a-integ END
+- Timestamp: 2026-01-03T22:40:00Z
+- Role: integration
+- Worktree: wt/bo-o3a-input-api-integ
+- Merged branches: bo-o3a-input-api-code; bo-o3a-input-api-test
+- Commands executed: (in wt/bo-o3a-input-api-integ/gsd-browser) make dev (pass); uv run ruff format --check (pass; 38 files already formatted); uv run ruff check (pass); uv run pytest (pass; 49 passed); make smoke (pass; 7 passed + CLI round trip)
+- Result: pass
+- Blockers/next steps: None.
