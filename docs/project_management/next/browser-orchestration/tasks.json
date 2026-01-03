@@ -469,7 +469,7 @@
       "name": "Take-control server API + gating",
       "type": "code",
       "phase": "O3a",
-      "status": "pending",
+      "status": "in_progress",
       "description": "Add /ctrl input socket events and enforce holder-only + paused-only gating with rate limiting and security logging (no CDP dispatch yet).",
       "references": [
         "docs/adr/ADR-0002-operator-dashboard-streaming-and-take-control.md",
