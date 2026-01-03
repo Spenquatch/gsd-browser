@@ -278,3 +278,11 @@ Only START/END entries. Docs edits happen on the orchestration branch only.
 - Worktree: wt/bo-o3c-dashboard-input-test
 - Commands planned: uv run ruff format --check; uv run pytest gsd-browser/tests -k o3c
 - Notes: No tracking information is configured for feat/browser-orchestration, so git pull --ff-only cannot run as written.
+
+## O3c-test END
+- Timestamp: 2026-01-03T23:31:17Z
+- Role: test
+- Worktree: wt/bo-o3c-dashboard-input-test
+- Commands executed: (in wt/bo-o3c-dashboard-input-test/gsd-browser) uv run --extra dev ruff format --check (pass; 41 files already formatted); (in wt/bo-o3c-dashboard-input-test) uv run --project gsd-browser --extra dev pytest gsd-browser/tests -k o3c (pass; 3 skipped, 54 deselected)
+- Result: pass (skipped until O3c dashboard input capture wiring is implemented)
+- Blockers/next steps: Merge O3c-code and rerun so the dashboard wiring tests assert instead of skipping.

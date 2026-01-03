@@ -702,7 +702,7 @@
       "name": "Dashboard input capture + docs verify steps",
       "type": "code",
       "phase": "O3c",
-      "status": "in_progress",
+      "status": "done",
       "description": "Update dashboard JS to capture/emit input events to /ctrl and add minimal manual verification docs steps.",
       "references": [
         "docs/project_management/next/browser-orchestration/plan.md",
@@ -739,7 +739,7 @@
       "name": "O3c wiring sanity tests",
       "type": "test",
       "phase": "O3c",
-      "status": "in_progress",
+      "status": "done",
       "description": "Keep this small: add any minimal tests needed for assumptions; primary server-side validation is already covered by O3a/O3b.",
       "references": [
         "docs/project_management/next/browser-orchestration/plan.md",
