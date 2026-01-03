@@ -64,3 +64,10 @@ Only START/END entries. Docs edits happen on the orchestration branch only.
 - Commands executed: (in wt/bo-o1b-callbacks-test) uv run --project gsd-browser ruff format --check (pass; 33 files already formatted); uv run --project gsd-browser pytest gsd-browser/tests -k o1b (pass; 2 skipped, 33 deselected)
 - Result: pass
 - Blockers/next steps: The new O1b tests currently skip until O1b callbacks/pause gating are wired into web_eval_agent; merge/implement that in O1b-integ, then rerun to enforce assertions.
+
+## O1b-integ START
+- Timestamp: 2026-01-03T16:27:17Z
+- Role: integration
+- Worktree: wt/bo-o1b-callbacks-integ
+- Commands planned: uv run ruff format --check; uv run ruff check; uv run pytest; make smoke
+- Notes: `feat/browser-orchestration` now tracks `origin/feat/browser-orchestration` (local remote); `git pull --ff-only` runs cleanly.
