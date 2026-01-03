@@ -546,7 +546,7 @@
       "name": "Integrate O3a",
       "type": "integration",
       "phase": "O3a",
-      "status": "pending",
+      "status": "in_progress",
       "description": "Merge O3a code+tests, reconcile to spec, and run full suite + smoke.",
       "references": [
         "docs/project_management/next/browser-orchestration/plan.md",
