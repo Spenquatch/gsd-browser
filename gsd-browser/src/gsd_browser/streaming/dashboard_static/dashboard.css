@@ -127,6 +127,18 @@ h2 {
   border-radius: 14px;
   overflow: hidden;
   position: relative;
+  outline: none;
+}
+
+.viewer:focus-visible {
+  border-color: rgba(143, 182, 255, 0.55);
+  box-shadow:
+    0 0 0 3px rgba(143, 182, 255, 0.18),
+    0 12px 40px rgba(0, 0, 0, 0.35);
+}
+
+.viewer.ctrl-enabled {
+  border-color: rgba(255, 210, 77, 0.55);
 }
 
 canvas,
@@ -267,4 +279,3 @@ button:disabled {
 .toast.good {
   border-color: rgba(37, 213, 161, 0.3);
 }
-
