@@ -9,6 +9,7 @@ import traceback
 import uuid
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 from mcp.server.fastmcp import Context, FastMCP
 from mcp.types import ImageContent, TextContent
@@ -39,6 +40,54 @@ def _truncate(text: str, *, max_len: int) -> str:
     if len(text) <= max_len:
         return text
     return text[: max(0, max_len - 1)] + "…"
+
+
+def _load_browser_use_classes() -> tuple[type[Any], type[Any]]:
+    from browser_use import Agent, BrowserSession
+
+    return Agent, BrowserSession
+
+
+def _history_final_result(history: Any) -> str | None:
+    final_result = getattr(history, "final_result", None)
+    if callable(final_result):
+        return final_result()
+    return None
+
+
+def _history_has_errors(history: Any) -> bool:
+    has_errors = getattr(history, "has_errors", None)
+    if callable(has_errors):
+        return bool(has_errors())
+    if isinstance(has_errors, bool):
+        return has_errors
+    return False
+
+
+def _history_error_count(history: Any) -> int:
+    errors_attr = getattr(history, "errors", None)
+    if callable(errors_attr):
+        errors_iter = errors_attr()
+    else:
+        errors_iter = errors_attr
+
+    if errors_iter is None:
+        return 0
+
+    try:
+        return sum(1 for err in errors_iter if err)
+    except TypeError:
+        return int(bool(errors_iter))
+
+
+def _history_step_count(history: Any) -> int:
+    steps = getattr(history, "history", None)
+    if steps is None:
+        return 0
+    try:
+        return len(steps)
+    except TypeError:
+        return 0
 
 
 @mcp.tool(name="web_eval_agent")
@@ -77,8 +126,12 @@ async def web_eval_agent(
     session_id = str(uuid.uuid4())
     started = datetime.now(UTC).timestamp()
 
-    runtime.screenshots.current_session_id = session_id
-    runtime.screenshots.current_session_start = started
+    if hasattr(runtime, "screenshots"):
+        try:
+            runtime.screenshots.current_session_id = session_id
+            runtime.screenshots.current_session_start = started
+        except Exception:  # noqa: BLE001
+            pass
 
     logger.info(
         "web_eval_agent called",
@@ -94,7 +147,7 @@ async def web_eval_agent(
     storage_state: str | None = str(state_path) if state_path.exists() else None
 
     try:
-        from browser_use import Agent, BrowserSession
+        Agent, BrowserSession = _load_browser_use_classes()
 
         llm = create_browser_use_llm(settings)
         browser_session = BrowserSession(headless=headless_browser, storage_state=storage_state)
@@ -103,18 +156,19 @@ async def web_eval_agent(
         agent = Agent(task=agent_task, llm=llm, browser_session=browser_session)
         history = await agent.run()
 
-        result = history.final_result()
-        error_count = sum(1 for err in history.errors() if err)
+        result = _history_final_result(history)
+        error_count = _history_error_count(history)
+        has_errors = _history_has_errors(history)
 
         if result is not None:
-            status = "partial" if history.has_errors() else "success"
+            status = "partial" if has_errors else "success"
         else:
-            status = "failed" if history.has_errors() else "partial"
+            status = "failed" if has_errors else "partial"
 
         summary = (
-            f"browser_use_steps={len(history.history)} "
+            f"browser_use_steps={_history_step_count(history)} "
             f"errors={error_count} "
-            f"result_present={bool(result)}"
+            f"result_present={result is not None}"
         )
         payload = {
             "version": "gsd-browser.web_eval_agent.v1",

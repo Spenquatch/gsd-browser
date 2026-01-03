@@ -29,7 +29,11 @@ def _assert_uuid(value: str) -> None:
 
 class _DummyRuntime:
     def __init__(self) -> None:
-        self.screenshots = object()
+        class _DummyScreenshots:
+            current_session_id: str | None = None
+            current_session_start: float | None = None
+
+        self.screenshots = _DummyScreenshots()
 
     def ensure_dashboard_running(self, *args: Any, **kwargs: Any) -> None:
         return None
@@ -52,10 +56,19 @@ def test_o1a_web_eval_agent_json_shape_and_final_result_mapping(
 
     monkeypatch.setattr(mcp_server_mod, "get_runtime", lambda: _DummyRuntime())
     monkeypatch.setattr(mcp_server_mod, "load_settings", lambda *args, **kwargs: object())
+    monkeypatch.setattr(mcp_server_mod, "create_browser_use_llm", lambda *args, **kwargs: object())
 
     class DummyHistory:
+        history: list[object] = []
+
         def final_result(self) -> str | None:
             return final_result_value
+
+        def has_errors(self) -> bool:
+            return False
+
+        def errors(self) -> list[object]:
+            return []
 
     class DummyAgent:
         def __init__(self, *args: Any, **kwargs: Any) -> None:
@@ -64,12 +77,13 @@ def test_o1a_web_eval_agent_json_shape_and_final_result_mapping(
         async def run(self, *args: Any, **kwargs: Any) -> DummyHistory:
             return DummyHistory()
 
-    if hasattr(mcp_server_mod, "Agent"):
-        monkeypatch.setattr(mcp_server_mod, "Agent", DummyAgent)
-    elif hasattr(mcp_server_mod, "browser_use") and hasattr(mcp_server_mod.browser_use, "Agent"):
-        monkeypatch.setattr(mcp_server_mod.browser_use, "Agent", DummyAgent)
-    else:
-        pytest.skip("Unable to stub browser-use Agent in current module structure")
+    class DummyBrowserSession:
+        def __init__(self, *args: Any, **kwargs: Any) -> None:
+            return None
+
+    monkeypatch.setattr(
+        mcp_server_mod, "_load_browser_use_classes", lambda: (DummyAgent, DummyBrowserSession)
+    )
 
     response = _run(
         mcp_server_mod.web_eval_agent(
