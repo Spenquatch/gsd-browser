@@ -624,7 +624,7 @@
       "name": "O3b CDP mapping tests",
       "type": "test",
       "phase": "O3b",
-      "status": "pending",
+      "status": "in_progress",
       "description": "Unit tests for CDP dispatch parameter mapping, Enter sequence, and typing behavior using mocked CDP clients.",
       "references": [
         "docs/project_management/next/browser-orchestration/plan.md",

@@ -217,3 +217,10 @@ Only START/END entries. Docs edits happen on the orchestration branch only.
 - Commands executed: (in wt/bo-o3a-input-api-integ/gsd-browser) make dev (pass); uv run ruff format --check (pass; 38 files already formatted); uv run ruff check (pass); uv run pytest (pass; 49 passed); make smoke (pass; 7 passed + CLI round trip)
 - Result: pass
 - Blockers/next steps: None.
+
+## O3b-test START
+- Timestamp: 2026-01-03T22:44:55Z
+- Role: test
+- Worktree: wt/bo-o3b-cdp-dispatch-test
+- Commands planned: uv run ruff format --check; uv run pytest gsd-browser/tests -k o3b
+- Notes: No tracking information is configured for feat/browser-orchestration, so git pull --ff-only cannot run as written.
