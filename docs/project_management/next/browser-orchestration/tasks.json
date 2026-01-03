@@ -586,7 +586,7 @@
       "name": "CDP input dispatch (keyboard correctness)",
       "type": "code",
       "phase": "O3b",
-      "status": "pending",
+      "status": "in_progress",
       "description": "Implement CDP Input.dispatch* routing for input events, focusing on keyboard correctness and modifiers using mocked CDP clients in tests.",
       "references": [
         "docs/project_management/next/browser-orchestration/plan.md",
