@@ -353,7 +353,7 @@
       "name": "get_run_events tool + compact/dev modes",
       "type": "code",
       "phase": "O2b",
-      "status": "in_progress",
+      "status": "done",
       "description": "Add get_run_events MCP tool with strict limits and implement web_eval_agent response mode selection (compact vs dev).",
       "references": [
         "docs/project_management/next/browser-orchestration/plan.md",
