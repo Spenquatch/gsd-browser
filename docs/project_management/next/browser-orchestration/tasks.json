@@ -81,7 +81,7 @@
       "name": "Integrate O1a",
       "type": "integration",
       "phase": "O1a",
-      "status": "pending",
+      "status": "in_progress",
       "description": "Merge O1a code+tests, reconcile to spec, and run full suite + smoke.",
       "references": [
         "docs/project_management/next/browser-orchestration/plan.md",

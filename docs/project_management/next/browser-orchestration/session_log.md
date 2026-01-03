@@ -18,3 +18,10 @@ Only START/END entries. Docs edits happen on the orchestration branch only.
 - Commands executed: (in gsd-browser) make dev (pass); uv run ruff format --check (pass; 31 files already formatted); uv run ruff check (pass)
 - Result: pass
 - Blockers/next steps: Run O1a-test and merge in O1a-integ.
+
+## O1a-integ START
+- Timestamp: 2026-01-03T03:26:22Z
+- Role: integration
+- Worktree: wt/bo-o1a-orchestrator-integ
+- Commands planned: uv run ruff format --check; uv run ruff check; uv run pytest; make smoke
+- Notes: Local repo has no upstream for feat/browser-orchestration, so git pull --ff-only cannot run as written.
