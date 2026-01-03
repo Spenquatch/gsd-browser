@@ -702,7 +702,7 @@
       "name": "Dashboard input capture + docs verify steps",
       "type": "code",
       "phase": "O3c",
-      "status": "pending",
+      "status": "in_progress",
       "description": "Update dashboard JS to capture/emit input events to /ctrl and add minimal manual verification docs steps.",
       "references": [
         "docs/project_management/next/browser-orchestration/plan.md",
