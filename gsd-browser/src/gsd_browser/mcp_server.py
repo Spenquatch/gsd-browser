@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import base64
+import inspect
 import json
 import logging
 import os
@@ -133,11 +134,17 @@ async def web_eval_agent(
     _ = ctx
     runtime = get_runtime()
     settings = load_settings(strict=False)
-    runtime.ensure_dashboard_running(
-        settings=settings, host=DEFAULT_DASHBOARD_HOST, port=DEFAULT_DASHBOARD_PORT
+    ensure_dashboard_running = getattr(runtime, "ensure_dashboard_running", None)
+    if callable(ensure_dashboard_running):
+        ensure_dashboard_running(
+            settings=settings, host=DEFAULT_DASHBOARD_HOST, port=DEFAULT_DASHBOARD_PORT
+        )
+
+    dashboard_fn = getattr(runtime, "dashboard", None)
+    dashboard = dashboard_fn() if callable(dashboard_fn) else None
+    control_state = (
+        getattr(getattr(dashboard, "runtime", None), "control_state", None) if dashboard else None
     )
-    dashboard = runtime.dashboard()
-    control_state = dashboard.runtime.control_state if dashboard else None
 
     normalized_url = _normalize_url(url)
     tool_call_id = str(uuid.uuid4())
@@ -169,9 +176,41 @@ async def web_eval_agent(
 
         step_screenshot_count = 0
 
-        async def record_step_screenshot(browser_state_summary: Any, _: Any, step: int) -> None:
+        async def record_step_screenshot(*args: Any, **kwargs: Any) -> None:
             nonlocal step_screenshot_count
-            screenshot_base64 = getattr(browser_state_summary, "screenshot", None)
+
+            browser_state_summary = args[0] if args else kwargs.get("browser_state_summary")
+            step = kwargs.get("step")
+            if step is None and len(args) >= 3:
+                step = args[2]
+
+            screenshot_base64 = None
+            if browser_state_summary is not None:
+                screenshot_base64 = getattr(browser_state_summary, "screenshot", None)
+                if screenshot_base64 is None:
+                    screenshot_base64 = getattr(browser_state_summary, "screenshot_base64", None)
+                if screenshot_base64 is None and hasattr(browser_state_summary, "get"):
+                    try:
+                        screenshot_base64 = browser_state_summary.get("screenshot")
+                    except Exception:  # noqa: BLE001
+                        screenshot_base64 = None
+                if screenshot_base64 is None and hasattr(browser_state_summary, "get"):
+                    try:
+                        screenshot_base64 = browser_state_summary.get("screenshot_base64")
+                    except Exception:  # noqa: BLE001
+                        screenshot_base64 = None
+
+            if screenshot_base64 is None:
+                screenshot_base64 = kwargs.get("screenshot")
+
+            if step is None and browser_state_summary is not None:
+                step = getattr(browser_state_summary, "step", None)
+                if step is None and hasattr(browser_state_summary, "get"):
+                    try:
+                        step = browser_state_summary.get("step")
+                    except Exception:  # noqa: BLE001
+                        step = None
+
             image_bytes = (
                 _decode_base64_image(screenshot_base64)
                 if isinstance(screenshot_base64, str)
@@ -180,11 +219,36 @@ async def web_eval_agent(
             if not image_bytes:
                 return
 
-            page_url = str(getattr(browser_state_summary, "url", "") or "")
-            page_title = str(getattr(browser_state_summary, "title", "") or "")
+            screenshots_manager = getattr(runtime, "screenshots", None)
+            record = getattr(screenshots_manager, "record_screenshot", None)
+            if not callable(record):
+                return
+
+            page_url_value = getattr(browser_state_summary, "url", None)
+            if page_url_value is None and hasattr(browser_state_summary, "get"):
+                try:
+                    page_url_value = browser_state_summary.get("url")
+                except Exception:  # noqa: BLE001
+                    page_url_value = None
+
+            page_title_value = getattr(browser_state_summary, "title", None)
+            if page_title_value is None and hasattr(browser_state_summary, "get"):
+                try:
+                    page_title_value = browser_state_summary.get("title")
+                except Exception:  # noqa: BLE001
+                    page_title_value = None
+
             browser_errors = getattr(browser_state_summary, "browser_errors", None)
+            if browser_errors is None and hasattr(browser_state_summary, "get"):
+                try:
+                    browser_errors = browser_state_summary.get("browser_errors")
+                except Exception:  # noqa: BLE001
+                    browser_errors = None
+
+            page_url = str(page_url_value or "")
+            page_title = str(page_title_value or "")
             has_error = bool(browser_errors)
-            runtime.screenshots.record_screenshot(
+            record(
                 screenshot_type="agent_step",
                 image_bytes=image_bytes,
                 mime_type="image/png",
@@ -197,7 +261,7 @@ async def web_eval_agent(
             )
             step_screenshot_count += 1
 
-        async def pause_gate(_: Any) -> None:
+        async def pause_gate(*_: Any, **__: Any) -> None:
             if control_state is None:
                 return
             await control_state.wait_until_unpaused()
@@ -206,13 +270,25 @@ async def web_eval_agent(
         browser_session = BrowserSession(headless=headless_browser, storage_state=storage_state)
 
         agent_task = f"{task}\n\nURL: {normalized_url}"
-        agent = Agent(
-            task=agent_task,
-            llm=llm,
-            browser_session=browser_session,
-            register_new_step_callback=record_step_screenshot,
-        )
-        history = await agent.run(on_step_end=pause_gate)
+        agent = Agent(task=agent_task, llm=llm, browser_session=browser_session)
+
+        register_callback = getattr(agent, "register_new_step_callback", None)
+        if callable(register_callback):
+            register_callback(record_step_screenshot)
+
+        run_kwargs: dict[str, Any] = {}
+        try:
+            signature = inspect.signature(agent.run)
+            has_kwargs = any(
+                param.kind is inspect.Parameter.VAR_KEYWORD
+                for param in signature.parameters.values()
+            )
+            if "on_step_end" in signature.parameters or has_kwargs:
+                run_kwargs["on_step_end"] = pause_gate
+        except (TypeError, ValueError):
+            run_kwargs["on_step_end"] = pause_gate
+
+        history = await agent.run(**run_kwargs)
 
         result = _history_final_result(history)
         error_count = _history_error_count(history)

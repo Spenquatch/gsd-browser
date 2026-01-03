@@ -4,8 +4,9 @@ import asyncio
 import inspect
 import json
 import uuid
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Callable
+from typing import Any
 
 import pytest
 
@@ -26,7 +27,7 @@ async def _maybe_await(value: Any) -> None:
 class _StepInfo:
     step: int
     url: str
-    screenshot_base64: str = "aW1n"  # base64("img")
+    screenshot: str = "aW1n"  # base64("img")
 
     def __getitem__(self, key: str) -> Any:
         return getattr(self, key)
@@ -100,7 +101,7 @@ class _DummyHistory:
 
 
 class _DummyAgent:
-    created: list["_DummyAgent"] = []
+    created: list[_DummyAgent] = []
     shared_control_state: _DummyControlState | None = None
     pause_between_steps: bool = False
 
@@ -131,18 +132,32 @@ class _DummyAgent:
         if self._step_callback is None:
             return
         try:
-            await _maybe_await(self._step_callback(info))
+            await _maybe_await(self._step_callback(info, None, info.step))
         except TypeError:
-            await _maybe_await(self._step_callback())
+            try:
+                await _maybe_await(self._step_callback(info))
+            except TypeError:
+                await _maybe_await(self._step_callback())
 
     async def run(self, *args: Any, **kwargs: Any) -> _DummyHistory:
         control_state = type(self).shared_control_state
+        on_step_end = kwargs.get("on_step_end")
 
-        await self._invoke_callback(_StepInfo(step=1, url="https://example.com"))
+        step1 = _StepInfo(step=1, url="https://example.com")
+        step2 = _StepInfo(step=2, url="https://example.com")
+
+        await self._invoke_callback(step1)
 
         if control_state is not None and type(self).pause_between_steps:
             control_state.pause()
-        await self._invoke_callback(_StepInfo(step=2, url="https://example.com"))
+
+        if callable(on_step_end):
+            await _maybe_await(on_step_end(step1))
+
+        await self._invoke_callback(step2)
+
+        if callable(on_step_end):
+            await _maybe_await(on_step_end(step2))
 
         return _DummyHistory()
 
@@ -196,11 +211,7 @@ def test_o1b_records_agent_step_screenshots_and_updates_artifacts(
 
     assert _DummyAgent.created, "expected Agent to be constructed"
     agent = _DummyAgent.created[0]
-
-    if not agent._registered_callback and not (
-        screenshots.record_calls or screenshots.add_key_calls
-    ):
-        pytest.skip("O1b callbacks not wired yet on this branch")
+    assert agent._registered_callback, "expected step callback to be registered"
 
     _assert_uuid(payload["session_id"])
     _assert_uuid(payload["tool_call_id"])
@@ -249,8 +260,6 @@ def test_o1b_pause_gate_blocks_between_steps_until_resumed(
         try:
             await asyncio.wait_for(control_state.wait_started.wait(), timeout=0.25)
         except TimeoutError:
-            if _DummyAgent.created and not _DummyAgent.created[0]._registered_callback:
-                pytest.skip("O1b pause gating not wired yet on this branch")
             raise
 
         assert not task.done(), "expected web_eval_agent to block while paused"
