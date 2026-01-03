@@ -333,11 +333,13 @@ def create_streaming_app(
                 meta["text_len"] = len(text)
         return meta
 
-    def _reject_input_event(*, sid: str, event: str, reason: str, payload: Any) -> dict[str, Any]:
+    def _reject_input_event(
+        *, sid: str, event: str, log_message: str, reason: str, payload: Any
+    ) -> dict[str, Any]:
         holder_sid = control_state.current_holder_sid()
         paused = control_state.is_paused()
         get_security_logger().info(
-            "ctrl_input_rejected",
+            log_message,
             extra={
                 "namespace": DEFAULT_CTRL_NAMESPACE,
                 "sid": sid,
@@ -411,13 +413,31 @@ def create_streaming_app(
         if not _allow_ctrl_event(sid=sid, event=event):
             return {"ok": False, "error": "rate_limited"}
         if not control_state.is_holder(sid=sid):
-            return _reject_input_event(sid=sid, event=event, reason="not_holder", payload=payload)
+            return _reject_input_event(
+                sid=sid,
+                event=event,
+                log_message="ctrl_not_holder",
+                reason="not_holder",
+                payload=payload,
+            )
         if not control_state.is_paused():
-            return _reject_input_event(sid=sid, event=event, reason="not_paused", payload=payload)
+            return _reject_input_event(
+                sid=sid,
+                event=event,
+                log_message="ctrl_not_paused",
+                reason="not_paused",
+                payload=payload,
+            )
 
         validated, error = _validate_input_payload(event=event, payload=payload)
         if error is not None:
-            return _reject_input_event(sid=sid, event=event, reason=error, payload=payload)
+            return _reject_input_event(
+                sid=sid,
+                event=event,
+                log_message="ctrl_invalid_payload",
+                reason=error,
+                payload=payload,
+            )
 
         queue_result = control_state.enqueue_input_event(
             sid=sid, event=event, payload=validated or {}
