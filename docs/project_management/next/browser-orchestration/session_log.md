@@ -255,3 +255,12 @@ Only START/END entries. Docs edits happen on the orchestration branch only.
 - Merged branches (planned): bo-o3b-cdp-dispatch-code; bo-o3b-cdp-dispatch-test
 - Commands planned: uv run ruff format --check; uv run ruff check; uv run pytest; make smoke
 - Notes: No tracking information is configured for feat/browser-orchestration, so git pull --ff-only cannot run as written.
+
+## O3b-integ END
+- Timestamp: 2026-01-03T23:09:45Z
+- Role: integration
+- Worktree: wt/bo-o3b-cdp-dispatch-integ
+- Merged branches: bo-o3b-cdp-dispatch-code; bo-o3b-cdp-dispatch-test
+- Commands executed: (in wt/bo-o3b-cdp-dispatch-integ/gsd-browser) make dev (pass); uv run ruff format --check (pass; 40 files already formatted); uv run ruff check (pass); uv run pytest (pass; 54 passed); make smoke (pass; 7 passed + CLI round trip)
+- Result: pass
+- Blockers/next steps: None.
