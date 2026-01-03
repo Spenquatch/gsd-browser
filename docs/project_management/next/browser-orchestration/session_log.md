@@ -239,3 +239,11 @@ Only START/END entries. Docs edits happen on the orchestration branch only.
 - Commands executed: (in wt/bo-o3b-cdp-dispatch-code/gsd-browser) make dev (pass); uv run ruff format --check (pass; 39 files already formatted); uv run ruff check (pass)
 - Result: pass
 - Blockers/next steps: Merge bo-o3b-cdp-dispatch-code in O3b-integ.
+
+## O3b-test END
+- Timestamp: 2026-01-03T22:52:52Z
+- Role: test
+- Worktree: wt/bo-o3b-cdp-dispatch-test
+- Commands executed: (in wt/bo-o3b-cdp-dispatch-test) uv run --project gsd-browser --extra dev ruff format --check (pass; 39 files already formatted); uv run --project gsd-browser --extra dev pytest gsd-browser/tests -k o3b (pass; 5 skipped, 49 deselected)
+- Result: pass (skipped until O3b CDP input dispatch is implemented)
+- Blockers/next steps: Merge bo-o3b-cdp-dispatch-test in O3b-integ so these tests enforce assertions instead of skipping.
