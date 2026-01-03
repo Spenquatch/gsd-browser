@@ -1,0 +1,813 @@
+{
+  "tasks": [
+    {
+      "id": "O1a-code",
+      "name": "Minimal orchestrated web_eval_agent + JSON contract",
+      "type": "code",
+      "phase": "O1a",
+      "status": "in_progress",
+      "description": "Run browser-use Agent in web_eval_agent, extract AgentHistoryList.final_result(), and return a single JSON TextContent response (no inline images).",
+      "references": [
+        "docs/adr/ADR-0001-agent-orchestration-and-answer-contract.md",
+        "docs/project_management/next/browser-orchestration/plan.md",
+        "docs/project_management/next/browser-orchestration/O1a-spec.md"
+      ],
+      "acceptance_criteria": [
+        "web_eval_agent runs browser-use and returns JSON per O1a spec.",
+        "result is populated from final_result() when available.",
+        "No images in response; stdout remains clean."
+      ],
+      "start_checklist": [
+        "git checkout feat/browser-orchestration && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, O1a-spec.md, kickoff_prompts/O1a-code.md",
+        "Set O1a-code status to in_progress in tasks.json",
+        "Add START entry to session_log.md; commit docs (docs: start O1a-code)",
+        "git branch bo-o1a-orchestrator-code feat/browser-orchestration",
+        "git worktree add wt/bo-o1a-orchestrator-code bo-o1a-orchestrator-code",
+        "Do not edit docs/tasks/session_log from the worktree"
+      ],
+      "end_checklist": [
+        "uv run ruff format --check",
+        "uv run ruff check",
+        "Commit changes inside wt/bo-o1a-orchestrator-code",
+        "Update tasks.json and session_log.md on feat/browser-orchestration (docs: finish O1a-code)",
+        "git worktree remove wt/bo-o1a-orchestrator-code"
+      ],
+      "worktree": "wt/bo-o1a-orchestrator-code",
+      "integration_task": "O1a-integ",
+      "kickoff_prompt": "docs/project_management/next/browser-orchestration/kickoff_prompts/O1a-code.md",
+      "depends_on": [],
+      "concurrent_with": ["O1a-test"]
+    },
+    {
+      "id": "O1a-test",
+      "name": "O1a contract + result extraction tests",
+      "type": "test",
+      "phase": "O1a",
+      "status": "pending",
+      "description": "Unit tests for response JSON shape and final_result extraction via stubs/mocks (no real browser).",
+      "references": [
+        "docs/project_management/next/browser-orchestration/plan.md",
+        "docs/project_management/next/browser-orchestration/O1a-spec.md"
+      ],
+      "acceptance_criteria": [
+        "Tests validate required JSON keys and bounded fields.",
+        "Tests validate final_result() mapping into result field."
+      ],
+      "start_checklist": [
+        "git checkout feat/browser-orchestration && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, O1a-spec.md, kickoff_prompts/O1a-test.md",
+        "Set O1a-test status to in_progress in tasks.json",
+        "Add START entry to session_log.md; commit docs (docs: start O1a-test)",
+        "git branch bo-o1a-orchestrator-test feat/browser-orchestration",
+        "git worktree add wt/bo-o1a-orchestrator-test bo-o1a-orchestrator-test",
+        "Do not edit docs/tasks/session_log from the worktree"
+      ],
+      "end_checklist": [
+        "uv run ruff format --check",
+        "uv run pytest gsd-browser/tests -k o1a",
+        "Commit changes inside wt/bo-o1a-orchestrator-test",
+        "Update tasks.json and session_log.md on feat/browser-orchestration (docs: finish O1a-test)",
+        "git worktree remove wt/bo-o1a-orchestrator-test"
+      ],
+      "worktree": "wt/bo-o1a-orchestrator-test",
+      "integration_task": "O1a-integ",
+      "kickoff_prompt": "docs/project_management/next/browser-orchestration/kickoff_prompts/O1a-test.md",
+      "depends_on": [],
+      "concurrent_with": ["O1a-code"]
+    },
+    {
+      "id": "O1a-integ",
+      "name": "Integrate O1a",
+      "type": "integration",
+      "phase": "O1a",
+      "status": "pending",
+      "description": "Merge O1a code+tests, reconcile to spec, and run full suite + smoke.",
+      "references": [
+        "docs/project_management/next/browser-orchestration/plan.md",
+        "docs/project_management/next/browser-orchestration/O1a-spec.md"
+      ],
+      "acceptance_criteria": [
+        "O1a acceptance criteria met on the orchestration branch.",
+        "ruff + pytest + make smoke pass."
+      ],
+      "start_checklist": [
+        "git checkout feat/browser-orchestration && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, O1a-spec.md, kickoff_prompts/O1a-integ.md",
+        "Set O1a-integ status to in_progress in tasks.json",
+        "Add START entry to session_log.md; commit docs (docs: start O1a-integ)",
+        "git branch bo-o1a-orchestrator-integ feat/browser-orchestration",
+        "git worktree add wt/bo-o1a-orchestrator-integ bo-o1a-orchestrator-integ",
+        "Do not edit docs/tasks/session_log from the worktree"
+      ],
+      "end_checklist": [
+        "uv run ruff format --check",
+        "uv run ruff check",
+        "uv run pytest",
+        "make smoke",
+        "Commit changes inside wt/bo-o1a-orchestrator-integ",
+        "Update tasks.json and session_log.md on feat/browser-orchestration (docs: finish O1a-integ)",
+        "git worktree remove wt/bo-o1a-orchestrator-integ"
+      ],
+      "worktree": "wt/bo-o1a-orchestrator-integ",
+      "integration_task": null,
+      "kickoff_prompt": "docs/project_management/next/browser-orchestration/kickoff_prompts/O1a-integ.md",
+      "depends_on": ["O1a-code", "O1a-test"],
+      "concurrent_with": []
+    },
+
+    {
+      "id": "O1b-code",
+      "name": "Step callbacks + screenshots + pause gating",
+      "type": "code",
+      "phase": "O1b",
+      "status": "pending",
+      "description": "Add step hooks to record agent_step screenshots and enforce pause gating between steps; keep responses compact and text-only.",
+      "references": [
+        "docs/adr/ADR-0001-agent-orchestration-and-answer-contract.md",
+        "docs/project_management/next/browser-orchestration/plan.md",
+        "docs/project_management/next/browser-orchestration/O1b-spec.md"
+      ],
+      "acceptance_criteria": [
+        "Screenshots recorded as artifacts (retrievable via get_screenshots).",
+        "Agent blocks between steps while paused.",
+        "Response artifacts counts updated; no inline images."
+      ],
+      "start_checklist": [
+        "git checkout feat/browser-orchestration && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, O1b-spec.md, kickoff_prompts/O1b-code.md",
+        "Set O1b-code status to in_progress in tasks.json",
+        "Add START entry to session_log.md; commit docs (docs: start O1b-code)",
+        "git branch bo-o1b-callbacks-code feat/browser-orchestration",
+        "git worktree add wt/bo-o1b-callbacks-code bo-o1b-callbacks-code",
+        "Do not edit docs/tasks/session_log from the worktree"
+      ],
+      "end_checklist": [
+        "uv run ruff format --check",
+        "uv run ruff check",
+        "Commit changes inside wt/bo-o1b-callbacks-code",
+        "Update tasks.json and session_log.md on feat/browser-orchestration (docs: finish O1b-code)",
+        "git worktree remove wt/bo-o1b-callbacks-code"
+      ],
+      "worktree": "wt/bo-o1b-callbacks-code",
+      "integration_task": "O1b-integ",
+      "kickoff_prompt": "docs/project_management/next/browser-orchestration/kickoff_prompts/O1b-code.md",
+      "depends_on": ["O1a-integ"],
+      "concurrent_with": ["O1b-test"]
+    },
+    {
+      "id": "O1b-test",
+      "name": "O1b pause + screenshots tests",
+      "type": "test",
+      "phase": "O1b",
+      "status": "pending",
+      "description": "Unit tests for pause gating and screenshot recording hooks using mocks/stubs.",
+      "references": [
+        "docs/project_management/next/browser-orchestration/plan.md",
+        "docs/project_management/next/browser-orchestration/O1b-spec.md"
+      ],
+      "acceptance_criteria": [
+        "Pause gate blocks between steps (unit-testable).",
+        "Screenshot recording invoked with expected session_id and metadata."
+      ],
+      "start_checklist": [
+        "git checkout feat/browser-orchestration && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, O1b-spec.md, kickoff_prompts/O1b-test.md",
+        "Set O1b-test status to in_progress in tasks.json",
+        "Add START entry to session_log.md; commit docs (docs: start O1b-test)",
+        "git branch bo-o1b-callbacks-test feat/browser-orchestration",
+        "git worktree add wt/bo-o1b-callbacks-test bo-o1b-callbacks-test",
+        "Do not edit docs/tasks/session_log from the worktree"
+      ],
+      "end_checklist": [
+        "uv run ruff format --check",
+        "uv run pytest gsd-browser/tests -k o1b",
+        "Commit changes inside wt/bo-o1b-callbacks-test",
+        "Update tasks.json and session_log.md on feat/browser-orchestration (docs: finish O1b-test)",
+        "git worktree remove wt/bo-o1b-callbacks-test"
+      ],
+      "worktree": "wt/bo-o1b-callbacks-test",
+      "integration_task": "O1b-integ",
+      "kickoff_prompt": "docs/project_management/next/browser-orchestration/kickoff_prompts/O1b-test.md",
+      "depends_on": ["O1a-integ"],
+      "concurrent_with": ["O1b-code"]
+    },
+    {
+      "id": "O1b-integ",
+      "name": "Integrate O1b",
+      "type": "integration",
+      "phase": "O1b",
+      "status": "pending",
+      "description": "Merge O1b code+tests, reconcile to spec, and run full suite + smoke.",
+      "references": [
+        "docs/project_management/next/browser-orchestration/plan.md",
+        "docs/project_management/next/browser-orchestration/O1b-spec.md"
+      ],
+      "acceptance_criteria": [
+        "O1b acceptance criteria met on the orchestration branch.",
+        "ruff + pytest + make smoke pass."
+      ],
+      "start_checklist": [
+        "git checkout feat/browser-orchestration && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, O1b-spec.md, kickoff_prompts/O1b-integ.md",
+        "Set O1b-integ status to in_progress in tasks.json",
+        "Add START entry to session_log.md; commit docs (docs: start O1b-integ)",
+        "git branch bo-o1b-callbacks-integ feat/browser-orchestration",
+        "git worktree add wt/bo-o1b-callbacks-integ bo-o1b-callbacks-integ",
+        "Do not edit docs/tasks/session_log from the worktree"
+      ],
+      "end_checklist": [
+        "uv run ruff format --check",
+        "uv run ruff check",
+        "uv run pytest",
+        "make smoke",
+        "Commit changes inside wt/bo-o1b-callbacks-integ",
+        "Update tasks.json and session_log.md on feat/browser-orchestration (docs: finish O1b-integ)",
+        "git worktree remove wt/bo-o1b-callbacks-integ"
+      ],
+      "worktree": "wt/bo-o1b-callbacks-integ",
+      "integration_task": null,
+      "kickoff_prompt": "docs/project_management/next/browser-orchestration/kickoff_prompts/O1b-integ.md",
+      "depends_on": ["O1b-code", "O1b-test"],
+      "concurrent_with": []
+    },
+
+    {
+      "id": "O2a-code",
+      "name": "In-memory run event store + capture pipeline",
+      "type": "code",
+      "phase": "O2a",
+      "status": "pending",
+      "description": "Add an in-memory run event store keyed by session_id and record agent/console/network events with strict bounds and truncation.",
+      "references": [
+        "docs/project_management/next/browser-orchestration/plan.md",
+        "docs/project_management/next/browser-orchestration/O2a-spec.md"
+      ],
+      "acceptance_criteria": [
+        "Event store records bounded agent/console/network events.",
+        "Limits and truncation enforced deterministically.",
+        "web_eval_agent artifacts counts reflect stored event totals."
+      ],
+      "start_checklist": [
+        "git checkout feat/browser-orchestration && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, O2a-spec.md, kickoff_prompts/O2a-code.md",
+        "Set O2a-code status to in_progress in tasks.json",
+        "Add START entry to session_log.md; commit docs (docs: start O2a-code)",
+        "git branch bo-o2a-events-store-code feat/browser-orchestration",
+        "git worktree add wt/bo-o2a-events-store-code bo-o2a-events-store-code",
+        "Do not edit docs/tasks/session_log from the worktree"
+      ],
+      "end_checklist": [
+        "uv run ruff format --check",
+        "uv run ruff check",
+        "Commit changes inside wt/bo-o2a-events-store-code",
+        "Update tasks.json and session_log.md on feat/browser-orchestration (docs: finish O2a-code)",
+        "git worktree remove wt/bo-o2a-events-store-code"
+      ],
+      "worktree": "wt/bo-o2a-events-store-code",
+      "integration_task": "O2a-integ",
+      "kickoff_prompt": "docs/project_management/next/browser-orchestration/kickoff_prompts/O2a-code.md",
+      "depends_on": ["O1b-integ"],
+      "concurrent_with": ["O2a-test"]
+    },
+    {
+      "id": "O2a-test",
+      "name": "O2a event store bounds tests",
+      "type": "test",
+      "phase": "O2a",
+      "status": "pending",
+      "description": "Unit tests for event store bounds, truncation, and basic filtering primitives.",
+      "references": [
+        "docs/project_management/next/browser-orchestration/plan.md",
+        "docs/project_management/next/browser-orchestration/O2a-spec.md"
+      ],
+      "acceptance_criteria": [
+        "Limits enforced (max events per type/session).",
+        "String truncation enforced with indicator.",
+        "Basic filter utilities behave deterministically."
+      ],
+      "start_checklist": [
+        "git checkout feat/browser-orchestration && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, O2a-spec.md, kickoff_prompts/O2a-test.md",
+        "Set O2a-test status to in_progress in tasks.json",
+        "Add START entry to session_log.md; commit docs (docs: start O2a-test)",
+        "git branch bo-o2a-events-store-test feat/browser-orchestration",
+        "git worktree add wt/bo-o2a-events-store-test bo-o2a-events-store-test",
+        "Do not edit docs/tasks/session_log from the worktree"
+      ],
+      "end_checklist": [
+        "uv run ruff format --check",
+        "uv run pytest gsd-browser/tests -k o2a",
+        "Commit changes inside wt/bo-o2a-events-store-test",
+        "Update tasks.json and session_log.md on feat/browser-orchestration (docs: finish O2a-test)",
+        "git worktree remove wt/bo-o2a-events-store-test"
+      ],
+      "worktree": "wt/bo-o2a-events-store-test",
+      "integration_task": "O2a-integ",
+      "kickoff_prompt": "docs/project_management/next/browser-orchestration/kickoff_prompts/O2a-test.md",
+      "depends_on": ["O1b-integ"],
+      "concurrent_with": ["O2a-code"]
+    },
+    {
+      "id": "O2a-integ",
+      "name": "Integrate O2a",
+      "type": "integration",
+      "phase": "O2a",
+      "status": "pending",
+      "description": "Merge O2a code+tests, reconcile to spec, and run full suite + smoke.",
+      "references": [
+        "docs/project_management/next/browser-orchestration/plan.md",
+        "docs/project_management/next/browser-orchestration/O2a-spec.md"
+      ],
+      "acceptance_criteria": [
+        "O2a acceptance criteria met on the orchestration branch.",
+        "ruff + pytest + make smoke pass."
+      ],
+      "start_checklist": [
+        "git checkout feat/browser-orchestration && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, O2a-spec.md, kickoff_prompts/O2a-integ.md",
+        "Set O2a-integ status to in_progress in tasks.json",
+        "Add START entry to session_log.md; commit docs (docs: start O2a-integ)",
+        "git branch bo-o2a-events-store-integ feat/browser-orchestration",
+        "git worktree add wt/bo-o2a-events-store-integ bo-o2a-events-store-integ",
+        "Do not edit docs/tasks/session_log from the worktree"
+      ],
+      "end_checklist": [
+        "uv run ruff format --check",
+        "uv run ruff check",
+        "uv run pytest",
+        "make smoke",
+        "Commit changes inside wt/bo-o2a-events-store-integ",
+        "Update tasks.json and session_log.md on feat/browser-orchestration (docs: finish O2a-integ)",
+        "git worktree remove wt/bo-o2a-events-store-integ"
+      ],
+      "worktree": "wt/bo-o2a-events-store-integ",
+      "integration_task": null,
+      "kickoff_prompt": "docs/project_management/next/browser-orchestration/kickoff_prompts/O2a-integ.md",
+      "depends_on": ["O2a-code", "O2a-test"],
+      "concurrent_with": []
+    },
+
+    {
+      "id": "O2b-code",
+      "name": "get_run_events tool + compact/dev modes",
+      "type": "code",
+      "phase": "O2b",
+      "status": "pending",
+      "description": "Add get_run_events MCP tool with strict limits and implement web_eval_agent response mode selection (compact vs dev).",
+      "references": [
+        "docs/project_management/next/browser-orchestration/plan.md",
+        "docs/project_management/next/browser-orchestration/O2b-spec.md"
+      ],
+      "acceptance_criteria": [
+        "get_run_events returns JSON with filters/limits.",
+        "web_eval_agent supports mode arg and default selection by host.",
+        "dev mode includes bounded console/network excerpts; compact stays small."
+      ],
+      "start_checklist": [
+        "git checkout feat/browser-orchestration && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, O2b-spec.md, kickoff_prompts/O2b-code.md",
+        "Set O2b-code status to in_progress in tasks.json",
+        "Add START entry to session_log.md; commit docs (docs: start O2b-code)",
+        "git branch bo-o2b-run-events-tool-code feat/browser-orchestration",
+        "git worktree add wt/bo-o2b-run-events-tool-code bo-o2b-run-events-tool-code",
+        "Do not edit docs/tasks/session_log from the worktree"
+      ],
+      "end_checklist": [
+        "uv run ruff format --check",
+        "uv run ruff check",
+        "Commit changes inside wt/bo-o2b-run-events-tool-code",
+        "Update tasks.json and session_log.md on feat/browser-orchestration (docs: finish O2b-code)",
+        "git worktree remove wt/bo-o2b-run-events-tool-code"
+      ],
+      "worktree": "wt/bo-o2b-run-events-tool-code",
+      "integration_task": "O2b-integ",
+      "kickoff_prompt": "docs/project_management/next/browser-orchestration/kickoff_prompts/O2b-code.md",
+      "depends_on": ["O2a-integ"],
+      "concurrent_with": ["O2b-test"]
+    },
+    {
+      "id": "O2b-test",
+      "name": "O2b get_run_events + mode tests",
+      "type": "test",
+      "phase": "O2b",
+      "status": "pending",
+      "description": "Unit tests for get_run_events filtering/limits and compact/dev default selection.",
+      "references": [
+        "docs/project_management/next/browser-orchestration/plan.md",
+        "docs/project_management/next/browser-orchestration/O2b-spec.md"
+      ],
+      "acceptance_criteria": [
+        "Filters validated (type/session/from_timestamp/has_error).",
+        "Limits enforced (last_n, payload bounds).",
+        "Mode default selection validated (localhost => dev, else compact)."
+      ],
+      "start_checklist": [
+        "git checkout feat/browser-orchestration && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, O2b-spec.md, kickoff_prompts/O2b-test.md",
+        "Set O2b-test status to in_progress in tasks.json",
+        "Add START entry to session_log.md; commit docs (docs: start O2b-test)",
+        "git branch bo-o2b-run-events-tool-test feat/browser-orchestration",
+        "git worktree add wt/bo-o2b-run-events-tool-test bo-o2b-run-events-tool-test",
+        "Do not edit docs/tasks/session_log from the worktree"
+      ],
+      "end_checklist": [
+        "uv run ruff format --check",
+        "uv run pytest gsd-browser/tests -k o2b",
+        "Commit changes inside wt/bo-o2b-run-events-tool-test",
+        "Update tasks.json and session_log.md on feat/browser-orchestration (docs: finish O2b-test)",
+        "git worktree remove wt/bo-o2b-run-events-tool-test"
+      ],
+      "worktree": "wt/bo-o2b-run-events-tool-test",
+      "integration_task": "O2b-integ",
+      "kickoff_prompt": "docs/project_management/next/browser-orchestration/kickoff_prompts/O2b-test.md",
+      "depends_on": ["O2a-integ"],
+      "concurrent_with": ["O2b-code"]
+    },
+    {
+      "id": "O2b-integ",
+      "name": "Integrate O2b",
+      "type": "integration",
+      "phase": "O2b",
+      "status": "pending",
+      "description": "Merge O2b code+tests, reconcile to spec, and run full suite + smoke.",
+      "references": [
+        "docs/project_management/next/browser-orchestration/plan.md",
+        "docs/project_management/next/browser-orchestration/O2b-spec.md"
+      ],
+      "acceptance_criteria": [
+        "O2b acceptance criteria met on the orchestration branch.",
+        "ruff + pytest + make smoke pass."
+      ],
+      "start_checklist": [
+        "git checkout feat/browser-orchestration && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, O2b-spec.md, kickoff_prompts/O2b-integ.md",
+        "Set O2b-integ status to in_progress in tasks.json",
+        "Add START entry to session_log.md; commit docs (docs: start O2b-integ)",
+        "git branch bo-o2b-run-events-tool-integ feat/browser-orchestration",
+        "git worktree add wt/bo-o2b-run-events-tool-integ bo-o2b-run-events-tool-integ",
+        "Do not edit docs/tasks/session_log from the worktree"
+      ],
+      "end_checklist": [
+        "uv run ruff format --check",
+        "uv run ruff check",
+        "uv run pytest",
+        "make smoke",
+        "Commit changes inside wt/bo-o2b-run-events-tool-integ",
+        "Update tasks.json and session_log.md on feat/browser-orchestration (docs: finish O2b-integ)",
+        "git worktree remove wt/bo-o2b-run-events-tool-integ"
+      ],
+      "worktree": "wt/bo-o2b-run-events-tool-integ",
+      "integration_task": null,
+      "kickoff_prompt": "docs/project_management/next/browser-orchestration/kickoff_prompts/O2b-integ.md",
+      "depends_on": ["O2b-code", "O2b-test"],
+      "concurrent_with": []
+    },
+
+    {
+      "id": "O3a-code",
+      "name": "Take-control server API + gating",
+      "type": "code",
+      "phase": "O3a",
+      "status": "pending",
+      "description": "Add /ctrl input socket events and enforce holder-only + paused-only gating with rate limiting and security logging (no CDP dispatch yet).",
+      "references": [
+        "docs/adr/ADR-0002-operator-dashboard-streaming-and-take-control.md",
+        "docs/project_management/next/browser-orchestration/plan.md",
+        "docs/project_management/next/browser-orchestration/O3a-spec.md"
+      ],
+      "acceptance_criteria": [
+        "Non-holder inputs rejected and logged.",
+        "Inputs accepted only while paused.",
+        "Rate limiting enforced for input events."
+      ],
+      "start_checklist": [
+        "git checkout feat/browser-orchestration && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, O3a-spec.md, kickoff_prompts/O3a-code.md",
+        "Set O3a-code status to in_progress in tasks.json",
+        "Add START entry to session_log.md; commit docs (docs: start O3a-code)",
+        "git branch bo-o3a-input-api-code feat/browser-orchestration",
+        "git worktree add wt/bo-o3a-input-api-code bo-o3a-input-api-code",
+        "Do not edit docs/tasks/session_log from the worktree"
+      ],
+      "end_checklist": [
+        "uv run ruff format --check",
+        "uv run ruff check",
+        "Commit changes inside wt/bo-o3a-input-api-code",
+        "Update tasks.json and session_log.md on feat/browser-orchestration (docs: finish O3a-code)",
+        "git worktree remove wt/bo-o3a-input-api-code"
+      ],
+      "worktree": "wt/bo-o3a-input-api-code",
+      "integration_task": "O3a-integ",
+      "kickoff_prompt": "docs/project_management/next/browser-orchestration/kickoff_prompts/O3a-code.md",
+      "depends_on": ["O2b-integ"],
+      "concurrent_with": ["O3a-test"]
+    },
+    {
+      "id": "O3a-test",
+      "name": "O3a take-control gating tests",
+      "type": "test",
+      "phase": "O3a",
+      "status": "pending",
+      "description": "Unit tests for holder-only + paused-only gating, validation, and rate limiting of input events.",
+      "references": [
+        "docs/project_management/next/browser-orchestration/plan.md",
+        "docs/project_management/next/browser-orchestration/O3a-spec.md"
+      ],
+      "acceptance_criteria": [
+        "Non-holder rejected; holder requires paused.",
+        "Rate limit enforced and logged.",
+        "Payload validation tested."
+      ],
+      "start_checklist": [
+        "git checkout feat/browser-orchestration && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, O3a-spec.md, kickoff_prompts/O3a-test.md",
+        "Set O3a-test status to in_progress in tasks.json",
+        "Add START entry to session_log.md; commit docs (docs: start O3a-test)",
+        "git branch bo-o3a-input-api-test feat/browser-orchestration",
+        "git worktree add wt/bo-o3a-input-api-test bo-o3a-input-api-test",
+        "Do not edit docs/tasks/session_log from the worktree"
+      ],
+      "end_checklist": [
+        "uv run ruff format --check",
+        "uv run pytest gsd-browser/tests -k o3a",
+        "Commit changes inside wt/bo-o3a-input-api-test",
+        "Update tasks.json and session_log.md on feat/browser-orchestration (docs: finish O3a-test)",
+        "git worktree remove wt/bo-o3a-input-api-test"
+      ],
+      "worktree": "wt/bo-o3a-input-api-test",
+      "integration_task": "O3a-integ",
+      "kickoff_prompt": "docs/project_management/next/browser-orchestration/kickoff_prompts/O3a-test.md",
+      "depends_on": ["O2b-integ"],
+      "concurrent_with": ["O3a-code"]
+    },
+    {
+      "id": "O3a-integ",
+      "name": "Integrate O3a",
+      "type": "integration",
+      "phase": "O3a",
+      "status": "pending",
+      "description": "Merge O3a code+tests, reconcile to spec, and run full suite + smoke.",
+      "references": [
+        "docs/project_management/next/browser-orchestration/plan.md",
+        "docs/project_management/next/browser-orchestration/O3a-spec.md"
+      ],
+      "acceptance_criteria": [
+        "O3a acceptance criteria met on the orchestration branch.",
+        "ruff + pytest + make smoke pass."
+      ],
+      "start_checklist": [
+        "git checkout feat/browser-orchestration && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, O3a-spec.md, kickoff_prompts/O3a-integ.md",
+        "Set O3a-integ status to in_progress in tasks.json",
+        "Add START entry to session_log.md; commit docs (docs: start O3a-integ)",
+        "git branch bo-o3a-input-api-integ feat/browser-orchestration",
+        "git worktree add wt/bo-o3a-input-api-integ bo-o3a-input-api-integ",
+        "Do not edit docs/tasks/session_log from the worktree"
+      ],
+      "end_checklist": [
+        "uv run ruff format --check",
+        "uv run ruff check",
+        "uv run pytest",
+        "make smoke",
+        "Commit changes inside wt/bo-o3a-input-api-integ",
+        "Update tasks.json and session_log.md on feat/browser-orchestration (docs: finish O3a-integ)",
+        "git worktree remove wt/bo-o3a-input-api-integ"
+      ],
+      "worktree": "wt/bo-o3a-input-api-integ",
+      "integration_task": null,
+      "kickoff_prompt": "docs/project_management/next/browser-orchestration/kickoff_prompts/O3a-integ.md",
+      "depends_on": ["O3a-code", "O3a-test"],
+      "concurrent_with": []
+    },
+
+    {
+      "id": "O3b-code",
+      "name": "CDP input dispatch (keyboard correctness)",
+      "type": "code",
+      "phase": "O3b",
+      "status": "pending",
+      "description": "Implement CDP Input.dispatch* routing for input events, focusing on keyboard correctness and modifiers using mocked CDP clients in tests.",
+      "references": [
+        "docs/project_management/next/browser-orchestration/plan.md",
+        "docs/project_management/next/browser-orchestration/O3b-spec.md"
+      ],
+      "acceptance_criteria": [
+        "CDP dispatch implemented for click/wheel/keydown/keyup/type.",
+        "Enter and modifier mapping correct.",
+        "No dispatch when no active session."
+      ],
+      "start_checklist": [
+        "git checkout feat/browser-orchestration && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, O3b-spec.md, kickoff_prompts/O3b-code.md",
+        "Set O3b-code status to in_progress in tasks.json",
+        "Add START entry to session_log.md; commit docs (docs: start O3b-code)",
+        "git branch bo-o3b-cdp-dispatch-code feat/browser-orchestration",
+        "git worktree add wt/bo-o3b-cdp-dispatch-code bo-o3b-cdp-dispatch-code",
+        "Do not edit docs/tasks/session_log from the worktree"
+      ],
+      "end_checklist": [
+        "uv run ruff format --check",
+        "uv run ruff check",
+        "Commit changes inside wt/bo-o3b-cdp-dispatch-code",
+        "Update tasks.json and session_log.md on feat/browser-orchestration (docs: finish O3b-code)",
+        "git worktree remove wt/bo-o3b-cdp-dispatch-code"
+      ],
+      "worktree": "wt/bo-o3b-cdp-dispatch-code",
+      "integration_task": "O3b-integ",
+      "kickoff_prompt": "docs/project_management/next/browser-orchestration/kickoff_prompts/O3b-code.md",
+      "depends_on": ["O3a-integ"],
+      "concurrent_with": ["O3b-test"]
+    },
+    {
+      "id": "O3b-test",
+      "name": "O3b CDP mapping tests",
+      "type": "test",
+      "phase": "O3b",
+      "status": "pending",
+      "description": "Unit tests for CDP dispatch parameter mapping, Enter sequence, and typing behavior using mocked CDP clients.",
+      "references": [
+        "docs/project_management/next/browser-orchestration/plan.md",
+        "docs/project_management/next/browser-orchestration/O3b-spec.md"
+      ],
+      "acceptance_criteria": [
+        "Enter triggers correct CDP event sequence.",
+        "Modifiers mapped correctly.",
+        "Printable chars dispatched correctly."
+      ],
+      "start_checklist": [
+        "git checkout feat/browser-orchestration && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, O3b-spec.md, kickoff_prompts/O3b-test.md",
+        "Set O3b-test status to in_progress in tasks.json",
+        "Add START entry to session_log.md; commit docs (docs: start O3b-test)",
+        "git branch bo-o3b-cdp-dispatch-test feat/browser-orchestration",
+        "git worktree add wt/bo-o3b-cdp-dispatch-test bo-o3b-cdp-dispatch-test",
+        "Do not edit docs/tasks/session_log from the worktree"
+      ],
+      "end_checklist": [
+        "uv run ruff format --check",
+        "uv run pytest gsd-browser/tests -k o3b",
+        "Commit changes inside wt/bo-o3b-cdp-dispatch-test",
+        "Update tasks.json and session_log.md on feat/browser-orchestration (docs: finish O3b-test)",
+        "git worktree remove wt/bo-o3b-cdp-dispatch-test"
+      ],
+      "worktree": "wt/bo-o3b-cdp-dispatch-test",
+      "integration_task": "O3b-integ",
+      "kickoff_prompt": "docs/project_management/next/browser-orchestration/kickoff_prompts/O3b-test.md",
+      "depends_on": ["O3a-integ"],
+      "concurrent_with": ["O3b-code"]
+    },
+    {
+      "id": "O3b-integ",
+      "name": "Integrate O3b",
+      "type": "integration",
+      "phase": "O3b",
+      "status": "pending",
+      "description": "Merge O3b code+tests, reconcile to spec, and run full suite + smoke.",
+      "references": [
+        "docs/project_management/next/browser-orchestration/plan.md",
+        "docs/project_management/next/browser-orchestration/O3b-spec.md"
+      ],
+      "acceptance_criteria": [
+        "O3b acceptance criteria met on the orchestration branch.",
+        "ruff + pytest + make smoke pass."
+      ],
+      "start_checklist": [
+        "git checkout feat/browser-orchestration && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, O3b-spec.md, kickoff_prompts/O3b-integ.md",
+        "Set O3b-integ status to in_progress in tasks.json",
+        "Add START entry to session_log.md; commit docs (docs: start O3b-integ)",
+        "git branch bo-o3b-cdp-dispatch-integ feat/browser-orchestration",
+        "git worktree add wt/bo-o3b-cdp-dispatch-integ bo-o3b-cdp-dispatch-integ",
+        "Do not edit docs/tasks/session_log from the worktree"
+      ],
+      "end_checklist": [
+        "uv run ruff format --check",
+        "uv run ruff check",
+        "uv run pytest",
+        "make smoke",
+        "Commit changes inside wt/bo-o3b-cdp-dispatch-integ",
+        "Update tasks.json and session_log.md on feat/browser-orchestration (docs: finish O3b-integ)",
+        "git worktree remove wt/bo-o3b-cdp-dispatch-integ"
+      ],
+      "worktree": "wt/bo-o3b-cdp-dispatch-integ",
+      "integration_task": null,
+      "kickoff_prompt": "docs/project_management/next/browser-orchestration/kickoff_prompts/O3b-integ.md",
+      "depends_on": ["O3b-code", "O3b-test"],
+      "concurrent_with": []
+    },
+
+    {
+      "id": "O3c-code",
+      "name": "Dashboard input capture + docs verify steps",
+      "type": "code",
+      "phase": "O3c",
+      "status": "pending",
+      "description": "Update dashboard JS to capture/emit input events to /ctrl and add minimal manual verification docs steps.",
+      "references": [
+        "docs/project_management/next/browser-orchestration/plan.md",
+        "docs/project_management/next/browser-orchestration/O3c-spec.md"
+      ],
+      "acceptance_criteria": [
+        "Dashboard emits click/scroll/keyboard events only when held+paused (client-side guard).",
+        "Manual verification steps documented."
+      ],
+      "start_checklist": [
+        "git checkout feat/browser-orchestration && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, O3c-spec.md, kickoff_prompts/O3c-code.md",
+        "Set O3c-code status to in_progress in tasks.json",
+        "Add START entry to session_log.md; commit docs (docs: start O3c-code)",
+        "git branch bo-o3c-dashboard-input-code feat/browser-orchestration",
+        "git worktree add wt/bo-o3c-dashboard-input-code bo-o3c-dashboard-input-code",
+        "Do not edit docs/tasks/session_log from the worktree"
+      ],
+      "end_checklist": [
+        "uv run ruff format --check",
+        "uv run ruff check",
+        "Commit changes inside wt/bo-o3c-dashboard-input-code",
+        "Update tasks.json and session_log.md on feat/browser-orchestration (docs: finish O3c-code)",
+        "git worktree remove wt/bo-o3c-dashboard-input-code"
+      ],
+      "worktree": "wt/bo-o3c-dashboard-input-code",
+      "integration_task": "O3c-integ",
+      "kickoff_prompt": "docs/project_management/next/browser-orchestration/kickoff_prompts/O3c-code.md",
+      "depends_on": ["O3b-integ"],
+      "concurrent_with": ["O3c-test"]
+    },
+    {
+      "id": "O3c-test",
+      "name": "O3c wiring sanity tests",
+      "type": "test",
+      "phase": "O3c",
+      "status": "pending",
+      "description": "Keep this small: add any minimal tests needed for assumptions; primary server-side validation is already covered by O3a/O3b.",
+      "references": [
+        "docs/project_management/next/browser-orchestration/plan.md",
+        "docs/project_management/next/browser-orchestration/O3c-spec.md"
+      ],
+      "acceptance_criteria": [
+        "Any added tests are fast and deterministic."
+      ],
+      "start_checklist": [
+        "git checkout feat/browser-orchestration && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, O3c-spec.md, kickoff_prompts/O3c-test.md",
+        "Set O3c-test status to in_progress in tasks.json",
+        "Add START entry to session_log.md; commit docs (docs: start O3c-test)",
+        "git branch bo-o3c-dashboard-input-test feat/browser-orchestration",
+        "git worktree add wt/bo-o3c-dashboard-input-test bo-o3c-dashboard-input-test",
+        "Do not edit docs/tasks/session_log from the worktree"
+      ],
+      "end_checklist": [
+        "uv run ruff format --check",
+        "uv run pytest gsd-browser/tests -k o3c",
+        "Commit changes inside wt/bo-o3c-dashboard-input-test",
+        "Update tasks.json and session_log.md on feat/browser-orchestration (docs: finish O3c-test)",
+        "git worktree remove wt/bo-o3c-dashboard-input-test"
+      ],
+      "worktree": "wt/bo-o3c-dashboard-input-test",
+      "integration_task": "O3c-integ",
+      "kickoff_prompt": "docs/project_management/next/browser-orchestration/kickoff_prompts/O3c-test.md",
+      "depends_on": ["O3b-integ"],
+      "concurrent_with": ["O3c-code"]
+    },
+    {
+      "id": "O3c-integ",
+      "name": "Integrate O3c",
+      "type": "integration",
+      "phase": "O3c",
+      "status": "pending",
+      "description": "Merge O3c code/tests, reconcile to spec, and run full suite + smoke.",
+      "references": [
+        "docs/project_management/next/browser-orchestration/plan.md",
+        "docs/project_management/next/browser-orchestration/O3c-spec.md"
+      ],
+      "acceptance_criteria": [
+        "O3c acceptance criteria met on the orchestration branch.",
+        "ruff + pytest + make smoke pass."
+      ],
+      "start_checklist": [
+        "git checkout feat/browser-orchestration && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, O3c-spec.md, kickoff_prompts/O3c-integ.md",
+        "Set O3c-integ status to in_progress in tasks.json",
+        "Add START entry to session_log.md; commit docs (docs: start O3c-integ)",
+        "git branch bo-o3c-dashboard-input-integ feat/browser-orchestration",
+        "git worktree add wt/bo-o3c-dashboard-input-integ bo-o3c-dashboard-input-integ",
+        "Do not edit docs/tasks/session_log from the worktree"
+      ],
+      "end_checklist": [
+        "uv run ruff format --check",
+        "uv run ruff check",
+        "uv run pytest",
+        "make smoke",
+        "Commit changes inside wt/bo-o3c-dashboard-input-integ",
+        "Update tasks.json and session_log.md on feat/browser-orchestration (docs: finish O3c-integ)",
+        "git worktree remove wt/bo-o3c-dashboard-input-integ"
+      ],
+      "worktree": "wt/bo-o3c-dashboard-input-integ",
+      "integration_task": null,
+      "kickoff_prompt": "docs/project_management/next/browser-orchestration/kickoff_prompts/O3c-integ.md",
+      "depends_on": ["O3c-code", "O3c-test"],
+      "concurrent_with": []
+    }
+  ]
+}
