@@ -108,3 +108,10 @@ Only START/END entries. Docs edits happen on the orchestration branch only.
 - Commands executed: (in wt/bo-o2a-events-store-test/gsd-browser) make dev (pass); uv run --project gsd-browser ruff format --check (pass; 34 files already formatted); uv run --project gsd-browser pytest gsd-browser/tests -k o2a (pass; 4 skipped, 35 deselected)
 - Result: pass
 - Blockers/next steps: The new O2a tests currently skip until the run event store + MCP integration lands in O2a-code/O2a-integ.
+
+## O2a-integ START
+- Timestamp: 2026-01-03T21:22:18Z
+- Role: integration
+- Worktree: wt/bo-o2a-events-store-integ
+- Commands planned: uv run ruff format --check; uv run ruff check; uv run pytest; make smoke
+- Notes: Local repo has no upstream for feat/browser-orchestration, so git pull --ff-only cannot run as written.
