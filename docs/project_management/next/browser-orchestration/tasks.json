@@ -275,7 +275,7 @@
       "name": "O2a event store bounds tests",
       "type": "test",
       "phase": "O2a",
-      "status": "in_progress",
+      "status": "done",
       "description": "Unit tests for event store bounds, truncation, and basic filtering primitives.",
       "references": [
         "docs/project_management/next/browser-orchestration/plan.md",

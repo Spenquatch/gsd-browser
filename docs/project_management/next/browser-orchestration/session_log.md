@@ -92,3 +92,11 @@ Only START/END entries. Docs edits happen on the orchestration branch only.
 - Role: test
 - Worktree: wt/bo-o2a-events-store-test
 - Commands planned: uv run ruff format --check; uv run pytest gsd-browser/tests -k o2a
+
+## O2a-test END
+- Timestamp: 2026-01-03T17:46:06Z
+- Role: test
+- Worktree: wt/bo-o2a-events-store-test
+- Commands executed: (in wt/bo-o2a-events-store-test/gsd-browser) make dev (pass); uv run --project gsd-browser ruff format --check (pass; 34 files already formatted); uv run --project gsd-browser pytest gsd-browser/tests -k o2a (pass; 4 skipped, 35 deselected)
+- Result: pass
+- Blockers/next steps: The new O2a tests currently skip until the run event store + MCP integration lands in O2a-code/O2a-integ.
