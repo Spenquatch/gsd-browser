@@ -16,3 +16,13 @@
 2. Releasing control stops input routing; resuming continues the agent.
 3. Manual verification steps are documented and reproducible.
 
+## Manual verification
+1. Start a `web_eval_agent(...)` run against a page with an input (keep it running so the session stays active).
+2. Open the dashboard and connect.
+3. Click **Take Control** (dashboard should show `control: you` and `Paused: true`).
+4. Click inside the stream view to focus it, then:
+   - click a target in the page
+   - type a short string and press Enter
+   - scroll the page with the mouse wheel
+5. Click **Resume** and confirm input no longer routes while unpaused.
+6. Click **Release** and confirm the agent continues normally.
