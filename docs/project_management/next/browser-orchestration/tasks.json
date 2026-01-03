@@ -469,7 +469,7 @@
       "name": "Take-control server API + gating",
       "type": "code",
       "phase": "O3a",
-      "status": "in_progress",
+      "status": "done",
       "description": "Add /ctrl input socket events and enforce holder-only + paused-only gating with rate limiting and security logging (no CDP dispatch yet).",
       "references": [
         "docs/adr/ADR-0002-operator-dashboard-streaming-and-take-control.md",
@@ -508,7 +508,7 @@
       "name": "O3a take-control gating tests",
       "type": "test",
       "phase": "O3a",
-      "status": "in_progress",
+      "status": "done",
       "description": "Unit tests for holder-only + paused-only gating, validation, and rate limiting of input events.",
       "references": [
         "docs/project_management/next/browser-orchestration/plan.md",
