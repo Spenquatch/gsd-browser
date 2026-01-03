@@ -81,6 +81,12 @@ Only START/END entries. Docs edits happen on the orchestration branch only.
 - Result: pass
 - Blockers/next steps: None.
 
+## O2a-code START
+- Timestamp: 2026-01-03T17:34:16Z
+- Role: code
+- Worktree: wt/bo-o2a-events-store-code
+- Commands planned: uv run ruff format --check; uv run ruff check
+
 ## O2a-test START
 - Timestamp: 2026-01-03T17:33:16Z
 - Role: test
