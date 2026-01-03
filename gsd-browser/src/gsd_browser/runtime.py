@@ -8,6 +8,7 @@ import time
 from dataclasses import dataclass
 
 from .config import Settings, load_settings
+from .run_event_store import RunEventStore
 from .screenshot_manager import ScreenshotManager
 from .streaming.server import StreamingRuntime, create_streaming_app
 
@@ -26,6 +27,7 @@ class DashboardServer:
 class AppRuntime:
     def __init__(self) -> None:
         self.screenshots = ScreenshotManager()
+        self.run_events = RunEventStore()
         self._lock = threading.Lock()
         self._dashboard: DashboardServer | None = None
 

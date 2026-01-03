@@ -19,6 +19,7 @@ from playwright.async_api import async_playwright
 
 from .config import load_settings
 from .llm.browser_use import create_browser_use_llm
+from .run_event_capture import CDPRunEventCapture
 from .runtime import DEFAULT_DASHBOARD_HOST, DEFAULT_DASHBOARD_PORT, get_runtime
 
 logger = logging.getLogger("gsd_browser.mcp")
@@ -104,6 +105,39 @@ def _decode_base64_image(data: str) -> bytes | None:
         return None
 
 
+def _agent_output_summary(agent_output: Any) -> str | None:
+    actions = getattr(agent_output, "action", None)
+    if actions is None and isinstance(agent_output, dict):
+        actions = agent_output.get("action")
+    if not isinstance(actions, list):
+        return None
+
+    action_names: list[str] = []
+    for action in actions:
+        payload: Any = action
+        if hasattr(action, "model_dump") and callable(action.model_dump):
+            try:
+                payload = action.model_dump()
+            except Exception:  # noqa: BLE001
+                payload = action
+
+        if isinstance(payload, dict):
+            present = [key for key, value in payload.items() if value not in (None, {}, [], "")]
+            if present:
+                action_names.append(str(present[0]))
+            continue
+
+        action_names.append(type(payload).__name__)
+
+    if not action_names:
+        return None
+    unique: list[str] = []
+    for name in action_names:
+        if name not in unique:
+            unique.append(name)
+    return _truncate("actions=" + ",".join(unique[:8]), max_len=1000)
+
+
 @mcp.tool(name="web_eval_agent")
 async def web_eval_agent(
     url: str, task: str, ctx: Context, headless_browser: bool = False
@@ -150,6 +184,7 @@ async def web_eval_agent(
     tool_call_id = str(uuid.uuid4())
     session_id = str(uuid.uuid4())
     started = datetime.now(UTC).timestamp()
+    runtime.run_events.ensure_session(session_id, created_at=started)
 
     if hasattr(runtime, "screenshots"):
         try:
@@ -175,6 +210,7 @@ async def web_eval_agent(
         Agent, BrowserSession = _load_browser_use_classes()
 
         step_screenshot_count = 0
+        cdp_capture = CDPRunEventCapture(store=runtime.run_events, session_id=session_id)
 
         async def record_step_screenshot(*args: Any, **kwargs: Any) -> None:
             nonlocal step_screenshot_count
@@ -261,6 +297,51 @@ async def web_eval_agent(
             )
             step_screenshot_count += 1
 
+        def record_step_event(*args: Any, **kwargs: Any) -> None:
+            browser_state_summary = args[0] if args else kwargs.get("browser_state_summary")
+            agent_output = args[1] if len(args) >= 2 else kwargs.get("agent_output")
+            step = kwargs.get("step")
+            if step is None and len(args) >= 3:
+                step = args[2]
+
+            summary = _agent_output_summary(agent_output)
+
+            page_url = None
+            page_title = None
+            if browser_state_summary is not None:
+                page_url = getattr(browser_state_summary, "url", None)
+                if page_url is None and hasattr(browser_state_summary, "get"):
+                    try:
+                        page_url = browser_state_summary.get("url")
+                    except Exception:  # noqa: BLE001
+                        page_url = None
+
+                page_title = getattr(browser_state_summary, "title", None)
+                if page_title is None and hasattr(browser_state_summary, "get"):
+                    try:
+                        page_title = browser_state_summary.get("title")
+                    except Exception:  # noqa: BLE001
+                        page_title = None
+
+            runtime.run_events.record_agent_event(
+                session_id,
+                captured_at=datetime.now(UTC).timestamp(),
+                step=int(step) if isinstance(step, int) else None,
+                url=str(page_url) if page_url else None,
+                title=str(page_title) if page_title else None,
+                summary=summary,
+            )
+
+        async def on_new_step(*args: Any, **kwargs: Any) -> None:
+            try:
+                await record_step_screenshot(*args, **kwargs)
+            except Exception:  # noqa: BLE001
+                logger.debug("Failed to record step screenshot", exc_info=True)
+            try:
+                record_step_event(*args, **kwargs)
+            except Exception:  # noqa: BLE001
+                logger.debug("Failed to record agent step event", exc_info=True)
+
         async def pause_gate(*_: Any, **__: Any) -> None:
             if control_state is None:
                 return
@@ -269,12 +350,34 @@ async def web_eval_agent(
         llm = create_browser_use_llm(settings)
         browser_session = BrowserSession(headless=headless_browser, storage_state=storage_state)
 
-        agent_task = f"{task}\n\nURL: {normalized_url}"
-        agent = Agent(task=agent_task, llm=llm, browser_session=browser_session)
+        try:
+            await browser_session.start()
+            cdp_capture.attach(browser_session.cdp_client)
+        except Exception:  # noqa: BLE001
+            logger.debug("Failed to attach CDP event capture", exc_info=True)
 
+        agent_task = f"{task}\n\nURL: {normalized_url}"
+        agent_kwargs: dict[str, Any] = {
+            "task": agent_task,
+            "llm": llm,
+            "browser_session": browser_session,
+        }
+        try:
+            signature = inspect.signature(Agent)
+            if "register_new_step_callback" in signature.parameters:
+                agent_kwargs["register_new_step_callback"] = on_new_step
+        except (TypeError, ValueError):
+            pass
+
+        agent = Agent(**agent_kwargs)
         register_callback = getattr(agent, "register_new_step_callback", None)
         if callable(register_callback):
-            register_callback(record_step_screenshot)
+            try:
+                callback_sig = inspect.signature(register_callback)
+                if len(callback_sig.parameters) == 1:
+                    register_callback(on_new_step)
+            except (TypeError, ValueError):
+                pass
 
         run_kwargs: dict[str, Any] = {}
         try:
@@ -288,7 +391,13 @@ async def web_eval_agent(
         except (TypeError, ValueError):
             run_kwargs["on_step_end"] = pause_gate
 
-        history = await agent.run(**run_kwargs)
+        try:
+            history = await agent.run(**run_kwargs)
+        finally:
+            try:
+                cdp_capture.detach(browser_session.cdp_client)
+            except Exception:  # noqa: BLE001
+                logger.debug("Failed to detach CDP event capture", exc_info=True)
 
         result = _history_final_result(history)
         error_count = _history_error_count(history)
@@ -317,7 +426,7 @@ async def web_eval_agent(
             "artifacts": {
                 "screenshots": step_screenshot_count,
                 "stream_samples": 0,
-                "run_events": 0,
+                "run_events": runtime.run_events.get_counts(session_id)["total"],
             },
             "next_actions": [
                 (
