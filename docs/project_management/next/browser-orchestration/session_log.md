@@ -271,3 +271,10 @@ Only START/END entries. Docs edits happen on the orchestration branch only.
 - Worktree: wt/bo-o3c-dashboard-input-code
 - Commands planned: uv run ruff format --check; uv run ruff check
 - Notes: No tracking information is configured for feat/browser-orchestration, so git pull --ff-only cannot run as written.
+
+## O3c-test START
+- Timestamp: 2026-01-03T23:27:26Z
+- Role: test
+- Worktree: wt/bo-o3c-dashboard-input-test
+- Commands planned: uv run ruff format --check; uv run pytest gsd-browser/tests -k o3c
+- Notes: No tracking information is configured for feat/browser-orchestration, so git pull --ff-only cannot run as written.
