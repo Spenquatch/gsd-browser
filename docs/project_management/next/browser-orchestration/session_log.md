@@ -80,3 +80,9 @@ Only START/END entries. Docs edits happen on the orchestration branch only.
 - Commands executed: (in wt/bo-o1b-callbacks-integ/gsd-browser) make dev (pass); uv run ruff format --check (pass; 33 files already formatted); uv run ruff check (pass); uv run pytest (pass; 35 passed); make smoke (pass; 7 passed + CLI round trip)
 - Result: pass
 - Blockers/next steps: None.
+
+## O2a-test START
+- Timestamp: 2026-01-03T17:33:16Z
+- Role: test
+- Worktree: wt/bo-o2a-events-store-test
+- Commands planned: uv run ruff format --check; uv run pytest gsd-browser/tests -k o2a
