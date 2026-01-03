@@ -247,3 +247,11 @@ Only START/END entries. Docs edits happen on the orchestration branch only.
 - Commands executed: (in wt/bo-o3b-cdp-dispatch-test) uv run --project gsd-browser --extra dev ruff format --check (pass; 39 files already formatted); uv run --project gsd-browser --extra dev pytest gsd-browser/tests -k o3b (pass; 5 skipped, 49 deselected)
 - Result: pass (skipped until O3b CDP input dispatch is implemented)
 - Blockers/next steps: Merge bo-o3b-cdp-dispatch-test in O3b-integ so these tests enforce assertions instead of skipping.
+
+## O3b-integ START
+- Timestamp: 2026-01-03T23:03:20Z
+- Role: integration
+- Worktree: wt/bo-o3b-cdp-dispatch-integ
+- Merged branches (planned): bo-o3b-cdp-dispatch-code; bo-o3b-cdp-dispatch-test
+- Commands planned: uv run ruff format --check; uv run ruff check; uv run pytest; make smoke
+- Notes: No tracking information is configured for feat/browser-orchestration, so git pull --ff-only cannot run as written.
