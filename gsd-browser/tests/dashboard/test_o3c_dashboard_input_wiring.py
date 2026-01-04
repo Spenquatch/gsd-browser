@@ -104,8 +104,7 @@ def test_o3c_dashboard_registers_pointer_and_keyboard_listeners() -> None:
     assert has_move_listener
 
     assert (
-        re.search(r"addEventListener\(\s*(?:\"wheel\"|'wheel')", js_text)
-        or ".onwheel" in js_text
+        re.search(r"addEventListener\(\s*(?:\"wheel\"|'wheel')", js_text) or ".onwheel" in js_text
     )
 
     has_key_listener = any(

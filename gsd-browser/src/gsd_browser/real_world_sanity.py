@@ -1,0 +1,376 @@
+"""Opt-in real-world scenario harness for gsd-browser web_eval_agent.
+
+This harness is intentionally not part of `pytest` or `make smoke`:
+- it depends on external websites
+- it requires a configured LLM provider and credentials
+- results can vary over time
+"""
+
+from __future__ import annotations
+
+import argparse
+import base64
+import json
+import os
+import sys
+import time
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any
+
+from mcp.server.fastmcp import Context
+
+from .config import load_settings
+from .mcp_server import web_eval_agent
+from .runtime import get_runtime
+
+
+@dataclass(frozen=True)
+class Scenario:
+    id: str
+    url: str
+    task: str
+    mode: str = "compact"
+    headless_browser: bool = True
+    expected: str = "pass"  # pass | soft_fail
+
+
+DEFAULT_SCENARIOS: tuple[Scenario, ...] = (
+    Scenario(
+        id="wikipedia-openai-first-sentence",
+        url="https://en.wikipedia.org/wiki/OpenAI",
+        task=(
+            "Find the first paragraph of this article and return the first sentence. "
+            "Also return the final URL of the page you used."
+        ),
+        expected="pass",
+    ),
+    Scenario(
+        id="hackernews-top-story",
+        url="https://news.ycombinator.com/",
+        task=(
+            "Return the title and direct URL of the first story on the page. "
+            "Do not include comment links."
+        ),
+        expected="pass",
+    ),
+    Scenario(
+        id="github-cdp-heading",
+        url="https://github.com/browser-use/browser-use",
+        task=(
+            "Open the README and find the section that mentions CDP. "
+            "Return the heading text and the anchor URL (the URL with #...)."
+        ),
+        expected="pass",
+    ),
+    Scenario(
+        id="huggingface-papers-botwall-probe",
+        url="https://huggingface.co/papers",
+        task=(
+            "Identify the top paper and open it. Return the paper title and the final URL. "
+            "If blocked by bot defenses or JS rendering issues, report exactly what is blocking "
+            "progress and suggest the best remediation (e.g., use setup_browser_state, "
+            "take control, try dev mode)."
+        ),
+        expected="soft_fail",
+    ),
+)
+
+
+def _now_slug() -> str:
+    return time.strftime("%Y%m%d-%H%M%S", time.gmtime())
+
+
+def _write_json(path: Path, payload: Any) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
+
+
+def _decode_image_bytes(image_b64: str) -> bytes | None:
+    try:
+        return base64.b64decode(image_b64, validate=False)
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _ext_for_mime(mime: str | None) -> str:
+    if mime == "image/png":
+        return ".png"
+    if mime == "image/jpeg":
+        return ".jpg"
+    if mime == "image/webp":
+        return ".webp"
+    return ".bin"
+
+
+def _classify(*, payload: dict[str, Any], screenshot_count: int, has_actionable_error: bool) -> str:
+    status = payload.get("status")
+    result = payload.get("result")
+
+    if status == "success" and isinstance(result, str) and result.strip():
+        return "pass"
+
+    if screenshot_count <= 0:
+        return "hard_fail"
+
+    if has_actionable_error:
+        return "soft_fail"
+
+    return "hard_fail"
+
+
+def _summarize_errors(payload: dict[str, Any], events: list[dict[str, Any]]) -> list[str]:
+    lines: list[str] = []
+    summary = payload.get("summary")
+    if isinstance(summary, str) and summary.strip():
+        lines.append(f"summary: {summary.strip()}")
+
+    # Prefer explicit dev excerpts if present.
+    dev_excerpts = payload.get("dev_excerpts")
+    if isinstance(dev_excerpts, dict):
+        for bucket in ("console_errors", "network_errors"):
+            items = dev_excerpts.get(bucket)
+            if isinstance(items, list) and items:
+                lines.append(f"{bucket}: {len(items)}")
+
+    # Otherwise use events.
+    for event in events[:10]:
+        event_type = event.get("event_type") or event.get("type") or "unknown"
+        msg = event.get("summary") or ""
+        if isinstance(msg, str) and msg.strip():
+            lines.append(f"{event_type}: {msg.strip()}")
+    return lines
+
+
+async def _run_one(*, scenario: Scenario, out_dir: Path) -> dict[str, Any]:
+    settings = load_settings(strict=False)
+
+    ctx = Context()
+    result = await web_eval_agent(
+        url=scenario.url,
+        task=scenario.task,
+        headless_browser=scenario.headless_browser,
+        mode=scenario.mode,
+        ctx=ctx,
+    )
+
+    if not result or not hasattr(result[0], "text"):
+        raise RuntimeError("web_eval_agent returned no TextContent payload")
+
+    payload = json.loads(result[0].text)
+    session_id = str(payload.get("session_id") or "")
+
+    runtime = get_runtime()
+    screenshots = runtime.screenshots.get_screenshots(
+        last_n=200,
+        screenshot_type="agent_step",
+        session_id=session_id or None,
+        include_images=True,
+    )
+
+    screenshots_dir = out_dir / "screenshots"
+    screenshots_dir.mkdir(parents=True, exist_ok=True)
+
+    written: list[dict[str, Any]] = []
+    for shot in screenshots:
+        image_b64 = shot.get("image_data")
+        image_bytes = _decode_image_bytes(str(image_b64)) if image_b64 else None
+        if not image_bytes:
+            continue
+        step = shot.get("step")
+        ext = _ext_for_mime(shot.get("mime_type"))
+        filename = f"step-{step if isinstance(step, int) else 'x'}-{shot.get('id')}{ext}"
+        (screenshots_dir / filename).write_bytes(image_bytes)
+        written.append({**shot, "filename": filename, "image_data": None})
+
+    # Capture error-focused run events.
+    events = runtime.run_events.get_events(
+        session_id=session_id or None,
+        last_n=200,
+        event_types=["agent", "console", "network"],
+        from_timestamp=None,
+        has_error=True,
+        include_details=True,
+    )
+
+    response_path = out_dir / "response.json"
+    events_path = out_dir / "events.json"
+    screenshots_index = out_dir / "screenshots.json"
+
+    _write_json(response_path, payload)
+    _write_json(events_path, events)
+    _write_json(screenshots_index, written)
+
+    # Rudimentary “actionable” check: any console exception/error or any network 4xx/5xx.
+    actionable = False
+    for event in events:
+        if (event.get("event_type") or event.get("type")) == "console":
+            actionable = True
+            break
+        details = event.get("details") if isinstance(event.get("details"), dict) else {}
+        status = details.get("status")
+        if isinstance(status, int) and status >= 400:
+            actionable = True
+            break
+
+    classification = _classify(
+        payload=payload, screenshot_count=len(written), has_actionable_error=actionable
+    )
+
+    return {
+        "scenario": {"id": scenario.id, "url": scenario.url, "expected": scenario.expected},
+        "result": {
+            "status": payload.get("status"),
+            "classification": classification,
+            "session_id": session_id,
+            "screenshots_written": len(written),
+            "events_with_error": len(events),
+            "result_present": bool(
+                isinstance(payload.get("result"), str) and payload["result"].strip()
+            ),
+        },
+        "paths": {
+            "dir": str(out_dir),
+            "response_json": str(response_path),
+            "events_json": str(events_path),
+            "screenshots_index": str(screenshots_index),
+            "screenshots_dir": str(screenshots_dir),
+        },
+        "highlights": _summarize_errors(payload, events),
+        "settings": {
+            "llm_provider": settings.llm_provider,
+            "model": settings.model,
+        },
+    }
+
+
+def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Run opt-in real-world sanity scenarios for gsd-browser"
+    )
+    parser.add_argument(
+        "--out",
+        type=Path,
+        default=Path("artifacts") / "real_world_sanity" / _now_slug(),
+        help="Output directory for the report bundle",
+    )
+    parser.add_argument(
+        "--scenario",
+        action="append",
+        dest="scenarios",
+        help="Scenario id to run (repeatable). Default: run all.",
+    )
+    parser.add_argument(
+        "--no-headless",
+        action="store_true",
+        help="Run browser in non-headless mode (applies to all scenarios).",
+    )
+    return parser.parse_args(argv)
+
+
+def _select_scenarios(selected: list[str] | None) -> list[Scenario]:
+    if not selected:
+        return list(DEFAULT_SCENARIOS)
+    wanted = {item.strip() for item in selected if item and item.strip()}
+    scenarios = [s for s in DEFAULT_SCENARIOS if s.id in wanted]
+    missing = sorted(wanted - {s.id for s in scenarios})
+    if missing:
+        raise SystemExit(
+            f"Unknown scenario ids: {missing}. Known: {[s.id for s in DEFAULT_SCENARIOS]}"
+        )
+    return scenarios
+
+
+def _render_markdown(summary: dict[str, Any]) -> str:
+    lines: list[str] = []
+    lines.append("# gsd-browser real-world sanity report")
+    lines.append("")
+    lines.append(f"- Timestamp (UTC): `{summary['started_at']}`")
+    lines.append(f"- Output dir: `{summary['out_dir']}`")
+    lines.append("")
+    for item in summary["runs"]:
+        sid = item["scenario"]["id"]
+        lines.append(f"## {sid}")
+        lines.append("")
+        lines.append(f"- URL: {item['scenario']['url']}")
+        lines.append(f"- Expected: `{item['scenario']['expected']}`")
+        lines.append(f"- Tool status: `{item['result']['status']}`")
+        lines.append(f"- Classification: `{item['result']['classification']}`")
+        lines.append(f"- Session: `{item['result']['session_id']}`")
+        lines.append(f"- Screenshots: `{item['result']['screenshots_written']}`")
+        lines.append(f"- Error events: `{item['result']['events_with_error']}`")
+        lines.append(f"- Response: `{item['paths']['response_json']}`")
+        lines.append(f"- Events: `{item['paths']['events_json']}`")
+        lines.append(f"- Screenshots index: `{item['paths']['screenshots_index']}`")
+        lines.append("")
+        if item.get("highlights"):
+            lines.append("Highlights:")
+            for hl in item["highlights"]:
+                lines.append(f"- {hl}")
+            lines.append("")
+    return "\n".join(lines).strip() + "\n"
+
+
+def main(argv: list[str] | None = None) -> None:
+    args = _parse_args(argv)
+    out_dir: Path = args.out
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    scenarios = _select_scenarios(args.scenarios)
+    if args.no_headless:
+        scenarios = [
+            Scenario(
+                id=s.id,
+                url=s.url,
+                task=s.task,
+                mode=s.mode,
+                headless_browser=False,
+                expected=s.expected,
+            )
+            for s in scenarios
+        ]
+
+    # Avoid printing secrets; just a quick “configured?” hint.
+    env_hint = {
+        "GSD_BROWSER_LLM_PROVIDER": os.environ.get("GSD_BROWSER_LLM_PROVIDER", ""),
+        "GSD_BROWSER_MODEL": os.environ.get("GSD_BROWSER_MODEL", ""),
+        "ANTHROPIC_API_KEY_set": bool(os.environ.get("ANTHROPIC_API_KEY")),
+        "OPENAI_API_KEY_set": bool(os.environ.get("OPENAI_API_KEY")),
+        "BROWSER_USE_API_KEY_set": bool(os.environ.get("BROWSER_USE_API_KEY")),
+        "OLLAMA_HOST_set": bool(os.environ.get("OLLAMA_HOST")),
+    }
+
+    started_at = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+
+    import asyncio
+
+    runs: list[dict[str, Any]] = []
+    for scenario in scenarios:
+        scenario_dir = out_dir / scenario.id
+        scenario_dir.mkdir(parents=True, exist_ok=True)
+        runs.append(asyncio.run(_run_one(scenario=scenario, out_dir=scenario_dir)))
+
+    summary = {
+        "started_at": started_at,
+        "out_dir": str(out_dir),
+        "env_hint": env_hint,
+        "runs": runs,
+    }
+
+    _write_json(out_dir / "summary.json", summary)
+    (out_dir / "report.md").write_text(_render_markdown(summary), encoding="utf-8")
+
+    # Minimal terminal summary.
+    for run in runs:
+        print(
+            f"{run['scenario']['id']}: {run['result']['classification']} "
+            f"(status={run['result']['status']} screenshots={run['result']['screenshots_written']})"
+        )
+    print(f"Wrote report bundle to {out_dir}")
+
+
+__all__ = ["Scenario", "DEFAULT_SCENARIOS", "main"]
+
+
+if __name__ == "__main__":  # pragma: no cover
+    main(sys.argv[1:])

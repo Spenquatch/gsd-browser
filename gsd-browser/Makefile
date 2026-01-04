@@ -1,4 +1,4 @@
-.PHONY: dev lint test smoke diagnose docker-build docker-run
+.PHONY: dev lint test smoke diagnose sanity-real docker-build docker-run
 
 UV ?= uv
 
@@ -29,6 +29,14 @@ test:
 
 smoke:
 	./scripts/smoke-test.sh
+
+sanity-real:
+	@if [ -x .venv/bin/python ]; then \
+		. .venv/bin/activate && python ./scripts/real_world_sanity.py; \
+	else \
+		echo "Run 'make dev' first to create .venv"; \
+		exit 1; \
+	fi
 
 diagnose:
 	./scripts/diagnose.sh
