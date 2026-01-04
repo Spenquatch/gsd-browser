@@ -28,10 +28,30 @@ if command -v uv >/dev/null 2>&1 && [ -z "${PIPX_DEFAULT_PYTHON:-}" ]; then
   export PIPX_DEFAULT_PYTHON
 fi
 
-VERSION=$(python3 - <<'PY'
-import tomllib
+VERSION=$(ROOT_DIR="$ROOT_DIR" python3 - <<'PY'
+import os
+import re
 from pathlib import Path
-print(tomllib.loads(Path('pyproject.toml').read_text())['project']['version'])
+
+try:
+    import tomllib  # py>=3.11
+except ModuleNotFoundError:  # pragma: no cover
+    tomllib = None
+
+root_dir = Path(os.environ["ROOT_DIR"])
+pyproject = root_dir / "pyproject.toml"
+text = pyproject.read_text(encoding="utf-8")
+if tomllib is not None:
+    print(tomllib.loads(text)["project"]["version"])
+else:  # pragma: no cover
+    m_section = re.search(r"(?ms)^\\[project\\]\\s*(.*?)(?:^\\[|\\Z)", text)
+    if not m_section:
+        raise SystemExit("pyproject.toml missing [project] section")
+    project_section = m_section.group(1)
+    m_version = re.search(r'(?m)^version\\s*=\\s*\"([^\"]+)\"\\s*$', project_section)
+    if not m_version:
+        raise SystemExit("pyproject.toml missing project.version")
+    print(m_version.group(1))
 PY
 )
 
@@ -65,9 +85,9 @@ PY
 python3 - <<PY
 from pathlib import Path
 import json
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 manifest = {
-    "installed_at": datetime.now(UTC).isoformat(),
+    "installed_at": datetime.now(timezone.utc).isoformat(),
     "version": "$VERSION",
     "source": "$ROOT_DIR",
     "pipx_venv": "$PIPX_ENV",
