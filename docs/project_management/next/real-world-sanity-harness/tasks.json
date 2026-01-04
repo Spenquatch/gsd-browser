@@ -1,0 +1,460 @@
+{
+  "tasks": [
+    {
+      "id": "R1-code",
+      "name": "Harness runner + scenario registry (code)",
+      "type": "code",
+      "phase": "R1",
+      "status": "pending",
+      "description": "Add/standardize the harness runner entrypoint and a curated scenario registry with stable ids.",
+      "references": [
+        "docs/adr/ADR-0004-real-world-sanity-harness-and-quality-gates.md",
+        "docs/project_management/next/real-world-sanity-harness/plan.md",
+        "docs/project_management/next/real-world-sanity-harness/R1-spec.md"
+      ],
+      "acceptance_criteria": [
+        "Harness runs one or more scenarios and writes the expected output tree.",
+        "Scenario ids match the plan and have minimal expectations (pass vs soft_fail).",
+        "No secrets are written to disk."
+      ],
+      "start_checklist": [
+        "git checkout feat/real-world-sanity-harness && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, R1-spec.md, kickoff_prompts/R1-code.md",
+        "Set R1-code status to in_progress in tasks.json",
+        "Add START entry to session_log.md; commit docs (docs: start R1-code)",
+        "git branch rw-r1-harness-code feat/real-world-sanity-harness",
+        "git worktree add wt/rw-r1-harness-code rw-r1-harness-code",
+        "Do not edit docs/tasks/session_log from the worktree"
+      ],
+      "end_checklist": [
+        "uv run ruff format --check",
+        "uv run ruff check",
+        "Commit changes inside wt/rw-r1-harness-code",
+        "Update tasks.json and session_log.md on feat/real-world-sanity-harness (docs: finish R1-code)",
+        "git worktree remove wt/rw-r1-harness-code"
+      ],
+      "worktree": "wt/rw-r1-harness-code",
+      "integration_task": "R1-integ",
+      "kickoff_prompt": "docs/project_management/next/real-world-sanity-harness/kickoff_prompts/R1-code.md",
+      "depends_on": [],
+      "concurrent_with": ["R1-test"]
+    },
+    {
+      "id": "R1-test",
+      "name": "Harness runner + scenario registry (test)",
+      "type": "test",
+      "phase": "R1",
+      "status": "pending",
+      "description": "Unit tests for scenario selection and output tree creation using stubs (no network).",
+      "references": [
+        "docs/project_management/next/real-world-sanity-harness/plan.md",
+        "docs/project_management/next/real-world-sanity-harness/R1-spec.md"
+      ],
+      "acceptance_criteria": [
+        "Tests validate scenario selection by id and missing-id error behavior.",
+        "Tests validate harness output directory structure with stubs."
+      ],
+      "start_checklist": [
+        "git checkout feat/real-world-sanity-harness && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, R1-spec.md, kickoff_prompts/R1-test.md",
+        "Set R1-test status to in_progress in tasks.json",
+        "Add START entry to session_log.md; commit docs (docs: start R1-test)",
+        "git branch rw-r1-harness-test feat/real-world-sanity-harness",
+        "git worktree add wt/rw-r1-harness-test rw-r1-harness-test",
+        "Do not edit docs/tasks/session_log from the worktree"
+      ],
+      "end_checklist": [
+        "uv run ruff format --check",
+        "uv run pytest gsd-browser/tests -k r1",
+        "Commit changes inside wt/rw-r1-harness-test",
+        "Update tasks.json and session_log.md on feat/real-world-sanity-harness (docs: finish R1-test)",
+        "git worktree remove wt/rw-r1-harness-test"
+      ],
+      "worktree": "wt/rw-r1-harness-test",
+      "integration_task": "R1-integ",
+      "kickoff_prompt": "docs/project_management/next/real-world-sanity-harness/kickoff_prompts/R1-test.md",
+      "depends_on": [],
+      "concurrent_with": ["R1-code"]
+    },
+    {
+      "id": "R1-integ",
+      "name": "Harness runner + scenario registry (integration)",
+      "type": "integration",
+      "phase": "R1",
+      "status": "pending",
+      "description": "Merge R1 code+tests, reconcile to spec, and make the slice green.",
+      "references": [
+        "docs/project_management/next/real-world-sanity-harness/plan.md",
+        "docs/project_management/next/real-world-sanity-harness/R1-spec.md"
+      ],
+      "acceptance_criteria": [
+        "R1 behavior matches spec; tests enforce scenario selection and output tree.",
+        "Integration commands pass (ruff + pytest + make smoke)."
+      ],
+      "start_checklist": [
+        "git checkout feat/real-world-sanity-harness && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, R1-spec.md, kickoff_prompts/R1-integ.md",
+        "Set R1-integ status to in_progress in tasks.json",
+        "Add START entry to session_log.md; commit docs (docs: start R1-integ)",
+        "git branch rw-r1-harness-integ feat/real-world-sanity-harness",
+        "git worktree add wt/rw-r1-harness-integ rw-r1-harness-integ",
+        "Do not edit docs/tasks/session_log from the worktree"
+      ],
+      "end_checklist": [
+        "uv run ruff format --check",
+        "uv run ruff check",
+        "uv run pytest",
+        "make smoke",
+        "Commit changes inside wt/rw-r1-harness-integ",
+        "Update tasks.json and session_log.md on feat/real-world-sanity-harness (docs: finish R1-integ)",
+        "git worktree remove wt/rw-r1-harness-integ"
+      ],
+      "worktree": "wt/rw-r1-harness-integ",
+      "integration_task": null,
+      "kickoff_prompt": "docs/project_management/next/real-world-sanity-harness/kickoff_prompts/R1-integ.md",
+      "depends_on": ["R1-code", "R1-test"],
+      "concurrent_with": []
+    },
+    {
+      "id": "R2-code",
+      "name": "Artifact harvesting + classification (code)",
+      "type": "code",
+      "phase": "R2",
+      "status": "pending",
+      "description": "Harvest screenshots and run events out-of-band and classify runs (pass/soft_fail/hard_fail).",
+      "references": [
+        "docs/adr/ADR-0004-real-world-sanity-harness-and-quality-gates.md",
+        "docs/project_management/next/real-world-sanity-harness/plan.md",
+        "docs/project_management/next/real-world-sanity-harness/R2-spec.md"
+      ],
+      "acceptance_criteria": [
+        "Per-scenario bundle includes response.json, events.json, screenshots/, screenshots.json.",
+        "Classification matches R2-spec and is stable/deterministic."
+      ],
+      "start_checklist": [
+        "git checkout feat/real-world-sanity-harness && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, R2-spec.md, kickoff_prompts/R2-code.md",
+        "Set R2-code status to in_progress in tasks.json",
+        "Add START entry to session_log.md; commit docs (docs: start R2-code)",
+        "git branch rw-r2-artifacts-code feat/real-world-sanity-harness",
+        "git worktree add wt/rw-r2-artifacts-code rw-r2-artifacts-code",
+        "Do not edit docs/tasks/session_log from the worktree"
+      ],
+      "end_checklist": [
+        "uv run ruff format --check",
+        "uv run ruff check",
+        "Commit changes inside wt/rw-r2-artifacts-code",
+        "Update tasks.json and session_log.md on feat/real-world-sanity-harness (docs: finish R2-code)",
+        "git worktree remove wt/rw-r2-artifacts-code"
+      ],
+      "worktree": "wt/rw-r2-artifacts-code",
+      "integration_task": "R2-integ",
+      "kickoff_prompt": "docs/project_management/next/real-world-sanity-harness/kickoff_prompts/R2-code.md",
+      "depends_on": ["R1-integ"],
+      "concurrent_with": ["R2-test"]
+    },
+    {
+      "id": "R2-test",
+      "name": "Artifact harvesting + classification (test)",
+      "type": "test",
+      "phase": "R2",
+      "status": "pending",
+      "description": "Unit tests for classification and “actionable reason” predicates using fixtures (no network).",
+      "references": [
+        "docs/project_management/next/real-world-sanity-harness/plan.md",
+        "docs/project_management/next/real-world-sanity-harness/R2-spec.md"
+      ],
+      "acceptance_criteria": [
+        "Tests validate pass/soft_fail/hard_fail classification on fixed fixtures.",
+        "Tests validate actionable predicate (console exception, 4xx/5xx, payload failure_reason)."
+      ],
+      "start_checklist": [
+        "git checkout feat/real-world-sanity-harness && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, R2-spec.md, kickoff_prompts/R2-test.md",
+        "Set R2-test status to in_progress in tasks.json",
+        "Add START entry to session_log.md; commit docs (docs: start R2-test)",
+        "git branch rw-r2-artifacts-test feat/real-world-sanity-harness",
+        "git worktree add wt/rw-r2-artifacts-test rw-r2-artifacts-test",
+        "Do not edit docs/tasks/session_log from the worktree"
+      ],
+      "end_checklist": [
+        "uv run ruff format --check",
+        "uv run pytest gsd-browser/tests -k r2",
+        "Commit changes inside wt/rw-r2-artifacts-test",
+        "Update tasks.json and session_log.md on feat/real-world-sanity-harness (docs: finish R2-test)",
+        "git worktree remove wt/rw-r2-artifacts-test"
+      ],
+      "worktree": "wt/rw-r2-artifacts-test",
+      "integration_task": "R2-integ",
+      "kickoff_prompt": "docs/project_management/next/real-world-sanity-harness/kickoff_prompts/R2-test.md",
+      "depends_on": ["R1-integ"],
+      "concurrent_with": ["R2-code"]
+    },
+    {
+      "id": "R2-integ",
+      "name": "Artifact harvesting + classification (integration)",
+      "type": "integration",
+      "phase": "R2",
+      "status": "pending",
+      "description": "Merge R2 code+tests, reconcile to spec, and make the slice green.",
+      "references": [
+        "docs/project_management/next/real-world-sanity-harness/plan.md",
+        "docs/project_management/next/real-world-sanity-harness/R2-spec.md"
+      ],
+      "acceptance_criteria": [
+        "Artifact harvesting and classification match spec; tests enforce behavior.",
+        "Integration commands pass (ruff + pytest + make smoke)."
+      ],
+      "start_checklist": [
+        "git checkout feat/real-world-sanity-harness && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, R2-spec.md, kickoff_prompts/R2-integ.md",
+        "Set R2-integ status to in_progress in tasks.json",
+        "Add START entry to session_log.md; commit docs (docs: start R2-integ)",
+        "git branch rw-r2-artifacts-integ feat/real-world-sanity-harness",
+        "git worktree add wt/rw-r2-artifacts-integ rw-r2-artifacts-integ",
+        "Do not edit docs/tasks/session_log from the worktree"
+      ],
+      "end_checklist": [
+        "uv run ruff format --check",
+        "uv run ruff check",
+        "uv run pytest",
+        "make smoke",
+        "Commit changes inside wt/rw-r2-artifacts-integ",
+        "Update tasks.json and session_log.md on feat/real-world-sanity-harness (docs: finish R2-integ)",
+        "git worktree remove wt/rw-r2-artifacts-integ"
+      ],
+      "worktree": "wt/rw-r2-artifacts-integ",
+      "integration_task": null,
+      "kickoff_prompt": "docs/project_management/next/real-world-sanity-harness/kickoff_prompts/R2-integ.md",
+      "depends_on": ["R2-code", "R2-test"],
+      "concurrent_with": []
+    },
+    {
+      "id": "R3-code",
+      "name": "Report formatting (code)",
+      "type": "code",
+      "phase": "R3",
+      "status": "pending",
+      "description": "Emit a stable summary.json and PR-friendly report.md for a harness run.",
+      "references": [
+        "docs/adr/ADR-0004-real-world-sanity-harness-and-quality-gates.md",
+        "docs/project_management/next/real-world-sanity-harness/plan.md",
+        "docs/project_management/next/real-world-sanity-harness/R3-spec.md"
+      ],
+      "acceptance_criteria": [
+        "report.md links per-scenario artifacts and includes bounded highlights.",
+        "summary.json has a stable schema with run metadata and per-scenario summaries."
+      ],
+      "start_checklist": [
+        "git checkout feat/real-world-sanity-harness && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, R3-spec.md, kickoff_prompts/R3-code.md",
+        "Set R3-code status to in_progress in tasks.json",
+        "Add START entry to session_log.md; commit docs (docs: start R3-code)",
+        "git branch rw-r3-report-code feat/real-world-sanity-harness",
+        "git worktree add wt/rw-r3-report-code rw-r3-report-code",
+        "Do not edit docs/tasks/session_log from the worktree"
+      ],
+      "end_checklist": [
+        "uv run ruff format --check",
+        "uv run ruff check",
+        "Commit changes inside wt/rw-r3-report-code",
+        "Update tasks.json and session_log.md on feat/real-world-sanity-harness (docs: finish R3-code)",
+        "git worktree remove wt/rw-r3-report-code"
+      ],
+      "worktree": "wt/rw-r3-report-code",
+      "integration_task": "R3-integ",
+      "kickoff_prompt": "docs/project_management/next/real-world-sanity-harness/kickoff_prompts/R3-code.md",
+      "depends_on": ["R2-integ"],
+      "concurrent_with": ["R3-test"]
+    },
+    {
+      "id": "R3-test",
+      "name": "Report formatting (test)",
+      "type": "test",
+      "phase": "R3",
+      "status": "pending",
+      "description": "Unit tests for Markdown rendering and summary schema bounds.",
+      "references": [
+        "docs/project_management/next/real-world-sanity-harness/plan.md",
+        "docs/project_management/next/real-world-sanity-harness/R3-spec.md"
+      ],
+      "acceptance_criteria": [
+        "Tests validate report.md output for a fixed fake summary payload.",
+        "Tests validate stable summary.json keys and truncation rules."
+      ],
+      "start_checklist": [
+        "git checkout feat/real-world-sanity-harness && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, R3-spec.md, kickoff_prompts/R3-test.md",
+        "Set R3-test status to in_progress in tasks.json",
+        "Add START entry to session_log.md; commit docs (docs: start R3-test)",
+        "git branch rw-r3-report-test feat/real-world-sanity-harness",
+        "git worktree add wt/rw-r3-report-test rw-r3-report-test",
+        "Do not edit docs/tasks/session_log from the worktree"
+      ],
+      "end_checklist": [
+        "uv run ruff format --check",
+        "uv run pytest gsd-browser/tests -k r3",
+        "Commit changes inside wt/rw-r3-report-test",
+        "Update tasks.json and session_log.md on feat/real-world-sanity-harness (docs: finish R3-test)",
+        "git worktree remove wt/rw-r3-report-test"
+      ],
+      "worktree": "wt/rw-r3-report-test",
+      "integration_task": "R3-integ",
+      "kickoff_prompt": "docs/project_management/next/real-world-sanity-harness/kickoff_prompts/R3-test.md",
+      "depends_on": ["R2-integ"],
+      "concurrent_with": ["R3-code"]
+    },
+    {
+      "id": "R3-integ",
+      "name": "Report formatting (integration)",
+      "type": "integration",
+      "phase": "R3",
+      "status": "pending",
+      "description": "Merge R3 code+tests, reconcile to spec, and make the slice green.",
+      "references": [
+        "docs/project_management/next/real-world-sanity-harness/plan.md",
+        "docs/project_management/next/real-world-sanity-harness/R3-spec.md"
+      ],
+      "acceptance_criteria": [
+        "Report and summary schema match spec; tests enforce rendering behavior.",
+        "Integration commands pass (ruff + pytest + make smoke)."
+      ],
+      "start_checklist": [
+        "git checkout feat/real-world-sanity-harness && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, R3-spec.md, kickoff_prompts/R3-integ.md",
+        "Set R3-integ status to in_progress in tasks.json",
+        "Add START entry to session_log.md; commit docs (docs: start R3-integ)",
+        "git branch rw-r3-report-integ feat/real-world-sanity-harness",
+        "git worktree add wt/rw-r3-report-integ rw-r3-report-integ",
+        "Do not edit docs/tasks/session_log from the worktree"
+      ],
+      "end_checklist": [
+        "uv run ruff format --check",
+        "uv run ruff check",
+        "uv run pytest",
+        "make smoke",
+        "Commit changes inside wt/rw-r3-report-integ",
+        "Update tasks.json and session_log.md on feat/real-world-sanity-harness (docs: finish R3-integ)",
+        "git worktree remove wt/rw-r3-report-integ"
+      ],
+      "worktree": "wt/rw-r3-report-integ",
+      "integration_task": null,
+      "kickoff_prompt": "docs/project_management/next/real-world-sanity-harness/kickoff_prompts/R3-integ.md",
+      "depends_on": ["R3-code", "R3-test"],
+      "concurrent_with": []
+    },
+    {
+      "id": "R4-code",
+      "name": "Quality gates ergonomics (code)",
+      "type": "code",
+      "phase": "R4",
+      "status": "pending",
+      "description": "Optional ergonomics like a Makefile target to run the harness; keep the gate opt-in and out of CI.",
+      "references": [
+        "docs/adr/ADR-0004-real-world-sanity-harness-and-quality-gates.md",
+        "docs/project_management/next/real-world-sanity-harness/plan.md",
+        "docs/project_management/next/real-world-sanity-harness/R4-spec.md"
+      ],
+      "acceptance_criteria": [
+        "Helper commands exist (optional) and are clearly marked as requiring credentials + internet.",
+        "Harness remains opt-in and not part of default CI."
+      ],
+      "start_checklist": [
+        "git checkout feat/real-world-sanity-harness && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, R4-spec.md, kickoff_prompts/R4-code.md",
+        "Set R4-code status to in_progress in tasks.json",
+        "Add START entry to session_log.md; commit docs (docs: start R4-code)",
+        "git branch rw-r4-gates-code feat/real-world-sanity-harness",
+        "git worktree add wt/rw-r4-gates-code rw-r4-gates-code",
+        "Do not edit docs/tasks/session_log from the worktree"
+      ],
+      "end_checklist": [
+        "uv run ruff format --check",
+        "uv run ruff check",
+        "Commit changes inside wt/rw-r4-gates-code",
+        "Update tasks.json and session_log.md on feat/real-world-sanity-harness (docs: finish R4-code)",
+        "git worktree remove wt/rw-r4-gates-code"
+      ],
+      "worktree": "wt/rw-r4-gates-code",
+      "integration_task": "R4-integ",
+      "kickoff_prompt": "docs/project_management/next/real-world-sanity-harness/kickoff_prompts/R4-code.md",
+      "depends_on": ["R3-integ"],
+      "concurrent_with": ["R4-test"]
+    },
+    {
+      "id": "R4-test",
+      "name": "Quality gates ergonomics (test)",
+      "type": "test",
+      "phase": "R4",
+      "status": "pending",
+      "description": "Any minimal tests needed by R4 code changes (only if necessary).",
+      "references": [
+        "docs/project_management/next/real-world-sanity-harness/plan.md",
+        "docs/project_management/next/real-world-sanity-harness/R4-spec.md"
+      ],
+      "acceptance_criteria": [
+        "Tests are minimal and deterministic; no network."
+      ],
+      "start_checklist": [
+        "git checkout feat/real-world-sanity-harness && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, R4-spec.md, kickoff_prompts/R4-test.md",
+        "Set R4-test status to in_progress in tasks.json",
+        "Add START entry to session_log.md; commit docs (docs: start R4-test)",
+        "git branch rw-r4-gates-test feat/real-world-sanity-harness",
+        "git worktree add wt/rw-r4-gates-test rw-r4-gates-test",
+        "Do not edit docs/tasks/session_log from the worktree"
+      ],
+      "end_checklist": [
+        "uv run ruff format --check",
+        "uv run pytest gsd-browser/tests -k r4",
+        "Commit changes inside wt/rw-r4-gates-test",
+        "Update tasks.json and session_log.md on feat/real-world-sanity-harness (docs: finish R4-test)",
+        "git worktree remove wt/rw-r4-gates-test"
+      ],
+      "worktree": "wt/rw-r4-gates-test",
+      "integration_task": "R4-integ",
+      "kickoff_prompt": "docs/project_management/next/real-world-sanity-harness/kickoff_prompts/R4-test.md",
+      "depends_on": ["R3-integ"],
+      "concurrent_with": ["R4-code"]
+    },
+    {
+      "id": "R4-integ",
+      "name": "Quality gates (integration)",
+      "type": "integration",
+      "phase": "R4",
+      "status": "pending",
+      "description": "Merge R4 code+tests, reconcile to spec, and make the slice green; then apply the PR checklist documentation on the orchestration branch.",
+      "references": [
+        "docs/project_management/next/real-world-sanity-harness/plan.md",
+        "docs/project_management/next/real-world-sanity-harness/R4-spec.md"
+      ],
+      "acceptance_criteria": [
+        "R4 ergonomics are present (if implemented) without adding CI flakiness.",
+        "PR checklist documentation exists and is clearly opt-in."
+      ],
+      "start_checklist": [
+        "git checkout feat/real-world-sanity-harness && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, R4-spec.md, kickoff_prompts/R4-integ.md",
+        "Set R4-integ status to in_progress in tasks.json",
+        "Add START entry to session_log.md; commit docs (docs: start R4-integ)",
+        "git branch rw-r4-gates-integ feat/real-world-sanity-harness",
+        "git worktree add wt/rw-r4-gates-integ rw-r4-gates-integ",
+        "Do not edit docs/tasks/session_log from the worktree"
+      ],
+      "end_checklist": [
+        "uv run ruff format --check",
+        "uv run ruff check",
+        "uv run pytest",
+        "make smoke",
+        "Commit changes inside wt/rw-r4-gates-integ",
+        "Update tasks.json and session_log.md on feat/real-world-sanity-harness (docs: finish R4-integ)",
+        "git worktree remove wt/rw-r4-gates-integ"
+      ],
+      "worktree": "wt/rw-r4-gates-integ",
+      "integration_task": null,
+      "kickoff_prompt": "docs/project_management/next/real-world-sanity-harness/kickoff_prompts/R4-integ.md",
+      "depends_on": ["R4-code", "R4-test"],
+      "concurrent_with": []
+    }
+  ]
+}

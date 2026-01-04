@@ -1,0 +1,694 @@
+{
+  "tasks": [
+    {
+      "id": "C1-code",
+      "name": "Lifecycle + budgets + status mapping (code)",
+      "type": "code",
+      "phase": "C1",
+      "status": "pending",
+      "description": "Remove browser-use session double-start, enforce cleanup, and add predictable timeouts/budgets + stable status mapping.",
+      "references": [
+        "docs/adr/ADR-0003-cdp-first-browser-use-integration.md",
+        "docs/project_management/next/cdp-first-browser-use/plan.md",
+        "docs/project_management/next/cdp-first-browser-use/C1-spec.md"
+      ],
+      "acceptance_criteria": [
+        "No explicit BrowserSession.start() in web_eval_agent orchestration path (unless browser-use requires it for a documented edge case).",
+        "Tool-level budget + max_steps + step_timeout defaults are enforced and configurable.",
+        "Status mapping matches C1 spec and is not ambiguous for success-with-warnings.",
+        "Cleanup occurs on success/failure/timeout without leaking sessions/tasks."
+      ],
+      "start_checklist": [
+        "git checkout feat/cdp-first-browser-use && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, C1-spec.md, kickoff_prompts/C1-code.md",
+        "Set C1-code status to in_progress in tasks.json",
+        "Add START entry to session_log.md; commit docs (docs: start C1-code)",
+        "git branch cf-c1-lifecycle-code feat/cdp-first-browser-use",
+        "git worktree add wt/cf-c1-lifecycle-code cf-c1-lifecycle-code",
+        "Do not edit docs/tasks/session_log from the worktree"
+      ],
+      "end_checklist": [
+        "uv run ruff format --check",
+        "uv run ruff check",
+        "Commit changes inside wt/cf-c1-lifecycle-code",
+        "Update tasks.json and session_log.md on feat/cdp-first-browser-use (docs: finish C1-code)",
+        "git worktree remove wt/cf-c1-lifecycle-code"
+      ],
+      "worktree": "wt/cf-c1-lifecycle-code",
+      "integration_task": "C1-integ",
+      "kickoff_prompt": "docs/project_management/next/cdp-first-browser-use/kickoff_prompts/C1-code.md",
+      "depends_on": [],
+      "concurrent_with": ["C1-test"]
+    },
+    {
+      "id": "C1-test",
+      "name": "Lifecycle + budgets + status mapping (test)",
+      "type": "test",
+      "phase": "C1",
+      "status": "pending",
+      "description": "Unit tests for status mapping and timeout/cancellation behavior.",
+      "references": [
+        "docs/project_management/next/cdp-first-browser-use/plan.md",
+        "docs/project_management/next/cdp-first-browser-use/C1-spec.md"
+      ],
+      "acceptance_criteria": [
+        "Tests validate status mapping table and JSON fields for timeouts.",
+        "Tests are stubbed/mocked; no real browser use."
+      ],
+      "start_checklist": [
+        "git checkout feat/cdp-first-browser-use && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, C1-spec.md, kickoff_prompts/C1-test.md",
+        "Set C1-test status to in_progress in tasks.json",
+        "Add START entry to session_log.md; commit docs (docs: start C1-test)",
+        "git branch cf-c1-lifecycle-test feat/cdp-first-browser-use",
+        "git worktree add wt/cf-c1-lifecycle-test cf-c1-lifecycle-test",
+        "Do not edit docs/tasks/session_log from the worktree"
+      ],
+      "end_checklist": [
+        "uv run ruff format --check",
+        "uv run pytest gsd-browser/tests -k c1",
+        "Commit changes inside wt/cf-c1-lifecycle-test",
+        "Update tasks.json and session_log.md on feat/cdp-first-browser-use (docs: finish C1-test)",
+        "git worktree remove wt/cf-c1-lifecycle-test"
+      ],
+      "worktree": "wt/cf-c1-lifecycle-test",
+      "integration_task": "C1-integ",
+      "kickoff_prompt": "docs/project_management/next/cdp-first-browser-use/kickoff_prompts/C1-test.md",
+      "depends_on": [],
+      "concurrent_with": ["C1-code"]
+    },
+    {
+      "id": "C1-integ",
+      "name": "Lifecycle + budgets + status mapping (integration)",
+      "type": "integration",
+      "phase": "C1",
+      "status": "pending",
+      "description": "Merge C1 code+tests, reconcile to spec, and make the slice green.",
+      "references": [
+        "docs/project_management/next/cdp-first-browser-use/plan.md",
+        "docs/project_management/next/cdp-first-browser-use/C1-spec.md"
+      ],
+      "acceptance_criteria": [
+        "Behavior matches C1-spec with tests enforcing status mapping and timeout behavior.",
+        "Integration commands pass (ruff + pytest + make smoke)."
+      ],
+      "start_checklist": [
+        "git checkout feat/cdp-first-browser-use && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, C1-spec.md, kickoff_prompts/C1-integ.md",
+        "Set C1-integ status to in_progress in tasks.json",
+        "Add START entry to session_log.md; commit docs (docs: start C1-integ)",
+        "git branch cf-c1-lifecycle-integ feat/cdp-first-browser-use",
+        "git worktree add wt/cf-c1-lifecycle-integ cf-c1-lifecycle-integ",
+        "Do not edit docs/tasks/session_log from the worktree"
+      ],
+      "end_checklist": [
+        "uv run ruff format --check",
+        "uv run ruff check",
+        "uv run pytest",
+        "make smoke",
+        "Commit changes inside wt/cf-c1-lifecycle-integ",
+        "Update tasks.json and session_log.md on feat/cdp-first-browser-use (docs: finish C1-integ)",
+        "git worktree remove wt/cf-c1-lifecycle-integ"
+      ],
+      "worktree": "wt/cf-c1-lifecycle-integ",
+      "integration_task": null,
+      "kickoff_prompt": "docs/project_management/next/cdp-first-browser-use/kickoff_prompts/C1-integ.md",
+      "depends_on": ["C1-code", "C1-test"],
+      "concurrent_with": []
+    },
+    {
+      "id": "C2-code",
+      "name": "Provider compatibility + prompt wrapper (code)",
+      "type": "code",
+      "phase": "C2",
+      "status": "pending",
+      "description": "Make provider/model policy explicit for browser-use structured output and add a browser-use-native prompt wrapper with stop conditions.",
+      "references": [
+        "docs/adr/ADR-0003-cdp-first-browser-use-integration.md",
+        "docs/project_management/next/cdp-first-browser-use/plan.md",
+        "docs/project_management/next/cdp-first-browser-use/C2-spec.md"
+      ],
+      "acceptance_criteria": [
+        "Misconfigured provider/model combos fail fast with actionable guidance.",
+        "Prompt wrapper applied via browser-use APIs and includes stop conditions + anchoring guidance."
+      ],
+      "start_checklist": [
+        "git checkout feat/cdp-first-browser-use && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, C2-spec.md, kickoff_prompts/C2-code.md",
+        "Set C2-code status to in_progress in tasks.json",
+        "Add START entry to session_log.md; commit docs (docs: start C2-code)",
+        "git branch cf-c2-provider-prompt-code feat/cdp-first-browser-use",
+        "git worktree add wt/cf-c2-provider-prompt-code cf-c2-provider-prompt-code",
+        "Do not edit docs/tasks/session_log from the worktree"
+      ],
+      "end_checklist": [
+        "uv run ruff format --check",
+        "uv run ruff check",
+        "Commit changes inside wt/cf-c2-provider-prompt-code",
+        "Update tasks.json and session_log.md on feat/cdp-first-browser-use (docs: finish C2-code)",
+        "git worktree remove wt/cf-c2-provider-prompt-code"
+      ],
+      "worktree": "wt/cf-c2-provider-prompt-code",
+      "integration_task": "C2-integ",
+      "kickoff_prompt": "docs/project_management/next/cdp-first-browser-use/kickoff_prompts/C2-code.md",
+      "depends_on": ["C1-integ"],
+      "concurrent_with": ["C2-test"]
+    },
+    {
+      "id": "C2-test",
+      "name": "Provider compatibility + prompt wrapper (test)",
+      "type": "test",
+      "phase": "C2",
+      "status": "pending",
+      "description": "Tests for provider/model validation and prompt wrapper content (stop conditions, anchoring).",
+      "references": [
+        "docs/project_management/next/cdp-first-browser-use/plan.md",
+        "docs/project_management/next/cdp-first-browser-use/C2-spec.md"
+      ],
+      "acceptance_criteria": [
+        "Provider/model failures are actionable and stable.",
+        "Prompt wrapper contains required stop conditions."
+      ],
+      "start_checklist": [
+        "git checkout feat/cdp-first-browser-use && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, C2-spec.md, kickoff_prompts/C2-test.md",
+        "Set C2-test status to in_progress in tasks.json",
+        "Add START entry to session_log.md; commit docs (docs: start C2-test)",
+        "git branch cf-c2-provider-prompt-test feat/cdp-first-browser-use",
+        "git worktree add wt/cf-c2-provider-prompt-test cf-c2-provider-prompt-test",
+        "Do not edit docs/tasks/session_log from the worktree"
+      ],
+      "end_checklist": [
+        "uv run ruff format --check",
+        "uv run pytest gsd-browser/tests -k c2",
+        "Commit changes inside wt/cf-c2-provider-prompt-test",
+        "Update tasks.json and session_log.md on feat/cdp-first-browser-use (docs: finish C2-test)",
+        "git worktree remove wt/cf-c2-provider-prompt-test"
+      ],
+      "worktree": "wt/cf-c2-provider-prompt-test",
+      "integration_task": "C2-integ",
+      "kickoff_prompt": "docs/project_management/next/cdp-first-browser-use/kickoff_prompts/C2-test.md",
+      "depends_on": ["C1-integ"],
+      "concurrent_with": ["C2-code"]
+    },
+    {
+      "id": "C2-integ",
+      "name": "Provider compatibility + prompt wrapper (integration)",
+      "type": "integration",
+      "phase": "C2",
+      "status": "pending",
+      "description": "Merge C2 code+tests, reconcile to spec, and make the slice green.",
+      "references": [
+        "docs/project_management/next/cdp-first-browser-use/plan.md",
+        "docs/project_management/next/cdp-first-browser-use/C2-spec.md"
+      ],
+      "acceptance_criteria": [
+        "Provider/model policy and prompt wrapper match C2-spec; tests enforce behavior.",
+        "Integration commands pass (ruff + pytest + make smoke)."
+      ],
+      "start_checklist": [
+        "git checkout feat/cdp-first-browser-use && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, C2-spec.md, kickoff_prompts/C2-integ.md",
+        "Set C2-integ status to in_progress in tasks.json",
+        "Add START entry to session_log.md; commit docs (docs: start C2-integ)",
+        "git branch cf-c2-provider-prompt-integ feat/cdp-first-browser-use",
+        "git worktree add wt/cf-c2-provider-prompt-integ cf-c2-provider-prompt-integ",
+        "Do not edit docs/tasks/session_log from the worktree"
+      ],
+      "end_checklist": [
+        "uv run ruff format --check",
+        "uv run ruff check",
+        "uv run pytest",
+        "make smoke",
+        "Commit changes inside wt/cf-c2-provider-prompt-integ",
+        "Update tasks.json and session_log.md on feat/cdp-first-browser-use (docs: finish C2-integ)",
+        "git worktree remove wt/cf-c2-provider-prompt-integ"
+      ],
+      "worktree": "wt/cf-c2-provider-prompt-integ",
+      "integration_task": null,
+      "kickoff_prompt": "docs/project_management/next/cdp-first-browser-use/kickoff_prompts/C2-integ.md",
+      "depends_on": ["C2-code", "C2-test"],
+      "concurrent_with": []
+    },
+    {
+      "id": "C3-code",
+      "name": "Step screenshots guarantee (code)",
+      "type": "code",
+      "phase": "C3",
+      "status": "pending",
+      "description": "Ensure at least N step screenshots per run, using a current-page fallback when BrowserStateSummary has no screenshot.",
+      "references": [
+        "docs/adr/ADR-0003-cdp-first-browser-use-integration.md",
+        "docs/project_management/next/cdp-first-browser-use/plan.md",
+        "docs/project_management/next/cdp-first-browser-use/C3-spec.md"
+      ],
+      "acceptance_criteria": [
+        "Primary screenshot capture uses BrowserStateSummary when available; fallback uses browser_session.get_current_page().",
+        "At least step 1 and last step screenshots are recorded; cap enforced."
+      ],
+      "start_checklist": [
+        "git checkout feat/cdp-first-browser-use && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, C3-spec.md, kickoff_prompts/C3-code.md",
+        "Set C3-code status to in_progress in tasks.json",
+        "Add START entry to session_log.md; commit docs (docs: start C3-code)",
+        "git branch cf-c3-screenshots-code feat/cdp-first-browser-use",
+        "git worktree add wt/cf-c3-screenshots-code cf-c3-screenshots-code",
+        "Do not edit docs/tasks/session_log from the worktree"
+      ],
+      "end_checklist": [
+        "uv run ruff format --check",
+        "uv run ruff check",
+        "Commit changes inside wt/cf-c3-screenshots-code",
+        "Update tasks.json and session_log.md on feat/cdp-first-browser-use (docs: finish C3-code)",
+        "git worktree remove wt/cf-c3-screenshots-code"
+      ],
+      "worktree": "wt/cf-c3-screenshots-code",
+      "integration_task": "C3-integ",
+      "kickoff_prompt": "docs/project_management/next/cdp-first-browser-use/kickoff_prompts/C3-code.md",
+      "depends_on": ["C2-integ"],
+      "concurrent_with": ["C3-test"]
+    },
+    {
+      "id": "C3-test",
+      "name": "Step screenshots guarantee (test)",
+      "type": "test",
+      "phase": "C3",
+      "status": "pending",
+      "description": "Unit tests for screenshot fallback and per-session caps/metadata.",
+      "references": [
+        "docs/project_management/next/cdp-first-browser-use/plan.md",
+        "docs/project_management/next/cdp-first-browser-use/C3-spec.md"
+      ],
+      "acceptance_criteria": [
+        "Tests validate fallback path is attempted and does not crash on failure.",
+        "Tests validate cap/eviction behavior."
+      ],
+      "start_checklist": [
+        "git checkout feat/cdp-first-browser-use && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, C3-spec.md, kickoff_prompts/C3-test.md",
+        "Set C3-test status to in_progress in tasks.json",
+        "Add START entry to session_log.md; commit docs (docs: start C3-test)",
+        "git branch cf-c3-screenshots-test feat/cdp-first-browser-use",
+        "git worktree add wt/cf-c3-screenshots-test cf-c3-screenshots-test",
+        "Do not edit docs/tasks/session_log from the worktree"
+      ],
+      "end_checklist": [
+        "uv run ruff format --check",
+        "uv run pytest gsd-browser/tests -k c3",
+        "Commit changes inside wt/cf-c3-screenshots-test",
+        "Update tasks.json and session_log.md on feat/cdp-first-browser-use (docs: finish C3-test)",
+        "git worktree remove wt/cf-c3-screenshots-test"
+      ],
+      "worktree": "wt/cf-c3-screenshots-test",
+      "integration_task": "C3-integ",
+      "kickoff_prompt": "docs/project_management/next/cdp-first-browser-use/kickoff_prompts/C3-test.md",
+      "depends_on": ["C2-integ"],
+      "concurrent_with": ["C3-code"]
+    },
+    {
+      "id": "C3-integ",
+      "name": "Step screenshots guarantee (integration)",
+      "type": "integration",
+      "phase": "C3",
+      "status": "pending",
+      "description": "Merge C3 code+tests, reconcile to spec, and make the slice green.",
+      "references": [
+        "docs/project_management/next/cdp-first-browser-use/plan.md",
+        "docs/project_management/next/cdp-first-browser-use/C3-spec.md"
+      ],
+      "acceptance_criteria": [
+        "Screenshot capture matches C3-spec; tests enforce behavior.",
+        "Integration commands pass (ruff + pytest + make smoke)."
+      ],
+      "start_checklist": [
+        "git checkout feat/cdp-first-browser-use && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, C3-spec.md, kickoff_prompts/C3-integ.md",
+        "Set C3-integ status to in_progress in tasks.json",
+        "Add START entry to session_log.md; commit docs (docs: start C3-integ)",
+        "git branch cf-c3-screenshots-integ feat/cdp-first-browser-use",
+        "git worktree add wt/cf-c3-screenshots-integ cf-c3-screenshots-integ",
+        "Do not edit docs/tasks/session_log from the worktree"
+      ],
+      "end_checklist": [
+        "uv run ruff format --check",
+        "uv run ruff check",
+        "uv run pytest",
+        "make smoke",
+        "Commit changes inside wt/cf-c3-screenshots-integ",
+        "Update tasks.json and session_log.md on feat/cdp-first-browser-use (docs: finish C3-integ)",
+        "git worktree remove wt/cf-c3-screenshots-integ"
+      ],
+      "worktree": "wt/cf-c3-screenshots-integ",
+      "integration_task": null,
+      "kickoff_prompt": "docs/project_management/next/cdp-first-browser-use/kickoff_prompts/C3-integ.md",
+      "depends_on": ["C3-code", "C3-test"],
+      "concurrent_with": []
+    },
+    {
+      "id": "C4-code",
+      "name": "CDP-first streaming adapter (code)",
+      "type": "code",
+      "phase": "C4",
+      "status": "pending",
+      "description": "Attach streaming to browser-use CDP sessions and emit frames + store stream_sample artifacts.",
+      "references": [
+        "docs/adr/ADR-0003-cdp-first-browser-use-integration.md",
+        "docs/project_management/next/cdp-first-browser-use/plan.md",
+        "docs/project_management/next/cdp-first-browser-use/C4-spec.md"
+      ],
+      "acceptance_criteria": [
+        "Streaming attaches via BrowserSession.get_or_create_cdp_session(focus=True) and ACKs frames.",
+        "At least one frame emits and one stream_sample stores when CDP is available.",
+        "Streaming tears down cleanly on run end."
+      ],
+      "start_checklist": [
+        "git checkout feat/cdp-first-browser-use && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, C4-spec.md, kickoff_prompts/C4-code.md",
+        "Set C4-code status to in_progress in tasks.json",
+        "Add START entry to session_log.md; commit docs (docs: start C4-code)",
+        "git branch cf-c4-streaming-code feat/cdp-first-browser-use",
+        "git worktree add wt/cf-c4-streaming-code cf-c4-streaming-code",
+        "Do not edit docs/tasks/session_log from the worktree"
+      ],
+      "end_checklist": [
+        "uv run ruff format --check",
+        "uv run ruff check",
+        "Commit changes inside wt/cf-c4-streaming-code",
+        "Update tasks.json and session_log.md on feat/cdp-first-browser-use (docs: finish C4-code)",
+        "git worktree remove wt/cf-c4-streaming-code"
+      ],
+      "worktree": "wt/cf-c4-streaming-code",
+      "integration_task": "C4-integ",
+      "kickoff_prompt": "docs/project_management/next/cdp-first-browser-use/kickoff_prompts/C4-code.md",
+      "depends_on": ["C3-integ"],
+      "concurrent_with": ["C4-test"]
+    },
+    {
+      "id": "C4-test",
+      "name": "CDP-first streaming adapter (test)",
+      "type": "test",
+      "phase": "C4",
+      "status": "pending",
+      "description": "Unit tests for streaming lifecycle and sampling/backpressure.",
+      "references": [
+        "docs/project_management/next/cdp-first-browser-use/plan.md",
+        "docs/project_management/next/cdp-first-browser-use/C4-spec.md"
+      ],
+      "acceptance_criteria": [
+        "Tests validate start/stop and sampling behavior via stubs.",
+        "No real browser/network calls."
+      ],
+      "start_checklist": [
+        "git checkout feat/cdp-first-browser-use && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, C4-spec.md, kickoff_prompts/C4-test.md",
+        "Set C4-test status to in_progress in tasks.json",
+        "Add START entry to session_log.md; commit docs (docs: start C4-test)",
+        "git branch cf-c4-streaming-test feat/cdp-first-browser-use",
+        "git worktree add wt/cf-c4-streaming-test cf-c4-streaming-test",
+        "Do not edit docs/tasks/session_log from the worktree"
+      ],
+      "end_checklist": [
+        "uv run ruff format --check",
+        "uv run pytest gsd-browser/tests -k c4",
+        "Commit changes inside wt/cf-c4-streaming-test",
+        "Update tasks.json and session_log.md on feat/cdp-first-browser-use (docs: finish C4-test)",
+        "git worktree remove wt/cf-c4-streaming-test"
+      ],
+      "worktree": "wt/cf-c4-streaming-test",
+      "integration_task": "C4-integ",
+      "kickoff_prompt": "docs/project_management/next/cdp-first-browser-use/kickoff_prompts/C4-test.md",
+      "depends_on": ["C3-integ"],
+      "concurrent_with": ["C4-code"]
+    },
+    {
+      "id": "C4-integ",
+      "name": "CDP-first streaming adapter (integration)",
+      "type": "integration",
+      "phase": "C4",
+      "status": "pending",
+      "description": "Merge C4 code+tests, reconcile to spec, and make the slice green.",
+      "references": [
+        "docs/project_management/next/cdp-first-browser-use/plan.md",
+        "docs/project_management/next/cdp-first-browser-use/C4-spec.md"
+      ],
+      "acceptance_criteria": [
+        "Streaming adapter matches C4-spec; tests enforce lifecycle and sampling behavior.",
+        "Integration commands pass (ruff + pytest + make smoke)."
+      ],
+      "start_checklist": [
+        "git checkout feat/cdp-first-browser-use && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, C4-spec.md, kickoff_prompts/C4-integ.md",
+        "Set C4-integ status to in_progress in tasks.json",
+        "Add START entry to session_log.md; commit docs (docs: start C4-integ)",
+        "git branch cf-c4-streaming-integ feat/cdp-first-browser-use",
+        "git worktree add wt/cf-c4-streaming-integ cf-c4-streaming-integ",
+        "Do not edit docs/tasks/session_log from the worktree"
+      ],
+      "end_checklist": [
+        "uv run ruff format --check",
+        "uv run ruff check",
+        "uv run pytest",
+        "make smoke",
+        "Commit changes inside wt/cf-c4-streaming-integ",
+        "Update tasks.json and session_log.md on feat/cdp-first-browser-use (docs: finish C4-integ)",
+        "git worktree remove wt/cf-c4-streaming-integ"
+      ],
+      "worktree": "wt/cf-c4-streaming-integ",
+      "integration_task": null,
+      "kickoff_prompt": "docs/project_management/next/cdp-first-browser-use/kickoff_prompts/C4-integ.md",
+      "depends_on": ["C4-code", "C4-test"],
+      "concurrent_with": []
+    },
+    {
+      "id": "C5-code",
+      "name": "Run events + ranked failure reporting (code)",
+      "type": "code",
+      "phase": "C5",
+      "status": "pending",
+      "description": "Improve run event capture robustness, implement error ranking, and include bounded failure context in tool responses.",
+      "references": [
+        "docs/adr/ADR-0003-cdp-first-browser-use-integration.md",
+        "docs/project_management/next/cdp-first-browser-use/plan.md",
+        "docs/project_management/next/cdp-first-browser-use/C5-spec.md"
+      ],
+      "acceptance_criteria": [
+        "Run events are captured without relying on brittle private handler registries.",
+        "Ranking de-emphasizes noise and highlights likely-causal failures.",
+        "web_eval_agent JSON includes bounded failure context (page + errors_top + next_actions)."
+      ],
+      "start_checklist": [
+        "git checkout feat/cdp-first-browser-use && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, C5-spec.md, kickoff_prompts/C5-code.md",
+        "Set C5-code status to in_progress in tasks.json",
+        "Add START entry to session_log.md; commit docs (docs: start C5-code)",
+        "git branch cf-c5-events-reporting-code feat/cdp-first-browser-use",
+        "git worktree add wt/cf-c5-events-reporting-code cf-c5-events-reporting-code",
+        "Do not edit docs/tasks/session_log from the worktree"
+      ],
+      "end_checklist": [
+        "uv run ruff format --check",
+        "uv run ruff check",
+        "Commit changes inside wt/cf-c5-events-reporting-code",
+        "Update tasks.json and session_log.md on feat/cdp-first-browser-use (docs: finish C5-code)",
+        "git worktree remove wt/cf-c5-events-reporting-code"
+      ],
+      "worktree": "wt/cf-c5-events-reporting-code",
+      "integration_task": "C5-integ",
+      "kickoff_prompt": "docs/project_management/next/cdp-first-browser-use/kickoff_prompts/C5-code.md",
+      "depends_on": ["C4-integ"],
+      "concurrent_with": ["C5-test"]
+    },
+    {
+      "id": "C5-test",
+      "name": "Run events + ranked failure reporting (test)",
+      "type": "test",
+      "phase": "C5",
+      "status": "pending",
+      "description": "Unit tests for run event bounds and ranking + failure context fields in the response.",
+      "references": [
+        "docs/project_management/next/cdp-first-browser-use/plan.md",
+        "docs/project_management/next/cdp-first-browser-use/C5-spec.md"
+      ],
+      "acceptance_criteria": [
+        "Tests cover event truncation and ranking on fixtures.",
+        "Tests cover response JSON failure fields."
+      ],
+      "start_checklist": [
+        "git checkout feat/cdp-first-browser-use && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, C5-spec.md, kickoff_prompts/C5-test.md",
+        "Set C5-test status to in_progress in tasks.json",
+        "Add START entry to session_log.md; commit docs (docs: start C5-test)",
+        "git branch cf-c5-events-reporting-test feat/cdp-first-browser-use",
+        "git worktree add wt/cf-c5-events-reporting-test cf-c5-events-reporting-test",
+        "Do not edit docs/tasks/session_log from the worktree"
+      ],
+      "end_checklist": [
+        "uv run ruff format --check",
+        "uv run pytest gsd-browser/tests -k c5",
+        "Commit changes inside wt/cf-c5-events-reporting-test",
+        "Update tasks.json and session_log.md on feat/cdp-first-browser-use (docs: finish C5-test)",
+        "git worktree remove wt/cf-c5-events-reporting-test"
+      ],
+      "worktree": "wt/cf-c5-events-reporting-test",
+      "integration_task": "C5-integ",
+      "kickoff_prompt": "docs/project_management/next/cdp-first-browser-use/kickoff_prompts/C5-test.md",
+      "depends_on": ["C4-integ"],
+      "concurrent_with": ["C5-code"]
+    },
+    {
+      "id": "C5-integ",
+      "name": "Run events + ranked failure reporting (integration)",
+      "type": "integration",
+      "phase": "C5",
+      "status": "pending",
+      "description": "Merge C5 code+tests, reconcile to spec, and make the slice green.",
+      "references": [
+        "docs/project_management/next/cdp-first-browser-use/plan.md",
+        "docs/project_management/next/cdp-first-browser-use/C5-spec.md"
+      ],
+      "acceptance_criteria": [
+        "Run event capture + ranking + response fields match C5-spec; tests enforce behavior.",
+        "Integration commands pass (ruff + pytest + make smoke)."
+      ],
+      "start_checklist": [
+        "git checkout feat/cdp-first-browser-use && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, C5-spec.md, kickoff_prompts/C5-integ.md",
+        "Set C5-integ status to in_progress in tasks.json",
+        "Add START entry to session_log.md; commit docs (docs: start C5-integ)",
+        "git branch cf-c5-events-reporting-integ feat/cdp-first-browser-use",
+        "git worktree add wt/cf-c5-events-reporting-integ cf-c5-events-reporting-integ",
+        "Do not edit docs/tasks/session_log from the worktree"
+      ],
+      "end_checklist": [
+        "uv run ruff format --check",
+        "uv run ruff check",
+        "uv run pytest",
+        "make smoke",
+        "Commit changes inside wt/cf-c5-events-reporting-integ",
+        "Update tasks.json and session_log.md on feat/cdp-first-browser-use (docs: finish C5-integ)",
+        "git worktree remove wt/cf-c5-events-reporting-integ"
+      ],
+      "worktree": "wt/cf-c5-events-reporting-integ",
+      "integration_task": null,
+      "kickoff_prompt": "docs/project_management/next/cdp-first-browser-use/kickoff_prompts/C5-integ.md",
+      "depends_on": ["C5-code", "C5-test"],
+      "concurrent_with": []
+    },
+    {
+      "id": "C6-code",
+      "name": "Take-control target robustness (code)",
+      "type": "code",
+      "phase": "C6",
+      "status": "pending",
+      "description": "Ensure ctrl input dispatch targets the browser-use active page/target and strengthen pause/queue semantics.",
+      "references": [
+        "docs/adr/ADR-0003-cdp-first-browser-use-integration.md",
+        "docs/project_management/next/cdp-first-browser-use/plan.md",
+        "docs/project_management/next/cdp-first-browser-use/C6-spec.md"
+      ],
+      "acceptance_criteria": [
+        "Ctrl inputs dispatch via browser-use focused CDP session; stale targets are avoided.",
+        "Auto-pause on take-control is default; resume does not replay stale inputs.",
+        "Rejected/accepted ctrl events are observable (bounded logging/events)."
+      ],
+      "start_checklist": [
+        "git checkout feat/cdp-first-browser-use && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, C6-spec.md, kickoff_prompts/C6-code.md",
+        "Set C6-code status to in_progress in tasks.json",
+        "Add START entry to session_log.md; commit docs (docs: start C6-code)",
+        "git branch cf-c6-control-target-code feat/cdp-first-browser-use",
+        "git worktree add wt/cf-c6-control-target-code cf-c6-control-target-code",
+        "Do not edit docs/tasks/session_log from the worktree"
+      ],
+      "end_checklist": [
+        "uv run ruff format --check",
+        "uv run ruff check",
+        "Commit changes inside wt/cf-c6-control-target-code",
+        "Update tasks.json and session_log.md on feat/cdp-first-browser-use (docs: finish C6-code)",
+        "git worktree remove wt/cf-c6-control-target-code"
+      ],
+      "worktree": "wt/cf-c6-control-target-code",
+      "integration_task": "C6-integ",
+      "kickoff_prompt": "docs/project_management/next/cdp-first-browser-use/kickoff_prompts/C6-code.md",
+      "depends_on": ["C5-integ"],
+      "concurrent_with": ["C6-test"]
+    },
+    {
+      "id": "C6-test",
+      "name": "Take-control target robustness (test)",
+      "type": "test",
+      "phase": "C6",
+      "status": "pending",
+      "description": "Unit tests for ctrl gating, target re-acquisition, and resume behavior.",
+      "references": [
+        "docs/project_management/next/cdp-first-browser-use/plan.md",
+        "docs/project_management/next/cdp-first-browser-use/C6-spec.md"
+      ],
+      "acceptance_criteria": [
+        "Tests validate holder-only and paused-only gating remains enforced.",
+        "Tests validate stale target dispatch is retried via re-acquisition.",
+        "Tests validate resume drains/clears stale buffered inputs."
+      ],
+      "start_checklist": [
+        "git checkout feat/cdp-first-browser-use && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, C6-spec.md, kickoff_prompts/C6-test.md",
+        "Set C6-test status to in_progress in tasks.json",
+        "Add START entry to session_log.md; commit docs (docs: start C6-test)",
+        "git branch cf-c6-control-target-test feat/cdp-first-browser-use",
+        "git worktree add wt/cf-c6-control-target-test cf-c6-control-target-test",
+        "Do not edit docs/tasks/session_log from the worktree"
+      ],
+      "end_checklist": [
+        "uv run ruff format --check",
+        "uv run pytest gsd-browser/tests -k c6",
+        "Commit changes inside wt/cf-c6-control-target-test",
+        "Update tasks.json and session_log.md on feat/cdp-first-browser-use (docs: finish C6-test)",
+        "git worktree remove wt/cf-c6-control-target-test"
+      ],
+      "worktree": "wt/cf-c6-control-target-test",
+      "integration_task": "C6-integ",
+      "kickoff_prompt": "docs/project_management/next/cdp-first-browser-use/kickoff_prompts/C6-test.md",
+      "depends_on": ["C5-integ"],
+      "concurrent_with": ["C6-code"]
+    },
+    {
+      "id": "C6-integ",
+      "name": "Take-control target robustness (integration)",
+      "type": "integration",
+      "phase": "C6",
+      "status": "pending",
+      "description": "Merge C6 code+tests, reconcile to spec, and make the slice green.",
+      "references": [
+        "docs/project_management/next/cdp-first-browser-use/plan.md",
+        "docs/project_management/next/cdp-first-browser-use/C6-spec.md"
+      ],
+      "acceptance_criteria": [
+        "Take-control dispatch semantics match C6-spec; tests enforce behavior.",
+        "Integration commands pass (ruff + pytest + make smoke)."
+      ],
+      "start_checklist": [
+        "git checkout feat/cdp-first-browser-use && git pull --ff-only",
+        "Read plan.md, tasks.json, session_log.md, C6-spec.md, kickoff_prompts/C6-integ.md",
+        "Set C6-integ status to in_progress in tasks.json",
+        "Add START entry to session_log.md; commit docs (docs: start C6-integ)",
+        "git branch cf-c6-control-target-integ feat/cdp-first-browser-use",
+        "git worktree add wt/cf-c6-control-target-integ cf-c6-control-target-integ",
+        "Do not edit docs/tasks/session_log from the worktree"
+      ],
+      "end_checklist": [
+        "uv run ruff format --check",
+        "uv run ruff check",
+        "uv run pytest",
+        "make smoke",
+        "Commit changes inside wt/cf-c6-control-target-integ",
+        "Update tasks.json and session_log.md on feat/cdp-first-browser-use (docs: finish C6-integ)",
+        "git worktree remove wt/cf-c6-control-target-integ"
+      ],
+      "worktree": "wt/cf-c6-control-target-integ",
+      "integration_task": null,
+      "kickoff_prompt": "docs/project_management/next/cdp-first-browser-use/kickoff_prompts/C6-integ.md",
+      "depends_on": ["C6-code", "C6-test"],
+      "concurrent_with": []
+    }
+  ]
+}
