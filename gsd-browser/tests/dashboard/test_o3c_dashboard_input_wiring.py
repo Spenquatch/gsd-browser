@@ -48,7 +48,10 @@ def test_o3c_dashboard_emits_expected_ctrl_events() -> None:
         "input_keyup",
         "input_type",
     ):
-        assert re.search(rf"\\bemit\\(\\s*['\"]{event}['\"]", js_text), event
+        assert re.search(
+            rf"(?:emitCtrl|ctrlSocket\.emit)\(\s*(?:\"{event}\"|'{event}')",
+            js_text,
+        ), event
 
 
 def test_o3c_dashboard_includes_payload_fields_expected_by_server() -> None:
@@ -101,8 +104,7 @@ def test_o3c_dashboard_registers_pointer_and_keyboard_listeners() -> None:
     assert has_move_listener
 
     assert (
-        "addEventListener('wheel'" in js_text
-        or 'addEventListener("wheel"' in js_text
+        re.search(r"addEventListener\(\s*(?:\"wheel\"|'wheel')", js_text)
         or ".onwheel" in js_text
     )
 
