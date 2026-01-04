@@ -205,6 +205,15 @@ Only START/END entries. Docs edits happen on the orchestration branch only.
 - Worktree: wt/bo-o3c-dashboard-input-integ
 - Commands planned: uv run ruff format --check; uv run ruff check; uv run pytest; make smoke
 - Notes: No git remote is configured in this repo, so git pull --ff-only cannot run as written.
+
+## O3c-integ END
+- Timestamp: 2026-01-04T01:33:07Z
+- Role: integration
+- Worktree: wt/bo-o3c-dashboard-input-integ
+- Merged branches: bo-o3c-dashboard-input-code; bo-o3c-dashboard-input-test
+- Commands executed: (in wt/bo-o3c-dashboard-input-integ/gsd-browser) make dev (pass); uv run ruff format --check (pass; 41 files already formatted); uv run ruff check (pass); uv run pytest (pass; 57 passed); make smoke (pass; 7 passed + CLI round trip)
+- Result: pass
+- Blockers/next steps: None.
 - Result: pass (skipped until O3a input handlers land)
 - Blockers/next steps: Implement `/ctrl` input handlers (`input_click`/`move`/`wheel`/`keydown`/`keyup`/`type`) so these tests enforce gating/logging rather than skipping.
 

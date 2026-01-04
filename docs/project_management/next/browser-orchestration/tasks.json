@@ -775,7 +775,7 @@
       "name": "Integrate O3c",
       "type": "integration",
       "phase": "O3c",
-      "status": "in_progress",
+      "status": "done",
       "description": "Merge O3c code/tests, reconcile to spec, and run full suite + smoke.",
       "references": [
         "docs/project_management/next/browser-orchestration/plan.md",
