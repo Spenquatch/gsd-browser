@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import inspect
-import weakref
 from collections import OrderedDict
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -198,10 +197,11 @@ class CDPRunEventCapture:
         ):
             return False
 
-        router = _REGISTER_ROUTERS.get(cdp_client)
+        client_id = id(cdp_client)
+        router = _REGISTER_ROUTERS_BY_ID.get(client_id)
         if router is None:
             router = _CDPClientRouter()
-            _REGISTER_ROUTERS[cdp_client] = router
+            _REGISTER_ROUTERS_BY_ID[client_id] = router
 
         router.active_capture = self
         self._register_router = router
@@ -382,4 +382,4 @@ class _CDPClientRouter:
         self.active_capture: CDPRunEventCapture | None = None
 
 
-_REGISTER_ROUTERS: weakref.WeakKeyDictionary[Any, _CDPClientRouter] = weakref.WeakKeyDictionary()
+_REGISTER_ROUTERS_BY_ID: dict[int, _CDPClientRouter] = {}
