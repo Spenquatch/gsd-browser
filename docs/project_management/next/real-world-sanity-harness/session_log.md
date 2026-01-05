@@ -55,6 +55,36 @@ Only START/END entries. Docs edits happen on the orchestration branch only.
 - Commands planned: uv run ruff format --check; uv run pytest gsd-browser/tests -k r4
 - Notes: No git remote/upstream configured in this repo, so `git pull --ff-only` cannot run as written.
 
+## R4-test END
+- Timestamp: 2026-01-05T14:56:30Z
+- Role: test
+- Worktree: wt/rw-r4-gates-test
+- Branch: rw-r4-gates-test
+- Commit: 0583d03
+- Commands run:
+  - (cwd=wt/rw-r4-gates-test/gsd-browser) `make dev` (to install ruff/pytest into `.venv`)
+  - (cwd=wt/rw-r4-gates-test/gsd-browser) `uv run ruff format --check`
+  - (cwd=wt/rw-r4-gates-test) `uv run --project gsd-browser pytest gsd-browser/tests -k r4`
+- Command outputs:
+  - `uv run ruff format --check`:
+    ```
+    55 files already formatted
+    ```
+  - `uv run --project gsd-browser pytest gsd-browser/tests -k r4`:
+    ```
+    ============================= test session starts ==============================
+    platform linux -- Python 3.11.14, pytest-9.0.2, pluggy-1.6.0
+    rootdir: /home/inboxgreen/gsd-browser/wt/rw-r4-gates-test/gsd-browser
+    configfile: pyproject.toml
+    plugins: anyio-4.12.0
+    collected 101 items / 99 deselected / 2 selected
+
+    gsd-browser/tests/test_real_world_sanity_r4.py ..                        [100%]
+
+    ======================= 2 passed, 99 deselected in 0.54s =======================
+    ```
+- Result: pass
+
 ## R3-integ START
 - Timestamp: 2026-01-05T14:39:53Z
 - Role: integration
