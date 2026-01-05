@@ -12,7 +12,7 @@ help:
 	@echo "    make py-lint        Run Ruff lint (requires py-dev)"
 	@echo "    make py-test        Run Pytest (requires py-dev)"
 	@echo "    make py-smoke       Run python smoke test script"
-	@echo "    make py-sanity-real Run real-world sanity harness (requires py-dev)"
+	@echo "    make py-sanity-real Run real-world sanity harness (manual; requires credentials + internet; set SANITY_REAL_CONFIRM=1)"
 	@echo "    make py-diagnose    Run python diagnostics script"
 	@echo ""
 	@echo "  TypeScript (gsd-browser-ts/)"
@@ -27,6 +27,7 @@ help:
 	@echo "Notes:"
 	@echo "  - Most commands run inside the corresponding subproject directory."
 	@echo "  - Example: make py-test"
+	@echo "  - For the real-world harness: SANITY_REAL_CONFIRM=1 make py-sanity-real"
 
 py-%:
 	@$(MAKE) -C gsd-browser $*
