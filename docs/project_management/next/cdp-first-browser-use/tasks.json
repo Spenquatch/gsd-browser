@@ -579,7 +579,7 @@
       "name": "Take-control target robustness (code)",
       "type": "code",
       "phase": "C6",
-      "status": "pending",
+      "status": "in_progress",
       "description": "Ensure ctrl input dispatch targets the browser-use active page/target and strengthen pause/queue semantics.",
       "references": [
         "docs/adr/ADR-0003-cdp-first-browser-use-integration.md",
