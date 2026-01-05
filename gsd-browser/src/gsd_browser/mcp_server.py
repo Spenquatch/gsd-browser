@@ -175,6 +175,54 @@ def _history_step_count(history: Any) -> int:
         return 0
 
 
+def _normalize_history_result(value: Any) -> str | None:
+    if value is None:
+        return None
+    if isinstance(value, str):
+        result = value.strip()
+    else:
+        result = str(value).strip()
+    return result or None
+
+
+def _history_error_messages(history: Any, *, max_items: int = 8) -> list[str]:
+    errors_attr = getattr(history, "errors", None)
+    if callable(errors_attr):
+        errors_iter = errors_attr()
+    else:
+        errors_iter = errors_attr
+
+    if errors_iter is None:
+        return []
+
+    messages: list[str] = []
+    try:
+        iterator = iter(errors_iter)
+    except TypeError:
+        iterator = iter([errors_iter])
+
+    for err in iterator:
+        if not err:
+            continue
+        text = str(err).strip()
+        if not text:
+            continue
+        text = _truncate(text, max_len=400)
+        if text not in messages:
+            messages.append(text)
+        if len(messages) >= max_items:
+            break
+    return messages
+
+
+def _dedupe(items: list[str]) -> list[str]:
+    unique: list[str] = []
+    for item in items:
+        if item and item not in unique:
+            unique.append(item)
+    return unique
+
+
 def _decode_base64_image(data: str) -> bytes | None:
     if not data:
         return None
@@ -227,6 +275,9 @@ async def web_eval_agent(
     ctx: Context,
     headless_browser: bool = False,
     mode: str | None = None,
+    budget_s: float | None = None,
+    max_steps: int | None = None,
+    step_timeout_s: float | None = None,
 ) -> list[TextContent]:
     """Evaluate the user experience / interface of a web application.
 
@@ -250,6 +301,9 @@ async def web_eval_agent(
         mode: Optional. Response mode:
           - "compact": minimal summary + references (default for non-localhost)
           - "dev": includes bounded console/network excerpts (default for localhost/127.0.0.1)
+        budget_s: Optional. Tool-level budget in seconds (overall wall-clock).
+        max_steps: Optional. Maximum number of browser-use steps.
+        step_timeout_s: Optional. Per-step timeout in seconds.
 
     Returns:
         list[TextContent]: A single JSON payload encoded as text (no inline images).
@@ -273,6 +327,48 @@ async def web_eval_agent(
     session_id = str(uuid.uuid4())
     started = datetime.now(UTC).timestamp()
     normalized_url = _normalize_url(url)
+
+    warnings: list[str] = []
+    default_budget_s = float(getattr(settings, "web_eval_budget_s", 60.0))
+    default_max_steps = int(getattr(settings, "web_eval_max_steps", 25))
+    default_step_timeout_s = float(getattr(settings, "web_eval_step_timeout_s", 15.0))
+    try:
+        effective_budget_s = default_budget_s if budget_s is None else float(budget_s)
+        effective_max_steps = default_max_steps if max_steps is None else int(max_steps)
+        effective_step_timeout_s = (
+            default_step_timeout_s if step_timeout_s is None else float(step_timeout_s)
+        )
+        if effective_budget_s <= 0:
+            raise ValueError("budget_s must be > 0")
+        if effective_max_steps <= 0:
+            raise ValueError("max_steps must be > 0")
+        if effective_step_timeout_s <= 0:
+            raise ValueError("step_timeout_s must be > 0")
+    except (TypeError, ValueError) as exc:
+        payload = {
+            "version": "gsd-browser.web_eval_agent.v1",
+            "session_id": session_id,
+            "tool_call_id": tool_call_id,
+            "url": normalized_url,
+            "task": task,
+            "mode": str(mode) if mode is not None else None,
+            "status": "failed",
+            "result": None,
+            "summary": _truncate(str(exc), max_len=2000),
+            "timeouts": {
+                "budget_s": default_budget_s,
+                "step_timeout_s": default_step_timeout_s,
+                "max_steps": default_max_steps,
+                "timed_out": False,
+            },
+            "warnings": [],
+            "artifacts": {"screenshots": 0, "stream_samples": 0, "run_events": 0},
+            "next_actions": [
+                "Pass positive budget_s/max_steps/step_timeout_s values.",
+                f"Open dashboard: http://{DEFAULT_DASHBOARD_HOST}:{DEFAULT_DASHBOARD_PORT}",
+            ],
+        }
+        return [TextContent(type="text", text=json.dumps(payload, ensure_ascii=False))]
     try:
         selected_mode = _select_web_eval_agent_mode(normalized_url=normalized_url, explicit=mode)
     except ValueError as exc:
@@ -286,6 +382,13 @@ async def web_eval_agent(
             "status": "failed",
             "result": None,
             "summary": _truncate(str(exc), max_len=2000),
+            "timeouts": {
+                "budget_s": effective_budget_s,
+                "step_timeout_s": effective_step_timeout_s,
+                "max_steps": effective_max_steps,
+                "timed_out": False,
+            },
+            "warnings": warnings,
             "artifacts": {"screenshots": 0, "stream_samples": 0, "run_events": 0},
             "next_actions": [
                 "Use mode='compact' or mode='dev' to override response behavior.",
@@ -319,11 +422,10 @@ async def web_eval_agent(
 
     state_path = _browser_state_path()
     storage_state: str | None = str(state_path) if state_path.exists() else None
+    step_screenshot_count = 0
 
     try:
         Agent, BrowserSession = _load_browser_use_classes()
-
-        step_screenshot_count = 0
         cdp_capture = CDPRunEventCapture(store=run_events, session_id=session_id)
 
         async def record_step_screenshot(*args: Any, **kwargs: Any) -> None:
@@ -458,24 +560,47 @@ async def web_eval_agent(
             except Exception:  # noqa: BLE001
                 logger.debug("Failed to record agent step event", exc_info=True)
 
-        llm = create_browser_use_llm(settings)
+        llm = create_browser_use_llm(settings, timeout_s=effective_step_timeout_s)
         browser_session = BrowserSession(headless=headless_browser, storage_state=storage_state)
 
         active_session_set = False
         cdp_dispatcher: CDPInputDispatcher | None = None
-        try:
-            await browser_session.start()
-            if control_state is not None:
-                set_active_session = getattr(control_state, "set_active_session", None)
-                if callable(set_active_session):
-                    set_active_session(session_id=session_id)
-                    active_session_set = True
-            cdp_client = getattr(browser_session, "cdp_client", None)
-            if cdp_client is not None:
-                cdp_dispatcher = CDPInputDispatcher(cdp_client=cdp_client)
-            cdp_capture.attach(browser_session.cdp_client)
-        except Exception:  # noqa: BLE001
-            logger.debug("Failed to attach CDP event capture", exc_info=True)
+        if control_state is not None:
+            set_active_session = getattr(control_state, "set_active_session", None)
+            if callable(set_active_session):
+                set_active_session(session_id=session_id)
+                active_session_set = True
+
+        cdp_attached = False
+
+        async def attach_cdp_when_ready() -> None:
+            nonlocal cdp_dispatcher, cdp_attached
+            while True:
+                cdp_client = getattr(browser_session, "cdp_client", None)
+                if cdp_client is not None:
+                    try:
+                        cdp_dispatcher = CDPInputDispatcher(cdp_client=cdp_client)
+                        cdp_capture.attach(cdp_client)
+                        cdp_attached = True
+                    except Exception:  # noqa: BLE001
+                        logger.debug("Failed to attach CDP event capture", exc_info=True)
+                    return
+                await asyncio.sleep(0.05)
+
+        cdp_attach_task = asyncio.create_task(attach_cdp_when_ready())
+
+        async def stop_browser_session() -> None:
+            stop = getattr(browser_session, "stop", None)
+            close = getattr(browser_session, "close", None)
+            target = stop if callable(stop) else close if callable(close) else None
+            if target is None:
+                return
+            try:
+                result = target()
+                if inspect.isawaitable(result):
+                    await result
+            except Exception:  # noqa: BLE001
+                logger.debug("Failed to stop browser_use session", exc_info=True)
 
         async def pause_gate(*_: Any, **__: Any) -> None:
             if control_state is None:
@@ -529,66 +654,137 @@ async def web_eval_agent(
                     },
                 )
 
-        agent_task = f"{task}\n\nURL: {normalized_url}"
-        agent_kwargs: dict[str, Any] = {
-            "task": agent_task,
-            "llm": llm,
-            "browser_session": browser_session,
-        }
+        history: Any | None = None
         try:
-            signature = inspect.signature(Agent)
-            if "register_new_step_callback" in signature.parameters:
-                agent_kwargs["register_new_step_callback"] = on_new_step
-        except (TypeError, ValueError):
-            pass
-
-        agent = Agent(**agent_kwargs)
-        register_callback = getattr(agent, "register_new_step_callback", None)
-        if callable(register_callback):
+            agent_task = f"{task}\n\nURL: {normalized_url}"
+            agent_kwargs: dict[str, Any] = {
+                "task": agent_task,
+                "llm": llm,
+                "browser_session": browser_session,
+            }
             try:
-                callback_sig = inspect.signature(register_callback)
-                if len(callback_sig.parameters) == 1:
-                    register_callback(on_new_step)
+                signature = inspect.signature(Agent)
+                has_kwargs = any(
+                    param.kind is inspect.Parameter.VAR_KEYWORD
+                    for param in signature.parameters.values()
+                )
+                if "register_new_step_callback" in signature.parameters:
+                    agent_kwargs["register_new_step_callback"] = on_new_step
+                if "max_steps" in signature.parameters or has_kwargs:
+                    agent_kwargs["max_steps"] = effective_max_steps
+                else:
+                    warnings.append(
+                        "browser-use Agent does not support max_steps; default not enforced"
+                    )
+                if "step_timeout" in signature.parameters or has_kwargs:
+                    agent_kwargs["step_timeout"] = effective_step_timeout_s
+                else:
+                    warnings.append(
+                        "browser-use Agent does not support step_timeout; default not enforced"
+                    )
+                if "llm_timeout" in signature.parameters or has_kwargs:
+                    agent_kwargs["llm_timeout"] = effective_step_timeout_s
             except (TypeError, ValueError):
                 pass
 
-        run_kwargs: dict[str, Any] = {}
-        try:
-            signature = inspect.signature(agent.run)
-            has_kwargs = any(
-                param.kind is inspect.Parameter.VAR_KEYWORD
-                for param in signature.parameters.values()
-            )
-            if "on_step_end" in signature.parameters or has_kwargs:
-                run_kwargs["on_step_end"] = pause_gate
-        except (TypeError, ValueError):
-            run_kwargs["on_step_end"] = pause_gate
+            agent = Agent(**agent_kwargs)
+            register_callback = getattr(agent, "register_new_step_callback", None)
+            if callable(register_callback):
+                try:
+                    callback_sig = inspect.signature(register_callback)
+                    if len(callback_sig.parameters) == 1:
+                        register_callback(on_new_step)
+                except (TypeError, ValueError):
+                    pass
 
-        try:
-            history = await agent.run(**run_kwargs)
-        finally:
+            run_kwargs: dict[str, Any] = {}
             try:
-                cdp_capture.detach(browser_session.cdp_client)
+                signature = inspect.signature(agent.run)
+                has_kwargs = any(
+                    param.kind is inspect.Parameter.VAR_KEYWORD
+                    for param in signature.parameters.values()
+                )
+                if "on_step_end" in signature.parameters or has_kwargs:
+                    run_kwargs["on_step_end"] = pause_gate
+                if "max_steps" in signature.parameters or has_kwargs:
+                    run_kwargs.setdefault("max_steps", effective_max_steps)
+                if "step_timeout" in signature.parameters or has_kwargs:
+                    run_kwargs.setdefault("step_timeout", effective_step_timeout_s)
+            except (TypeError, ValueError):
+                run_kwargs["on_step_end"] = pause_gate
+
+            elapsed_s = max(0.0, datetime.now(UTC).timestamp() - started)
+            remaining_budget_s = max(0.1, effective_budget_s - elapsed_s)
+            async with asyncio.timeout(remaining_budget_s):
+                history = await agent.run(**run_kwargs)
+        finally:
+            cdp_attach_task.cancel()
+            try:
+                await cdp_attach_task
+            except asyncio.CancelledError:
+                pass
             except Exception:  # noqa: BLE001
-                logger.debug("Failed to detach CDP event capture", exc_info=True)
+                logger.debug("Failed to wait for CDP attach task", exc_info=True)
+
+            if cdp_attached:
+                try:
+                    cdp_client = getattr(browser_session, "cdp_client", None)
+                    if cdp_client is not None:
+                        cdp_capture.detach(cdp_client)
+                except Exception:  # noqa: BLE001
+                    logger.debug("Failed to detach CDP event capture", exc_info=True)
+
             if control_state is not None and active_session_set:
                 clear_active_session = getattr(control_state, "clear_active_session", None)
                 if callable(clear_active_session):
                     clear_active_session(session_id=session_id)
 
-        result = _history_final_result(history)
+            await asyncio.shield(stop_browser_session())
+
+        if history is None:
+            raise RuntimeError("browser-use run did not produce history")
+
+        result = _normalize_history_result(_history_final_result(history))
         error_count = _history_error_count(history)
-        has_errors = _history_has_errors(history)
+        steps = _history_step_count(history)
+        warnings.extend(_history_error_messages(history, max_items=8))
+        warnings = _dedupe(warnings)[:20]
 
-        if result is not None:
-            status = "partial" if has_errors else "success"
-        else:
-            status = "failed" if has_errors else "partial"
+        timed_out = False
+        if result is None:
+            if steps >= effective_max_steps:
+                timed_out = True
+            elif any("timeout" in warning.lower() for warning in warnings):
+                timed_out = True
 
-        summary = (
-            f"browser_use_steps={_history_step_count(history)} "
-            f"errors={error_count} "
-            f"result_present={result is not None}"
+        status = "success" if result is not None else "failed"
+
+        judgement = getattr(history, "judgement", None)
+        if result is not None and callable(judgement):
+            try:
+                judgement_value = judgement()
+            except Exception:  # noqa: BLE001
+                judgement_value = None
+            for flag, label in (
+                ("impossible_task", "impossible_task"),
+                ("reached_captcha", "reached_captcha"),
+            ):
+                value = (
+                    getattr(judgement_value, flag, None) if judgement_value is not None else None
+                )
+                if isinstance(value, bool) and value:
+                    status = "partial"
+                    warnings = _dedupe([*warnings, f"partial_reason={label}"])[:20]
+                    break
+
+        summary = _truncate(
+            (
+                f"browser_use_steps={steps} "
+                f"errors={error_count} "
+                f"warnings={len(warnings)} "
+                f"timed_out={timed_out}"
+            ),
+            max_len=2000,
         )
         payload = {
             "version": "gsd-browser.web_eval_agent.v1",
@@ -599,7 +795,14 @@ async def web_eval_agent(
             "mode": selected_mode,
             "status": status,
             "result": result,
-            "summary": _truncate(summary, max_len=2000),
+            "summary": summary,
+            "timeouts": {
+                "budget_s": effective_budget_s,
+                "step_timeout_s": effective_step_timeout_s,
+                "max_steps": effective_max_steps,
+                "timed_out": timed_out,
+            },
+            "warnings": warnings,
             "artifacts": {
                 "screenshots": step_screenshot_count,
                 "stream_samples": 0,
@@ -645,14 +848,124 @@ async def web_eval_agent(
         )
 
         return [TextContent(type="text", text=json.dumps(payload, ensure_ascii=False))]
+    except TimeoutError:
+        duration_s = max(0.0, datetime.now(UTC).timestamp() - started)
+        warnings = _dedupe([*warnings, f"timed_out_after_s={effective_budget_s:g}"])[:20]
+
+        logger.info(
+            "web_eval_agent timed out",
+            extra={
+                "tool_call_id": tool_call_id,
+                "session_id": session_id,
+                "url": normalized_url,
+                "duration_s": duration_s,
+            },
+        )
+
+        payload = {
+            "version": "gsd-browser.web_eval_agent.v1",
+            "session_id": session_id,
+            "tool_call_id": tool_call_id,
+            "url": normalized_url,
+            "task": task,
+            "mode": selected_mode,
+            "status": "failed",
+            "result": None,
+            "summary": _truncate(
+                f"Tool budget exceeded (budget_s={effective_budget_s:g}).",
+                max_len=2000,
+            ),
+            "timeouts": {
+                "budget_s": effective_budget_s,
+                "step_timeout_s": effective_step_timeout_s,
+                "max_steps": effective_max_steps,
+                "timed_out": True,
+            },
+            "warnings": warnings,
+            "artifacts": {
+                "screenshots": step_screenshot_count,
+                "stream_samples": 0,
+                "run_events": (
+                    getattr(run_events, "get_counts", lambda _sid: {"total": 0})(session_id).get(
+                        "total", 0
+                    )
+                    if run_events is not None
+                    else 0
+                ),
+            },
+            "next_actions": [
+                "Increase budget_s (or reduce task scope) and retry.",
+                (
+                    "Use get_run_events(session_id="
+                    f"'{session_id}', event_types=['console','network'], has_error=true, last_n=50)"
+                ),
+                (
+                    "Use get_screenshots(session_id="
+                    f"'{session_id}', screenshot_type='agent_step', last_n=5)"
+                ),
+                f"Open dashboard: http://{DEFAULT_DASHBOARD_HOST}:{DEFAULT_DASHBOARD_PORT}",
+            ],
+        }
+        return [TextContent(type="text", text=json.dumps(payload, ensure_ascii=False))]
+    except asyncio.CancelledError:
+        duration_s = max(0.0, datetime.now(UTC).timestamp() - started)
+        warnings = _dedupe([*warnings, "cancelled"])[:20]
+
+        logger.info(
+            "web_eval_agent cancelled",
+            extra={
+                "tool_call_id": tool_call_id,
+                "session_id": session_id,
+                "url": normalized_url,
+                "duration_s": duration_s,
+            },
+        )
+
+        payload = {
+            "version": "gsd-browser.web_eval_agent.v1",
+            "session_id": session_id,
+            "tool_call_id": tool_call_id,
+            "url": normalized_url,
+            "task": task,
+            "mode": selected_mode,
+            "status": "failed",
+            "result": None,
+            "summary": _truncate("Cancelled.", max_len=2000),
+            "timeouts": {
+                "budget_s": effective_budget_s,
+                "step_timeout_s": effective_step_timeout_s,
+                "max_steps": effective_max_steps,
+                "timed_out": False,
+            },
+            "warnings": warnings,
+            "artifacts": {
+                "screenshots": step_screenshot_count,
+                "stream_samples": 0,
+                "run_events": (
+                    getattr(run_events, "get_counts", lambda _sid: {"total": 0})(session_id).get(
+                        "total", 0
+                    )
+                    if run_events is not None
+                    else 0
+                ),
+            },
+            "next_actions": [
+                "Retry the tool call.",
+                f"Open dashboard: http://{DEFAULT_DASHBOARD_HOST}:{DEFAULT_DASHBOARD_PORT}",
+            ],
+        }
+        return [TextContent(type="text", text=json.dumps(payload, ensure_ascii=False))]
     except Exception as exc:  # noqa: BLE001
+        duration_s = max(0.0, datetime.now(UTC).timestamp() - started)
+        warnings = _dedupe([*warnings, _truncate(f"{type(exc).__name__}: {exc}", max_len=400)])[:20]
+
         logger.exception(
             "web_eval_agent failed",
             extra={
                 "tool_call_id": tool_call_id,
                 "session_id": session_id,
                 "url": normalized_url,
-                "duration_s": max(0.0, datetime.now(UTC).timestamp() - started),
+                "duration_s": duration_s,
             },
         )
         payload = {
@@ -665,9 +978,33 @@ async def web_eval_agent(
             "status": "failed",
             "result": None,
             "summary": _truncate(f"{type(exc).__name__}: {exc}", max_len=2000),
-            "artifacts": {"screenshots": 0, "stream_samples": 0, "run_events": 0},
+            "timeouts": {
+                "budget_s": effective_budget_s,
+                "step_timeout_s": effective_step_timeout_s,
+                "max_steps": effective_max_steps,
+                "timed_out": False,
+            },
+            "warnings": warnings,
+            "artifacts": {
+                "screenshots": step_screenshot_count,
+                "stream_samples": 0,
+                "run_events": (
+                    getattr(run_events, "get_counts", lambda _sid: {"total": 0})(session_id).get(
+                        "total", 0
+                    )
+                    if run_events is not None
+                    else 0
+                ),
+            },
             "next_actions": [
-                "Use get_screenshots(screenshot_type='agent_step', last_n=5, include_images=false)",
+                (
+                    "Use get_run_events(session_id="
+                    f"'{session_id}', event_types=['console','network'], has_error=true, last_n=50)"
+                ),
+                (
+                    "Use get_screenshots(session_id="
+                    f"'{session_id}', screenshot_type='agent_step', last_n=5)"
+                ),
                 f"Open dashboard: http://{DEFAULT_DASHBOARD_HOST}:{DEFAULT_DASHBOARD_PORT}",
             ],
         }
