@@ -1,0 +1,10 @@
+[
+  {
+    "event_type": "network",
+    "has_error": true,
+    "summary": "GET https://example.test/ -> 403",
+    "details": {
+      "status": 403
+    }
+  }
+]

@@ -1,0 +1,18 @@
+[
+  {
+    "event_type": "console",
+    "has_error": false,
+    "summary": "info: starting scenario",
+    "details": {
+      "level": "info"
+    }
+  },
+  {
+    "event_type": "network",
+    "has_error": false,
+    "summary": "GET https://example.test/ -> 200",
+    "details": {
+      "status": 200
+    }
+  }
+]

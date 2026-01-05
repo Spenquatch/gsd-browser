@@ -1,0 +1,10 @@
+[
+  {
+    "event_type": "console",
+    "has_error": true,
+    "summary": "ReferenceError: foo is not defined",
+    "details": {
+      "level": "error"
+    }
+  }
+]
