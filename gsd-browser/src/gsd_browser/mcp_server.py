@@ -872,7 +872,7 @@ async def web_eval_agent(
             "status": "failed",
             "result": None,
             "summary": _truncate(
-                f"Tool budget exceeded (budget_s={effective_budget_s:g}).",
+                f"Timeout: tool budget exceeded (budget_s={effective_budget_s:g}).",
                 max_len=2000,
             ),
             "timeouts": {
