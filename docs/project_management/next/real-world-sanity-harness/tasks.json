@@ -348,7 +348,7 @@
       "name": "Quality gates ergonomics (code)",
       "type": "code",
       "phase": "R4",
-      "status": "pending",
+      "status": "in_progress",
       "description": "Optional ergonomics like a Makefile target to run the harness; keep the gate opt-in and out of CI.",
       "references": [
         "docs/adr/ADR-0004-real-world-sanity-harness-and-quality-gates.md",
