@@ -656,7 +656,7 @@
       "name": "Take-control target robustness (integration)",
       "type": "integration",
       "phase": "C6",
-      "status": "in_progress",
+      "status": "completed",
       "description": "Merge C6 code+tests, reconcile to spec, and make the slice green.",
       "references": [
         "docs/project_management/next/cdp-first-browser-use/plan.md",

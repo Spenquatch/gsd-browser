@@ -276,3 +276,12 @@ Only START/END entries. Docs edits happen on the orchestration branch only.
 - Worktree: wt/cf-c6-control-target-integ
 - Commands planned: uv run ruff format --check; uv run ruff check; uv run pytest; make smoke
 - Notes: `git pull --ff-only` cannot run as written because `feat/cdp-first-browser-use` has no configured remote/upstream locally.
+
+## C6-integ END
+- Timestamp: 2026-01-05T04:15:12Z
+- Role: integration
+- Worktree: wt/cf-c6-control-target-integ
+- Branch: cf-c6-control-target-integ
+- Final commit: 2b7371a
+- Commands executed: (in wt/cf-c6-control-target-integ/gsd-browser) make dev (pass; created .venv and installed deps); uv run ruff format --check (pass; 52 files already formatted); uv run ruff check (pass; All checks passed!); uv run pytest (pass; 83 passed in 1.13s); make smoke (pass; 7 passed in 0.27s + CLI round trip "hello")
+- Result: pass
