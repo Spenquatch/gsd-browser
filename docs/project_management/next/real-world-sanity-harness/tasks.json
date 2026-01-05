@@ -309,7 +309,7 @@
       "name": "Report formatting (integration)",
       "type": "integration",
       "phase": "R3",
-      "status": "in_progress",
+      "status": "completed",
       "description": "Merge R3 code+tests, reconcile to spec, and make the slice green.",
       "references": [
         "docs/project_management/next/real-world-sanity-harness/plan.md",
