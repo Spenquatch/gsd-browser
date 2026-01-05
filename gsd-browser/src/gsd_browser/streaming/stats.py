@@ -14,6 +14,11 @@ class StreamingStats:
     streaming_mode: StreamingMode
     frame_queue_max: int
 
+    cdp_available: bool = False
+    active_run_session_id: str | None = None
+    active_cdp_session_id: str | None = None
+    last_cdp_error: str | None = None
+
     frames_received: int = 0
     frames_emitted: int = 0
     frames_dropped: int = 0
@@ -52,10 +57,29 @@ class StreamingStats:
         with self._lock:
             self.sampler_frames_stored += 1
 
+    def note_cdp_attached(self, *, run_session_id: str, cdp_session_id: str) -> None:
+        with self._lock:
+            self.cdp_available = True
+            self.active_run_session_id = run_session_id
+            self.active_cdp_session_id = cdp_session_id
+            self.last_cdp_error = None
+
+    def note_cdp_detached(self, *, error: str | None = None) -> None:
+        with self._lock:
+            self.cdp_available = False
+            self.active_cdp_session_id = None
+            self.active_run_session_id = None
+            if error:
+                self.last_cdp_error = error
+
     def snapshot(self) -> dict[str, Any]:
         with self._lock:
             return {
                 "streaming_mode": self.streaming_mode,
+                "cdp_available": self.cdp_available,
+                "active_run_session_id": self.active_run_session_id,
+                "active_cdp_session_id": self.active_cdp_session_id,
+                "last_cdp_error": self.last_cdp_error,
                 "frame_latency_ms": self.last_frame_latency_ms,
                 "frames_dropped": self.frames_dropped,
                 "last_frame_ts": self.last_frame_emitted_ts,

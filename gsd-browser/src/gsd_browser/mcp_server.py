@@ -8,6 +8,7 @@ import inspect
 import json
 import logging
 import os
+import time
 import traceback
 import uuid
 from datetime import UTC, datetime
@@ -364,9 +365,10 @@ async def web_eval_agent(
 
     dashboard_fn = getattr(runtime, "dashboard", None)
     dashboard = dashboard_fn() if callable(dashboard_fn) else None
-    control_state = (
-        getattr(getattr(dashboard, "runtime", None), "control_state", None) if dashboard else None
-    )
+    streaming_runtime = getattr(dashboard, "runtime", None) if dashboard else None
+    control_state = getattr(streaming_runtime, "control_state", None) if streaming_runtime else None
+    cdp_streamer = getattr(streaming_runtime, "cdp_streamer", None) if streaming_runtime else None
+    streaming_stats = getattr(streaming_runtime, "stats", None) if streaming_runtime else None
 
     tool_call_id = str(uuid.uuid4())
     session_id = str(uuid.uuid4())
@@ -474,6 +476,17 @@ async def web_eval_agent(
     last_page_title: str | None = None
     last_browser_errors: list[Any] = []
     last_has_error = False
+    streaming_disabled_reason: str | None = None
+
+    def _count_stream_samples() -> int:
+        screenshots = getattr(runtime, "screenshots", None)
+        count = getattr(screenshots, "count_screenshots", None) if screenshots is not None else None
+        if not callable(count):
+            return 0
+        try:
+            return int(count(screenshot_type="stream_sample", session_id=session_id))
+        except Exception:  # noqa: BLE001
+            return 0
 
     try:
         Agent, BrowserSession = _load_browser_use_classes()
@@ -791,6 +804,8 @@ async def web_eval_agent(
         llm = llms.primary
         browser_session = BrowserSession(headless=headless_browser, storage_state=storage_state)
 
+        streaming_attach_task: asyncio.Task[None] | None = None
+
         active_session_set = False
         cdp_dispatcher: CDPInputDispatcher | None = None
         if control_state is not None:
@@ -800,6 +815,38 @@ async def web_eval_agent(
                 active_session_set = True
 
         cdp_attached = False
+
+        async def attach_streaming_when_ready() -> None:
+            nonlocal streaming_disabled_reason
+            if cdp_streamer is None:
+                return
+            if getattr(streaming_stats, "streaming_mode", None) != "cdp":
+                return
+
+            started_wait = time.time()
+            while True:
+                if not hasattr(browser_session, "cdp_client"):
+                    return
+                if getattr(browser_session, "cdp_client", None) is not None:
+                    break
+                if time.time() - started_wait > 10.0:
+                    streaming_disabled_reason = "cdp_not_ready"
+                    note_detached = getattr(streaming_stats, "note_cdp_detached", None)
+                    if callable(note_detached):
+                        note_detached(error=streaming_disabled_reason)
+                    return
+                await asyncio.sleep(0.05)
+
+            try:
+                start_browser_use = getattr(cdp_streamer, "start_browser_use", None)
+                if not callable(start_browser_use):
+                    raise RuntimeError("cdp_streamer.start_browser_use unavailable")
+                await start_browser_use(browser_session=browser_session, session_id=session_id)
+            except Exception as exc:  # noqa: BLE001
+                streaming_disabled_reason = _truncate(f"{type(exc).__name__}: {exc}", max_len=400)
+                note_detached = getattr(streaming_stats, "note_cdp_detached", None)
+                if callable(note_detached):
+                    note_detached(error=streaming_disabled_reason)
 
         async def attach_cdp_when_ready() -> None:
             nonlocal cdp_dispatcher, cdp_attached
@@ -816,6 +863,7 @@ async def web_eval_agent(
                 await asyncio.sleep(0.05)
 
         cdp_attach_task = asyncio.create_task(attach_cdp_when_ready())
+        streaming_attach_task = asyncio.create_task(attach_streaming_when_ready())
 
         async def stop_browser_session() -> None:
             stop = getattr(browser_session, "stop", None)
@@ -968,6 +1016,23 @@ async def web_eval_agent(
             except Exception:  # noqa: BLE001
                 logger.debug("Failed to wait for CDP attach task", exc_info=True)
 
+            if streaming_attach_task is not None:
+                streaming_attach_task.cancel()
+                try:
+                    await streaming_attach_task
+                except asyncio.CancelledError:
+                    pass
+                except Exception:  # noqa: BLE001
+                    logger.debug("Failed to wait for streaming attach task", exc_info=True)
+
+            if cdp_streamer is not None:
+                stop_streaming = getattr(cdp_streamer, "stop", None)
+                if callable(stop_streaming):
+                    try:
+                        await asyncio.shield(stop_streaming(session_id=session_id))
+                    except Exception:  # noqa: BLE001
+                        logger.debug("Failed to stop streaming", exc_info=True)
+
             if cdp_attached:
                 try:
                     cdp_client = getattr(browser_session, "cdp_client", None)
@@ -997,6 +1062,10 @@ async def web_eval_agent(
         error_count = _history_error_count(history)
         steps = _history_step_count(history)
         warnings.extend(_history_error_messages(history, max_items=8))
+        if streaming_disabled_reason is not None:
+            warnings.append(
+                _truncate(f"streaming_disabled={streaming_disabled_reason}", max_len=400)
+            )
         if final_notes is not None:
             warnings.append(_truncate(f"final_notes={final_notes}", max_len=400))
         warnings = _dedupe(warnings)[:20]
@@ -1060,7 +1129,7 @@ async def web_eval_agent(
             "warnings": warnings,
             "artifacts": {
                 "screenshots": step_screenshot_count,
-                "stream_samples": 0,
+                "stream_samples": _count_stream_samples(),
                 "run_events": (
                     getattr(run_events, "get_counts", lambda _sid: {"total": 0})(session_id).get(
                         "total", 0
@@ -1139,7 +1208,7 @@ async def web_eval_agent(
             "warnings": warnings,
             "artifacts": {
                 "screenshots": step_screenshot_count,
-                "stream_samples": 0,
+                "stream_samples": _count_stream_samples(),
                 "run_events": (
                     getattr(run_events, "get_counts", lambda _sid: {"total": 0})(session_id).get(
                         "total", 0
@@ -1195,7 +1264,7 @@ async def web_eval_agent(
             "warnings": warnings,
             "artifacts": {
                 "screenshots": step_screenshot_count,
-                "stream_samples": 0,
+                "stream_samples": _count_stream_samples(),
                 "run_events": (
                     getattr(run_events, "get_counts", lambda _sid: {"total": 0})(session_id).get(
                         "total", 0
@@ -1242,7 +1311,7 @@ async def web_eval_agent(
             "warnings": warnings,
             "artifacts": {
                 "screenshots": step_screenshot_count,
-                "stream_samples": 0,
+                "stream_samples": _count_stream_samples(),
                 "run_events": (
                     getattr(run_events, "get_counts", lambda _sid: {"total": 0})(session_id).get(
                         "total", 0
