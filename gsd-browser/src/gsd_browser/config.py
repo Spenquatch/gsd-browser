@@ -25,6 +25,18 @@ class Settings(BaseModel):
     llm_provider: LLMProvider = Field("anthropic", alias="GSD_BROWSER_LLM_PROVIDER")
     model: str = Field("claude-haiku-4-5", alias="GSD_BROWSER_MODEL")
 
+    fallback_llm_provider: LLMProvider | None = Field(
+        None, alias="GSD_BROWSER_FALLBACK_LLM_PROVIDER"
+    )
+    fallback_model: str = Field("", alias="GSD_BROWSER_FALLBACK_MODEL")
+
+    openai_add_schema_to_system_prompt: bool = Field(
+        True, alias="GSD_BROWSER_OPENAI_ADD_SCHEMA_TO_SYSTEM_PROMPT"
+    )
+    openai_dont_force_structured_output: bool = Field(
+        False, alias="GSD_BROWSER_OPENAI_DONT_FORCE_STRUCTURED_OUTPUT"
+    )
+
     anthropic_api_key: str = Field("", alias="ANTHROPIC_API_KEY")
     openai_api_key: str = Field("", alias="OPENAI_API_KEY")
     browser_use_api_key: str = Field("", alias="BROWSER_USE_API_KEY")
@@ -121,11 +133,16 @@ def load_settings(
 
     merged = _build_env_mapping(env)
     llm_provider = normalize_llm_provider(merged.get("GSD_BROWSER_LLM_PROVIDER"))
+    fallback_llm_provider_raw = merged.get("GSD_BROWSER_FALLBACK_LLM_PROVIDER")
+    fallback_llm_provider = (
+        normalize_llm_provider(fallback_llm_provider_raw) if fallback_llm_provider_raw else None
+    )
     streaming_mode = normalize_streaming_mode(merged.get("STREAMING_MODE"))
     streaming_quality = normalize_streaming_quality(merged.get("STREAMING_QUALITY"))
     try:
         payload: dict[str, object] = {
             "GSD_BROWSER_LLM_PROVIDER": llm_provider,
+            "GSD_BROWSER_FALLBACK_LLM_PROVIDER": fallback_llm_provider,
             "STREAMING_MODE": streaming_mode,
             "STREAMING_QUALITY": streaming_quality,
         }
@@ -139,10 +156,28 @@ def load_settings(
             payload["BROWSER_USE_LLM_URL"] = merged["BROWSER_USE_LLM_URL"]
         if merged.get("OLLAMA_HOST") is not None:
             payload["OLLAMA_HOST"] = merged["OLLAMA_HOST"]
-        if merged.get("GSD_BROWSER_MODEL") is not None:
-            payload["GSD_BROWSER_MODEL"] = merged["GSD_BROWSER_MODEL"]
+
+        model_value = merged.get("GSD_BROWSER_MODEL")
+        model_value = model_value.strip() if isinstance(model_value, str) else None
+        if model_value:
+            payload["GSD_BROWSER_MODEL"] = model_value
         elif llm_provider == "chatbrowseruse":
             payload["GSD_BROWSER_MODEL"] = "bu-latest"
+        elif llm_provider == "openai":
+            payload["GSD_BROWSER_MODEL"] = "gpt-4o-mini"
+        elif llm_provider == "ollama":
+            payload["GSD_BROWSER_MODEL"] = "llama3.2"
+
+        if merged.get("GSD_BROWSER_FALLBACK_MODEL") is not None:
+            payload["GSD_BROWSER_FALLBACK_MODEL"] = merged["GSD_BROWSER_FALLBACK_MODEL"]
+        if merged.get("GSD_BROWSER_OPENAI_ADD_SCHEMA_TO_SYSTEM_PROMPT") is not None:
+            payload["GSD_BROWSER_OPENAI_ADD_SCHEMA_TO_SYSTEM_PROMPT"] = merged[
+                "GSD_BROWSER_OPENAI_ADD_SCHEMA_TO_SYSTEM_PROMPT"
+            ]
+        if merged.get("GSD_BROWSER_OPENAI_DONT_FORCE_STRUCTURED_OUTPUT") is not None:
+            payload["GSD_BROWSER_OPENAI_DONT_FORCE_STRUCTURED_OUTPUT"] = merged[
+                "GSD_BROWSER_OPENAI_DONT_FORCE_STRUCTURED_OUTPUT"
+            ]
         if merged.get("LOG_LEVEL") is not None:
             payload["LOG_LEVEL"] = merged["LOG_LEVEL"]
         if merged.get("GSD_BROWSER_JSON_LOGS") is not None:
