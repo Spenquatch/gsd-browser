@@ -52,3 +52,10 @@ Only START/END entries. Docs edits happen on the orchestration branch only.
 - Worktree: wt/cf-c2-provider-prompt-code
 - Commands planned: uv run ruff format --check; uv run ruff check
 - Notes: `git pull --ff-only` failed because `feat/cdp-first-browser-use` has no upstream tracking branch configured locally.
+
+## C2-test START
+- Timestamp: 2026-01-05T01:21:11Z
+- Role: test
+- Worktree: wt/cf-c2-provider-prompt-test
+- Commands planned: uv run ruff format --check; uv run pytest gsd-browser/tests -k c2
+- Notes: Local repo has no configured git remote/upstream for feat/cdp-first-browser-use, so git pull --ff-only cannot run as written.
