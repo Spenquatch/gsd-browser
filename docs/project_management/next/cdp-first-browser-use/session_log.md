@@ -132,3 +132,12 @@ Only START/END entries. Docs edits happen on the orchestration branch only.
 - Worktree: wt/cf-c3-screenshots-integ
 - Commands planned: uv run ruff format --check; uv run ruff check; uv run pytest; make smoke
 - Notes: Local repo has no configured git remote/upstream for feat/cdp-first-browser-use, so git pull --ff-only cannot run as written.
+
+## C3-integ END
+- Timestamp: 2026-01-05T02:20:37Z
+- Role: integration
+- Worktree: wt/cf-c3-screenshots-integ
+- Branch: cf-c3-screenshots-integ
+- Final commit: f4d07e8
+- Commands executed: (in wt/cf-c3-screenshots-integ/gsd-browser) make dev (pass; created .venv and installed deps); uv run ruff format --check (pass; 47 files already formatted); uv run ruff check (pass; All checks passed!); uv run pytest (pass; 72 passed in 1.65s); make smoke (pass; 7 passed in 0.27s + CLI round trip "hello")
+- Result: pass
