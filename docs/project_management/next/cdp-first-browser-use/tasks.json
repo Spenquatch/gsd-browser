@@ -235,7 +235,7 @@
       "name": "Step screenshots guarantee (code)",
       "type": "code",
       "phase": "C3",
-      "status": "in_progress",
+      "status": "completed",
       "description": "Ensure at least N step screenshots per run, using a current-page fallback when BrowserStateSummary has no screenshot.",
       "references": [
         "docs/adr/ADR-0003-cdp-first-browser-use-integration.md",
