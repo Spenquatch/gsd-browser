@@ -11,6 +11,27 @@ Only START/END entries. Docs edits happen on the orchestration branch only.
 - Commands planned: uv run ruff format --check; uv run ruff check
 - Notes: Local repo has no configured git remote/upstream for feat/real-world-sanity-harness, so git pull --ff-only cannot run as written.
 
+## R4-code END
+- Timestamp: 2026-01-05T14:56:30Z
+- Role: code
+- Worktree: wt/rw-r4-gates-code
+- Branch: rw-r4-gates-code
+- Commit: 7884be0
+- Commands run:
+  - (cwd=wt/rw-r4-gates-code/gsd-browser) `make dev` (to install ruff into `.venv`)
+  - (cwd=wt/rw-r4-gates-code/gsd-browser) `uv run ruff format --check`
+  - (cwd=wt/rw-r4-gates-code/gsd-browser) `uv run ruff check`
+- Command outputs:
+  - `uv run ruff format --check`:
+    ```
+    54 files already formatted
+    ```
+  - `uv run ruff check`:
+    ```
+    All checks passed!
+    ```
+- Result: pass
+
 ## R1-code START
 - Timestamp: 2026-01-05T13:45:40Z
 - Role: code
