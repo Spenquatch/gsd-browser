@@ -221,3 +221,10 @@ Only START/END entries. Docs edits happen on the orchestration branch only.
 - Commit: e7d5e38
 - Commands executed: (in wt/cf-c5-events-reporting-test/gsd-browser) make dev (pass; installed pytest/ruff); uv run ruff format --check (pass; 49 files already formatted); uv run pytest tests -k c5 (pass; 1 passed, 2 xfailed, 76 deselected in 0.80s)
 - Result: pass (2 xfailed pending C5-code implementation)
+
+## C5-integ START
+- Timestamp: 2026-01-05T03:13:49Z
+- Role: integration
+- Worktree: wt/cf-c5-events-reporting-integ
+- Commands planned: uv run ruff format --check; uv run ruff check; uv run pytest; make smoke
+- Notes: `git pull --ff-only` cannot run as written because `feat/cdp-first-browser-use` has no configured remote/upstream locally.
