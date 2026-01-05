@@ -44,7 +44,7 @@
       "name": "Harness runner + scenario registry (test)",
       "type": "test",
       "phase": "R1",
-      "status": "pending",
+      "status": "in_progress",
       "description": "Unit tests for scenario selection and output tree creation using stubs (no network).",
       "references": [
         "docs/project_management/next/real-world-sanity-harness/plan.md",
