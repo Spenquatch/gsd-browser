@@ -349,7 +349,7 @@
       "name": "CDP-first streaming adapter (code)",
       "type": "code",
       "phase": "C4",
-      "status": "pending",
+      "status": "in_progress",
       "description": "Attach streaming to browser-use CDP sessions and emit frames + store stream_sample artifacts.",
       "references": [
         "docs/adr/ADR-0003-cdp-first-browser-use-integration.md",
