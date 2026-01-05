@@ -20,7 +20,7 @@ from mcp.types import ImageContent, TextContent
 from playwright.async_api import async_playwright
 
 from .config import load_settings
-from .llm.browser_use import create_browser_use_llm
+from .llm.browser_use import create_browser_use_llms
 from .run_event_capture import CDPRunEventCapture
 from .run_event_store import RunEventStore
 from .runtime import DEFAULT_DASHBOARD_HOST, DEFAULT_DASHBOARD_PORT, get_runtime
@@ -233,6 +233,27 @@ def _decode_base64_image(data: str) -> bytes | None:
         return base64.b64decode(payload)
     except Exception:  # noqa: BLE001
         return None
+
+
+def _browser_use_prompt_wrapper(*, base_url: str) -> str:
+    return (
+        "You are an automated browser agent running inside an MCP tool call.\n"
+        f"Base URL: {base_url}\n\n"
+        "Rules:\n"
+        "- Start at the Base URL and stay on the same site unless the task explicitly "
+        "requires leaving.\n"
+        "- If the site requires login and you cannot proceed without credentials, STOP.\n"
+        "- If you encounter a CAPTCHA, bot wall, or similar automated-access restriction, STOP.\n"
+        "- If the task is impossible due to site restrictions (permissions, paywall, blocked "
+        "flows), STOP.\n"
+        "- You may retry a transient UI failure 1–2 times (timeouts, missed clicks), but do not "
+        "loop.\n\n"
+        "When you STOP (or when you finish), respond with a single-line JSON object only:\n"
+        '{"result":"<short user-facing answer>",'
+        '"status":"success|login_required|captcha|impossible_task|failed",'
+        '"notes":"<optional>"}\n'
+        "Do not wrap the JSON in Markdown fences and do not include extra text.\n"
+    )
 
 
 def _agent_output_summary(agent_output: Any) -> str | None:
@@ -560,7 +581,8 @@ async def web_eval_agent(
             except Exception:  # noqa: BLE001
                 logger.debug("Failed to record agent step event", exc_info=True)
 
-        llm = create_browser_use_llm(settings, timeout_s=effective_step_timeout_s)
+        llms = create_browser_use_llms(settings, timeout_s=effective_step_timeout_s)
+        llm = llms.primary
         browser_session = BrowserSession(headless=headless_browser, storage_state=storage_state)
 
         active_session_set = False
@@ -656,11 +678,15 @@ async def web_eval_agent(
 
         history: Any | None = None
         try:
-            agent_task = f"{task}\n\nURL: {normalized_url}"
+            prompt_wrapper = _browser_use_prompt_wrapper(base_url=normalized_url)
             agent_kwargs: dict[str, Any] = {
-                "task": agent_task,
+                "task": task,
                 "llm": llm,
                 "browser_session": browser_session,
+                "fallback_llm": llms.fallback,
+                "extend_system_message": prompt_wrapper,
+                "initial_actions": [{"navigate": {"url": normalized_url, "new_tab": False}}],
+                "max_failures": 2,
             }
             try:
                 signature = inspect.signature(Agent)
@@ -670,6 +696,14 @@ async def web_eval_agent(
                 )
                 if "register_new_step_callback" in signature.parameters:
                     agent_kwargs["register_new_step_callback"] = on_new_step
+                if "extend_system_message" not in signature.parameters and not has_kwargs:
+                    agent_kwargs.pop("extend_system_message", None)
+                if "fallback_llm" not in signature.parameters and not has_kwargs:
+                    agent_kwargs.pop("fallback_llm", None)
+                if "initial_actions" not in signature.parameters and not has_kwargs:
+                    agent_kwargs.pop("initial_actions", None)
+                if "max_failures" not in signature.parameters and not has_kwargs:
+                    agent_kwargs.pop("max_failures", None)
                 if "max_steps" in signature.parameters or has_kwargs:
                     agent_kwargs["max_steps"] = effective_max_steps
                 else:
