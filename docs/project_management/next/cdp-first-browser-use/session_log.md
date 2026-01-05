@@ -29,3 +29,10 @@ Only START/END entries. Docs edits happen on the orchestration branch only.
 - Commit: d9e8dbe
 - Commands executed: (in wt/cf-c1-lifecycle-code/gsd-browser) uv run ruff format --check (pass; 43 files already formatted); uv run ruff check (pass; All checks passed!)
 - Result: pass
+
+## C1-integ START
+- Timestamp: 2026-01-05T01:12:26Z
+- Role: integration
+- Worktree: wt/cf-c1-lifecycle-integ
+- Commands planned: uv run ruff format --check; uv run ruff check; uv run pytest; make smoke
+- Notes: Local repo has no configured git remote/upstream for feat/cdp-first-browser-use, so git pull --ff-only cannot run as written.
