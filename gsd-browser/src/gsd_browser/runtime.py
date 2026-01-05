@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import socket
 import threading
 import time
@@ -22,6 +23,7 @@ class DashboardServer:
     port: int
     runtime: StreamingRuntime
     thread: threading.Thread
+    loop: asyncio.AbstractEventLoop | None
 
 
 class AppRuntime:
@@ -46,6 +48,12 @@ class AppRuntime:
         with self._lock:
             existing = self._dashboard
             if existing is not None and existing.host == host and existing.port == port:
+                loop = existing.loop
+                if loop is not None:
+                    streamer = getattr(existing.runtime, "cdp_streamer", None)
+                    set_emit_loop = getattr(streamer, "set_emit_loop", None)
+                    if callable(set_emit_loop):
+                        set_emit_loop(loop)
                 return existing
 
             effective_settings = settings or load_settings(strict=False)
@@ -53,15 +61,35 @@ class AppRuntime:
                 settings=effective_settings, screenshots=self.screenshots
             )
 
+            loop_ready = threading.Event()
+            loop_holder: dict[str, asyncio.AbstractEventLoop] = {}
+
             thread = threading.Thread(
                 target=_run_uvicorn_in_thread,
-                kwargs={"runtime": runtime, "host": host, "port": port},
+                kwargs={
+                    "runtime": runtime,
+                    "host": host,
+                    "port": port,
+                    "loop_ready": loop_ready,
+                    "loop_holder": loop_holder,
+                },
                 name="gsd-browser-dashboard",
                 daemon=True,
             )
             thread.start()
 
-            server = DashboardServer(host=host, port=port, runtime=runtime, thread=thread)
+            loop: asyncio.AbstractEventLoop | None = None
+            if loop_ready.wait(timeout=startup_timeout_s):
+                loop = loop_holder.get("loop")
+                if loop is not None:
+                    streamer = getattr(runtime, "cdp_streamer", None)
+                    set_emit_loop = getattr(streamer, "set_emit_loop", None)
+                    if callable(set_emit_loop):
+                        set_emit_loop(loop)
+
+            server = DashboardServer(
+                host=host, port=port, runtime=runtime, thread=thread, loop=loop
+            )
             self._dashboard = server
 
         _wait_for_port(host=host, port=port, timeout_s=startup_timeout_s)
@@ -80,10 +108,30 @@ def get_runtime() -> AppRuntime:
         return _RUNTIME
 
 
-def _run_uvicorn_in_thread(*, runtime: StreamingRuntime, host: str, port: int) -> None:
+def _run_uvicorn_in_thread(
+    *,
+    runtime: StreamingRuntime,
+    host: str,
+    port: int,
+    loop_ready: threading.Event,
+    loop_holder: dict[str, asyncio.AbstractEventLoop],
+) -> None:
     import uvicorn
 
-    uvicorn.run(runtime.asgi_app, host=host, port=port, log_level="info", access_log=False)
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    loop_holder["loop"] = loop
+    loop_ready.set()
+
+    config = uvicorn.Config(
+        runtime.asgi_app,
+        host=host,
+        port=port,
+        log_level="info",
+        access_log=False,
+    )
+    server = uvicorn.Server(config)
+    loop.run_until_complete(server.serve())
 
 
 def _wait_for_port(*, host: str, port: int, timeout_s: float) -> None:

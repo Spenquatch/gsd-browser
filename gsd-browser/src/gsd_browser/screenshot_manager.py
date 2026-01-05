@@ -195,6 +195,33 @@ class ScreenshotManager:
         )
         return shot.to_dict(include_images=True)
 
+    def count_screenshots(
+        self,
+        *,
+        screenshot_type: str | None = None,
+        session_id: str | None = None,
+        from_timestamp: float | None = None,
+        has_error: bool | None = None,
+    ) -> int:
+        if screenshot_type == "all":
+            screenshot_type = None
+
+        with self._lock:
+            items = list(self._items)
+
+        total = 0
+        for shot in items:
+            if screenshot_type and shot.screenshot_type != screenshot_type:
+                continue
+            if session_id and shot.session_id != session_id:
+                continue
+            if from_timestamp is not None and shot.timestamp < from_timestamp:
+                continue
+            if has_error is not None and shot.has_error != has_error:
+                continue
+            total += 1
+        return total
+
     def get_screenshots(
         self,
         *,
