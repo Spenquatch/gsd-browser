@@ -45,3 +45,10 @@ Only START/END entries. Docs edits happen on the orchestration branch only.
 - Final commit: b8808fe
 - Commands executed: (in wt/cf-c1-lifecycle-integ/gsd-browser) make dev (pass; installed ruff/pytest); uv run ruff format --check (pass; 44 files already formatted); uv run ruff check (pass; All checks passed!); uv run pytest (pass; 61 passed in 2.49s); make smoke (pass; 7 passed in 0.28s + CLI round trip "hello")
 - Result: pass
+
+## C2-code START
+- Timestamp: 2026-01-05T01:20:36Z
+- Role: code
+- Worktree: wt/cf-c2-provider-prompt-code
+- Commands planned: uv run ruff format --check; uv run ruff check
+- Notes: `git pull --ff-only` failed because `feat/cdp-first-browser-use` has no upstream tracking branch configured locally.

@@ -121,7 +121,7 @@
       "name": "Provider compatibility + prompt wrapper (code)",
       "type": "code",
       "phase": "C2",
-      "status": "pending",
+      "status": "in_progress",
       "description": "Make provider/model policy explicit for browser-use structured output and add a browser-use-native prompt wrapper with stop conditions.",
       "references": [
         "docs/adr/ADR-0003-cdp-first-browser-use-integration.md",
