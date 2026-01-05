@@ -125,3 +125,10 @@ Only START/END entries. Docs edits happen on the orchestration branch only.
 - Commit: f98de3c
 - Commands executed: (in wt/cf-c3-screenshots-test/gsd-browser) make dev (pass; installed pytest/ruff); uv run ruff format --check (pass; 47 files already formatted); uv run pytest tests -k c3 (pass; 4 xfailed, 68 deselected)
 - Result: pass (tests xfail pending C3-code implementation)
+
+## C3-integ START
+- Timestamp: 2026-01-05T02:18:10Z
+- Role: integration
+- Worktree: wt/cf-c3-screenshots-integ
+- Commands planned: uv run ruff format --check; uv run ruff check; uv run pytest; make smoke
+- Notes: Local repo has no configured git remote/upstream for feat/cdp-first-browser-use, so git pull --ff-only cannot run as written.

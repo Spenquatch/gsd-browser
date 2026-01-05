@@ -310,7 +310,7 @@
       "name": "Step screenshots guarantee (integration)",
       "type": "integration",
       "phase": "C3",
-      "status": "pending",
+      "status": "in_progress",
       "description": "Merge C3 code+tests, reconcile to spec, and make the slice green.",
       "references": [
         "docs/project_management/next/cdp-first-browser-use/plan.md",
