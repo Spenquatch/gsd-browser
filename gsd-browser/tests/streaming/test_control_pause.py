@@ -41,7 +41,7 @@ def test_control_state_holder_semantics(monkeypatch: pytest.MonkeyPatch) -> None
     assert state.snapshot() == {
         "holder_sid": "sid-1",
         "held_since_ts": 123.0,
-        "paused": False,
+        "paused": True,
         "active_session_id": None,
     }
 
@@ -49,7 +49,7 @@ def test_control_state_holder_semantics(monkeypatch: pytest.MonkeyPatch) -> None
     assert state.snapshot() == {
         "holder_sid": "sid-1",
         "held_since_ts": 123.0,
-        "paused": False,
+        "paused": True,
         "active_session_id": None,
     }
 
@@ -57,7 +57,7 @@ def test_control_state_holder_semantics(monkeypatch: pytest.MonkeyPatch) -> None
     assert state.snapshot() == {
         "holder_sid": "sid-1",
         "held_since_ts": 123.0,
-        "paused": False,
+        "paused": True,
         "active_session_id": None,
     }
 
@@ -183,7 +183,7 @@ def test_ctrl_socket_handlers_enforce_holder_and_publish_state(
             lambda **_: True,
         )
 
-        runtime = create_streaming_app(settings=Settings())
+        runtime = create_streaming_app(settings=Settings(auto_pause_on_take_control=False))
         capture = _EmitCapture()
         monkeypatch.setattr(runtime.sio, "emit", capture.emit)
 

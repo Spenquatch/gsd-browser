@@ -26,7 +26,15 @@ class _FakeCdpClient:
     def __init__(self) -> None:
         self.calls: list[_CdpCall] = []
 
-    async def send(self, method: str, params: dict[str, Any] | None = None) -> None:
+    async def send(
+        self,
+        method: str,
+        params: dict[str, Any] | None = None,
+        *,
+        session_id: str | None = None,
+        **_: Any,
+    ) -> None:
+        _ = session_id
         self.calls.append(_CdpCall(method=method, params=dict(params or {})))
 
 

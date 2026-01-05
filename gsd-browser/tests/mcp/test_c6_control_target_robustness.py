@@ -289,7 +289,12 @@ def _require_c6_target_dispatch_support() -> None:
     except Exception as exc:  # noqa: BLE001
         pytest.xfail(f"C6 CDP dispatch module unavailable: {exc}")
 
-    dispatcher_sig = inspect.signature(getattr(cdp_mod, "CDPInputDispatcher"))
+    try:
+        dispatcher_cls = cdp_mod.CDPInputDispatcher
+    except AttributeError as exc:
+        pytest.xfail(f"C6 CDP dispatch module unavailable: {exc}")
+
+    dispatcher_sig = inspect.signature(dispatcher_cls)
     if "send" not in dispatcher_sig.parameters:
         pytest.xfail("C6 CDPInputDispatcher(send=...) not implemented yet")
 

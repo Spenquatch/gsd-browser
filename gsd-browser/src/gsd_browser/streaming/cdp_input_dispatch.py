@@ -150,7 +150,28 @@ def _modifier_bit_for_key(*, key: str, code: str | None = None) -> int:
 class CDPInputDispatcher:
     """Stateful CDP input dispatcher to preserve modifier semantics across events."""
 
-    def __init__(self, *, send: Callable[[str, dict[str, Any]], Awaitable[None]]) -> None:
+    def __init__(
+        self,
+        cdp_client: Any | None = None,
+        *,
+        send: Callable[[str, dict[str, Any]], Awaitable[None]] | None = None,
+        cdp_session_id: str | None = None,
+    ) -> None:
+        if send is None:
+            if cdp_client is None:
+                raise TypeError("CDPInputDispatcher requires send=... or cdp_client")
+            session_id = cdp_session_id or "default"
+
+            async def _send(event: str, payload: dict[str, Any]) -> None:
+                await dispatch_ctrl_input_event(
+                    cdp_client=cdp_client,
+                    cdp_session_id=session_id,
+                    event=event,
+                    payload=payload,
+                )
+
+            send = _send
+
         self._send = send
         self._held_modifiers = 0
 

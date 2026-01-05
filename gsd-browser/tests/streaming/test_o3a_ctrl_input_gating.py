@@ -126,7 +126,7 @@ def test_o3a_holder_inputs_require_pause_and_are_logged_when_running(
         )
         caplog.set_level(logging.INFO, logger="test.security")
 
-        runtime = create_streaming_app(settings=Settings())
+        runtime = create_streaming_app(settings=Settings(auto_pause_on_take_control=False))
         handlers = _require_input_handlers(runtime, names=("input_click",))
 
         runtime.control_state.take_control(sid="holder")
