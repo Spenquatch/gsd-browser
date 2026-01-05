@@ -284,3 +284,86 @@ Only START/END entries. Docs edits happen on the orchestration branch only.
 - Worktree: wt/rw-r2-artifacts-integ
 - Commands planned: uv run ruff format --check; uv run ruff check; uv run pytest; make smoke
 - Notes: Local repo has no configured git remote/upstream, so `git pull --ff-only` cannot run as written.
+
+## R2-integ END
+- Timestamp: 2026-01-05T14:22:29Z
+- Role: integration
+- Worktree: wt/rw-r2-artifacts-integ
+- Branch: rw-r2-artifacts-integ
+- Commit: b846f8c
+- Commands run:
+  - (cwd=wt/rw-r2-artifacts-integ/gsd-browser) `uv run ruff format --check`
+  - (cwd=wt/rw-r2-artifacts-integ/gsd-browser) `uv run ruff check`
+  - (cwd=wt/rw-r2-artifacts-integ/gsd-browser) `uv run pytest`
+  - (cwd=wt/rw-r2-artifacts-integ/gsd-browser) `make smoke`
+- Command outputs:
+  - `uv run ruff format --check`:
+    ```
+    Uninstalled 3 packages in 3ms
+    Installed 3 packages in 7ms
+    53 files already formatted
+    ```
+  - `uv run ruff check`:
+    ```
+    All checks passed!
+    ```
+  - `uv run pytest`:
+    ```
+    ============================= test session starts ==============================
+    platform linux -- Python 3.11.14, pytest-9.0.2, pluggy-1.6.0
+    rootdir: /home/inboxgreen/gsd-browser/wt/rw-r2-artifacts-integ/gsd-browser
+    configfile: pyproject.toml
+    testpaths: tests
+    plugins: anyio-4.12.0
+    collected 96 items
+
+    tests/dashboard/test_o3c_dashboard_input_wiring.py ...                   [  3%]
+    tests/dashboard/test_security.py .....                                   [  8%]
+    tests/llm/test_browseruse_providers.py ....                              [ 12%]
+    tests/llm/test_c2_provider_model_validation.py ......                    [ 18%]
+    tests/mcp/test_c1_lifecycle_budgets_status.py ....                       [ 22%]
+    tests/mcp/test_c2_prompt_wrapper.py .                                    [ 23%]
+    tests/mcp/test_c3_step_screenshot_guarantee.py ....                      [ 28%]
+    tests/mcp/test_c5_run_events_ranked_failure_reporting.py ...             [ 31%]
+    tests/mcp/test_c6_control_target_robustness.py ..                        [ 33%]
+    tests/mcp/test_o1a_web_eval_agent_contract.py ..                         [ 35%]
+    tests/mcp/test_o1b_pause_gating_and_screenshots.py ..                    [ 37%]
+    tests/mcp/test_o2a_run_event_store.py ....                               [ 41%]
+    tests/mcp/test_o2b_get_run_events_and_mode.py ......                     [ 47%]
+    tests/mcp/test_screenshot_tool.py ....                                   [ 52%]
+    tests/smoke/test_stdio.py .                                              [ 53%]
+    tests/smoke/test_streaming.py ...                                        [ 56%]
+    tests/smoke/test_telemetry.py ...                                        [ 59%]
+    tests/streaming/test_c4_cdp_first_streaming_adapter.py ....              [ 63%]
+    tests/streaming/test_c6_ctrl_input_gating.py ..                          [ 65%]
+    tests/streaming/test_cdp_wiring.py .....                                 [ 70%]
+    tests/streaming/test_control_pause.py ......                             [ 77%]
+    tests/streaming/test_o3a_ctrl_input_gating.py ....                       [ 81%]
+    tests/streaming/test_o3b_cdp_dispatch_mapping.py .....                   [ 86%]
+    tests/test_real_world_sanity_r2.py .............                         [100%]
+
+    ============================== 96 passed in 2.58s ==============================
+    ```
+  - `make smoke`:
+    ```
+    ./scripts/smoke-test.sh
+    ============================= test session starts ==============================
+    platform linux -- Python 3.11.14, pytest-9.0.2, pluggy-1.6.0
+    rootdir: /home/inboxgreen/gsd-browser/wt/rw-r2-artifacts-integ/gsd-browser
+    configfile: pyproject.toml
+    plugins: anyio-4.12.0
+    collected 7 items
+
+    tests/smoke/test_stdio.py .                                              [ 14%]
+    tests/smoke/test_streaming.py ...                                        [ 57%]
+    tests/smoke/test_telemetry.py ...                                        [100%]
+
+    ============================== 7 passed in 0.28s ===============================
+
+    [smoke] CLI round trip...
+    [INFO] gsd_browser.server: Starting gsd-browser placeholder server
+    [INFO] gsd_browser.server: Once flag set; stopping after single message
+    [INFO] gsd_browser.server: Server exiting
+    hello
+    ```
+- Result: pass
