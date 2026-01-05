@@ -1,6 +1,18 @@
-.PHONY: dev lint test smoke diagnose sanity-real docker-build docker-run
+.PHONY: help dev lint test smoke diagnose sanity-real docker-build docker-run
 
 UV ?= uv
+
+help:
+	@echo ""
+	@echo "gsd-browser (Python) targets:"
+	@echo "  make dev         Create .venv and install deps"
+	@echo "  make lint        Run Ruff lint (requires dev)"
+	@echo "  make test        Run Pytest (requires dev)"
+	@echo "  make smoke       Run smoke test script"
+	@echo "  make sanity-real Run real-world sanity harness (requires dev)"
+	@echo "  make diagnose    Run diagnostics script"
+	@echo "  make docker-build Build docker image"
+	@echo "  make docker-run   Run docker image"
 
 dev:
 	@if command -v $(UV) >/dev/null 2>&1; then \
