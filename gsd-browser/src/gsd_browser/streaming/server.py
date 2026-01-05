@@ -77,10 +77,12 @@ class StreamingRuntime:
 class ControlState:
     """Thread-safe control state shared across the dashboard thread and tool runtime."""
 
-    def __init__(self) -> None:
+    def __init__(self, *, auto_pause_on_take_control: bool = True) -> None:
         self._lock = threading.Lock()
         self._unpaused = threading.Event()
         self._unpaused.set()
+
+        self._auto_pause_on_take_control = bool(auto_pause_on_take_control)
 
         self.holder_sid: str | None = None
         self.held_since_ts: float | None = None
@@ -104,6 +106,9 @@ class ControlState:
         if not session_id_value:
             return
         with self._lock:
+            if self.active_session_id != session_id_value:
+                self._input_events.clear()
+                self._input_seq = 0
             self.active_session_id = session_id_value
 
     def clear_active_session(self, *, session_id: str | None = None) -> None:
@@ -111,6 +116,7 @@ class ControlState:
             if session_id is not None and self.active_session_id != session_id:
                 return
             self.active_session_id = None
+            self._input_events.clear()
 
     def has_active_session(self) -> bool:
         with self._lock:
@@ -143,6 +149,23 @@ class ControlState:
                         "dropped_event": dropped.get("event"),
                         "queued": len(self._input_events),
                         "reason": "buffer_full",
+                    },
+                )
+            if self._input_seq == 1 or self._input_seq % 25 == 0:
+                meta: dict[str, Any] = {"payload_keys": sorted(payload.keys())}
+                if event == "input_type":
+                    text = payload.get("text")
+                    if isinstance(text, str):
+                        meta["text_len"] = len(text)
+                get_security_logger().info(
+                    "ctrl_input_queued",
+                    extra={
+                        "namespace": DEFAULT_CTRL_NAMESPACE,
+                        "sid": sid,
+                        "event": event,
+                        "seq": self._input_seq,
+                        "queued": len(self._input_events),
+                        **meta,
                     },
                 )
             return {"queued": len(self._input_events), "dropped": dropped is not None}
@@ -188,7 +211,8 @@ class ControlState:
             if self.holder_sid is None:
                 self.holder_sid = sid
                 self.held_since_ts = time.time()
-                self._set_paused_locked(False)
+                self._input_events.clear()
+                self._set_paused_locked(self._auto_pause_on_take_control)
 
     def release_control(self, *, sid: str) -> None:
         with self._lock:
@@ -239,7 +263,8 @@ def create_streaming_app(
     event_limiter = FixedWindowRateLimiter(
         window_seconds=60, max_events=auth_config.per_sid_events_per_minute
     )
-    control_state = ControlState()
+    auto_pause_on_take_control = getattr(settings, "auto_pause_on_take_control", True)
+    control_state = ControlState(auto_pause_on_take_control=bool(auto_pause_on_take_control))
     cdp_streamer = CdpScreencastStreamer(
         sio=sio,
         stats=stats,
