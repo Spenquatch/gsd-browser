@@ -5,7 +5,7 @@
       "name": "Harness runner + scenario registry (code)",
       "type": "code",
       "phase": "R1",
-      "status": "pending",
+      "status": "in_progress",
       "description": "Add/standardize the harness runner entrypoint and a curated scenario registry with stable ids.",
       "references": [
         "docs/adr/ADR-0004-real-world-sanity-harness-and-quality-gates.md",
