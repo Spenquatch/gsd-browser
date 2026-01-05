@@ -425,7 +425,7 @@
       "name": "CDP-first streaming adapter (integration)",
       "type": "integration",
       "phase": "C4",
-      "status": "pending",
+      "status": "in_progress",
       "description": "Merge C4 code+tests, reconcile to spec, and make the slice green.",
       "references": [
         "docs/project_management/next/cdp-first-browser-use/plan.md",

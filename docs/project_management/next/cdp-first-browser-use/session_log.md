@@ -173,3 +173,10 @@ Only START/END entries. Docs edits happen on the orchestration branch only.
 - Commit: 3ffa7f8
 - Commands executed: (in wt/cf-c4-streaming-test/gsd-browser) make dev (pass; installed pytest/ruff); uv run ruff format --check (pass; 48 files already formatted); uv run pytest tests -k c4 (pass; 4 xfailed, 72 deselected)
 - Result: pass (tests xfail pending C4-code implementation)
+
+## C4-integ START
+- Timestamp: 2026-01-05T02:43:30Z
+- Role: integration
+- Worktree: wt/cf-c4-streaming-integ
+- Commands planned: uv run ruff format --check; uv run ruff check; uv run pytest; make smoke
+- Notes: `git pull --ff-only` cannot run as written because `feat/cdp-first-browser-use` has no configured remote/upstream locally.
