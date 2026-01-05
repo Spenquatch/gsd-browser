@@ -20,3 +20,12 @@ Only START/END entries. Docs edits happen on the orchestration branch only.
 - Blockers/next steps: 3 tests skip until C1-code adds warnings surfacing + budget/timeouts args; re-run once C1-integ lands to enforce assertions.
 
 - START 2026-01-05T00:51:20Z — C1-code — created local `feat/cdp-first-browser-use` (no git remote configured for `git pull --ff-only`)
+
+## C1-code END
+- Timestamp: 2026-01-05T01:10:12Z
+- Role: code
+- Worktree: wt/cf-c1-lifecycle-code
+- Branch: cf-c1-lifecycle-code
+- Commit: d9e8dbe
+- Commands executed: (in wt/cf-c1-lifecycle-code/gsd-browser) uv run ruff format --check (pass; 43 files already formatted); uv run ruff check (pass; All checks passed!)
+- Result: pass

@@ -5,7 +5,7 @@
       "name": "Lifecycle + budgets + status mapping (code)",
       "type": "code",
       "phase": "C1",
-      "status": "in_progress",
+      "status": "completed",
       "description": "Remove browser-use session double-start, enforce cleanup, and add predictable timeouts/budgets + stable status mapping.",
       "references": [
         "docs/adr/ADR-0003-cdp-first-browser-use-integration.md",
