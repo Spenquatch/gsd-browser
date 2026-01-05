@@ -103,17 +103,94 @@ def _ext_for_mime(mime: str | None) -> str:
     return ".bin"
 
 
-def _classify(*, payload: dict[str, Any], screenshot_count: int, has_actionable_error: bool) -> str:
+def _event_type(event: dict[str, Any]) -> str:
+    value = event.get("event_type") or event.get("type") or ""
+    return str(value).strip().lower()
+
+
+def _event_details(event: dict[str, Any]) -> dict[str, Any]:
+    details = event.get("details")
+    return details if isinstance(details, dict) else {}
+
+
+def _has_actionable_error_events(events: list[dict[str, Any]]) -> bool:
+    for event in events:
+        if not isinstance(event, dict):
+            continue
+        event_type = _event_type(event)
+        details = _event_details(event)
+
+        if event_type == "console":
+            level = str(details.get("level") or "").strip().lower()
+            if level in {"error", "exception", "fatal"}:
+                return True
+            if event.get("has_error") is True:
+                return True
+
+        if event_type == "network":
+            status = details.get("status")
+            if isinstance(status, int) and status >= 400:
+                return True
+            if event.get("has_error") is True:
+                return True
+
+    return False
+
+
+_FAILURE_REASON_KEYS = {"failure_reason", "failureReason"}
+
+
+def _has_payload_failure_reason(payload: dict[str, Any]) -> bool:
+    errors_top = payload.get("errors_top")
+    if isinstance(errors_top, list):
+        for item in errors_top:
+            if not isinstance(item, dict):
+                continue
+            if str(item.get("type") or "").strip().lower() == "judge":
+                summary = str(item.get("summary") or "").strip()
+                if summary:
+                    return True
+
+    max_depth = 8
+    max_nodes = 250
+    visited = 0
+    pending: list[tuple[Any, int]] = [(payload, max_depth)]
+
+    while pending and visited < max_nodes:
+        current, depth = pending.pop()
+        visited += 1
+
+        if isinstance(current, dict):
+            for key, value in current.items():
+                if key in _FAILURE_REASON_KEYS:
+                    text = str(value).strip() if value is not None else ""
+                    if text:
+                        return True
+                if depth > 0 and isinstance(value, (dict, list)):
+                    pending.append((value, depth - 1))
+        elif isinstance(current, list) and depth > 0:
+            for value in current:
+                if isinstance(value, (dict, list)):
+                    pending.append((value, depth - 1))
+
+    return False
+
+
+def _classify(
+    *,
+    payload: dict[str, Any],
+    artifact_screenshots: int,
+    artifact_events: int,
+    has_actionable_reason: bool,
+) -> str:
     status = payload.get("status")
     result = payload.get("result")
 
     if status == "success" and isinstance(result, str) and result.strip():
         return "pass"
 
-    if screenshot_count <= 0:
-        return "hard_fail"
-
-    if has_actionable_error:
+    has_artifacts = artifact_screenshots > 0 or artifact_events > 0
+    if status in {"failed", "partial"} and has_artifacts and has_actionable_reason:
         return "soft_fail"
 
     return "hard_fail"
@@ -181,7 +258,21 @@ async def _run_one(*, scenario: Scenario, out_dir: Path) -> dict[str, Any]:
         ext = _ext_for_mime(shot.get("mime_type"))
         filename = f"step-{step if isinstance(step, int) else 'x'}-{shot.get('id')}{ext}"
         (screenshots_dir / filename).write_bytes(image_bytes)
-        written.append({**shot, "filename": filename, "image_data": None})
+        written.append(
+            {
+                "id": shot.get("id"),
+                "timestamp": shot.get("timestamp") or shot.get("captured_at"),
+                "type": shot.get("type"),
+                "source": shot.get("source"),
+                "session_id": shot.get("session_id"),
+                "has_error": shot.get("has_error"),
+                "metadata": shot.get("metadata"),
+                "mime_type": shot.get("mime_type"),
+                "url": shot.get("url"),
+                "step": shot.get("step"),
+                "filename": filename,
+            }
+        )
 
     # Capture error-focused run events.
     events = runtime.run_events.get_events(
@@ -201,20 +292,13 @@ async def _run_one(*, scenario: Scenario, out_dir: Path) -> dict[str, Any]:
     _write_json(events_path, events)
     _write_json(screenshots_index, written)
 
-    # Rudimentary “actionable” check: any console exception/error or any network 4xx/5xx.
-    actionable = False
-    for event in events:
-        if (event.get("event_type") or event.get("type")) == "console":
-            actionable = True
-            break
-        details = event.get("details") if isinstance(event.get("details"), dict) else {}
-        status = details.get("status")
-        if isinstance(status, int) and status >= 400:
-            actionable = True
-            break
+    actionable = _has_actionable_error_events(events) or _has_payload_failure_reason(payload)
 
     classification = _classify(
-        payload=payload, screenshot_count=len(written), has_actionable_error=actionable
+        payload=payload,
+        artifact_screenshots=len(written),
+        artifact_events=len(events),
+        has_actionable_reason=actionable,
     )
 
     return {
