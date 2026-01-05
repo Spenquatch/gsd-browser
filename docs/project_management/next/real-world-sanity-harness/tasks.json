@@ -234,7 +234,7 @@
       "name": "Report formatting (code)",
       "type": "code",
       "phase": "R3",
-      "status": "pending",
+      "status": "in_progress",
       "description": "Emit a stable summary.json and PR-friendly report.md for a harness run.",
       "references": [
         "docs/adr/ADR-0004-real-world-sanity-harness-and-quality-gates.md",
@@ -272,7 +272,7 @@
       "name": "Report formatting (test)",
       "type": "test",
       "phase": "R3",
-      "status": "pending",
+      "status": "in_progress",
       "description": "Unit tests for Markdown rendering and summary schema bounds.",
       "references": [
         "docs/project_management/next/real-world-sanity-harness/plan.md",
