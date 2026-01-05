@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import inspect
 from typing import TYPE_CHECKING
 
 from ..config import Settings
@@ -9,6 +10,23 @@ from .env import LLMProvider
 
 if TYPE_CHECKING:  # pragma: no cover
     from browser_use.llm.base import BaseChatModel
+
+
+def _provider_timeout_kwargs(
+    provider: type[object], timeout_s: float | None
+) -> dict[str, float] | None:
+    if timeout_s is None:
+        return None
+    try:
+        signature = inspect.signature(provider)
+    except (TypeError, ValueError):
+        return None
+
+    timeout_value = float(timeout_s)
+    for param_name in ("timeout", "request_timeout", "timeout_s"):
+        if param_name in signature.parameters:
+            return {param_name: timeout_value}
+    return None
 
 
 def validate_llm_settings(settings: Settings) -> None:
@@ -50,7 +68,7 @@ def validate_llm_settings(settings: Settings) -> None:
     raise ValueError(f"Unsupported GSD_BROWSER_LLM_PROVIDER: {provider!r}")
 
 
-def create_browser_use_llm(settings: Settings) -> BaseChatModel:
+def create_browser_use_llm(settings: Settings, *, timeout_s: float | None = None) -> BaseChatModel:
     """Create the browser-use BaseChatModel for the configured provider."""
     validate_llm_settings(settings)
 
@@ -63,16 +81,33 @@ def create_browser_use_llm(settings: Settings) -> BaseChatModel:
 
     provider: LLMProvider = settings.llm_provider
     if provider == "chatbrowseruse":
+        timeout_kwargs = _provider_timeout_kwargs(browser_use.ChatBrowserUse, timeout_s)
         return browser_use.ChatBrowserUse(
             model=settings.model,
             api_key=settings.browser_use_api_key,
             base_url=settings.browser_use_llm_url or None,
+            **(timeout_kwargs or {}),
         )
     if provider == "openai":
-        return browser_use.ChatOpenAI(model=settings.model, api_key=settings.openai_api_key)
+        timeout_kwargs = _provider_timeout_kwargs(browser_use.ChatOpenAI, timeout_s)
+        return browser_use.ChatOpenAI(
+            model=settings.model,
+            api_key=settings.openai_api_key,
+            **(timeout_kwargs or {}),
+        )
     if provider == "ollama":
-        return browser_use.ChatOllama(model=settings.model, host=settings.ollama_host)
+        timeout_kwargs = _provider_timeout_kwargs(browser_use.ChatOllama, timeout_s)
+        return browser_use.ChatOllama(
+            model=settings.model,
+            host=settings.ollama_host,
+            **(timeout_kwargs or {}),
+        )
     if provider == "anthropic":
-        return browser_use.ChatAnthropic(model=settings.model, api_key=settings.anthropic_api_key)
+        timeout_kwargs = _provider_timeout_kwargs(browser_use.ChatAnthropic, timeout_s)
+        return browser_use.ChatAnthropic(
+            model=settings.model,
+            api_key=settings.anthropic_api_key,
+            **(timeout_kwargs or {}),
+        )
 
     raise ValueError(f"Unsupported GSD_BROWSER_LLM_PROVIDER: {provider!r}")

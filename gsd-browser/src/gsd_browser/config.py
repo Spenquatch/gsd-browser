@@ -36,6 +36,10 @@ class Settings(BaseModel):
     streaming_mode: StreamingMode = Field("cdp", alias="STREAMING_MODE")
     streaming_quality: StreamingQuality = Field("med", alias="STREAMING_QUALITY")
 
+    web_eval_budget_s: float = Field(60.0, alias="GSD_BROWSER_WEB_EVAL_BUDGET_S")
+    web_eval_max_steps: int = Field(25, alias="GSD_BROWSER_WEB_EVAL_MAX_STEPS")
+    web_eval_step_timeout_s: float = Field(15.0, alias="GSD_BROWSER_WEB_EVAL_STEP_TIMEOUT_S")
+
     model_config = ConfigDict(populate_by_name=True)
 
     def _mcp_env(self) -> dict[str, str]:
@@ -143,6 +147,14 @@ def load_settings(
             payload["LOG_LEVEL"] = merged["LOG_LEVEL"]
         if merged.get("GSD_BROWSER_JSON_LOGS") is not None:
             payload["GSD_BROWSER_JSON_LOGS"] = merged["GSD_BROWSER_JSON_LOGS"]
+        if merged.get("GSD_BROWSER_WEB_EVAL_BUDGET_S") is not None:
+            payload["GSD_BROWSER_WEB_EVAL_BUDGET_S"] = merged["GSD_BROWSER_WEB_EVAL_BUDGET_S"]
+        if merged.get("GSD_BROWSER_WEB_EVAL_MAX_STEPS") is not None:
+            payload["GSD_BROWSER_WEB_EVAL_MAX_STEPS"] = merged["GSD_BROWSER_WEB_EVAL_MAX_STEPS"]
+        if merged.get("GSD_BROWSER_WEB_EVAL_STEP_TIMEOUT_S") is not None:
+            payload["GSD_BROWSER_WEB_EVAL_STEP_TIMEOUT_S"] = merged[
+                "GSD_BROWSER_WEB_EVAL_STEP_TIMEOUT_S"
+            ]
 
         return Settings.model_validate(payload, strict=strict)
     except ValidationError as exc:
