@@ -22,8 +22,10 @@ Implement `C4-spec`: drive streaming via browser-use CDP sessions and sample fra
 
 ## Constraints / requirements
 - Do not assume Playwright `Page` identity matches the agent’s active page.
-- Attach to browser-use CDP session manager; handle detaches and focus changes.
+- Attach to browser-use focused `CDPSession` via `BrowserSession.get_or_create_cdp_session()` and scope commands/events with `CDPSession.session_id`.
+- Subscribe to CDP events via `cdp_client.register.*` (handler signature includes `cdp_session_id`).
 - Ensure streaming stops on run end and doesn’t leak between sessions.
+- If CDP attach fails, disable streaming for the run; do not fall back to Playwright CDP sessions.
 
 ## Required commands (record output in END entry)
 - `uv run ruff format --check`
@@ -34,4 +36,3 @@ Implement `C4-spec`: drive streaming via browser-use CDP sessions and sample fra
 2. Commit changes inside `wt/cf-c4-streaming-code` (no docs edits).
 3. Switch back to `feat/cdp-first-browser-use`; mark task completed; add END entry; commit docs (`docs: finish C4-code`). Do not merge this branch into `feat/cdp-first-browser-use`.
 4. Remove worktree `wt/cf-c4-streaming-code`.
-

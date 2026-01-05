@@ -22,7 +22,8 @@ Implement `C6-spec`: ensure ctrl input dispatch targets the active browser-use C
 
 ## Constraints / requirements
 - Maintain holder-only and paused-only acceptance rules.
-- Dispatch must re-acquire focus/target when detaches happen (best effort) instead of hard failing.
+- Dispatch must re-acquire the focused `CDPSession` via `BrowserSession.get_or_create_cdp_session()` and send `Input.dispatch*` commands with session scoping (`CDPSession.session_id`).
+- If a focused `CDPSession` cannot be acquired, reject the event with a bounded/logged reason (`target_unavailable`) rather than dispatching to an arbitrary root client.
 - Auto-pause on take-control is default behavior unless explicitly disabled.
 
 ## Required commands (record output in END entry)
@@ -34,4 +35,3 @@ Implement `C6-spec`: ensure ctrl input dispatch targets the active browser-use C
 2. Commit changes inside `wt/cf-c6-control-target-code` (no docs edits).
 3. Switch back to `feat/cdp-first-browser-use`; mark task completed; add END entry; commit docs (`docs: finish C6-code`). Do not merge this branch into `feat/cdp-first-browser-use`.
 4. Remove worktree `wt/cf-c6-control-target-code`.
-

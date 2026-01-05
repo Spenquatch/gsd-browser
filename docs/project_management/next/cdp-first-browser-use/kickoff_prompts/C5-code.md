@@ -24,6 +24,8 @@ Implement `C5-spec`: improve run event capture robustness, add error ranking, an
 - Do not capture response bodies or secrets.
 - Error ranking must de-emphasize common noise (telemetry/WAF) and highlight likely-causal failures.
 - Compact `web_eval_agent` response stays bounded; artifacts remain out-of-band.
+- Preserve the existing `gsd-browser.web_eval_agent.v1` response shape; add bounded fields only as specified in `C5-spec` (`page`, `errors_top`, optional `warnings`).
+- Prefer `cdp_client.register.*` for CDP event capture; avoid new private handler-registry dependencies.
 
 ## Required commands (record output in END entry)
 - `uv run ruff format --check`
@@ -34,4 +36,3 @@ Implement `C5-spec`: improve run event capture robustness, add error ranking, an
 2. Commit changes inside `wt/cf-c5-events-reporting-code` (no docs edits).
 3. Switch back to `feat/cdp-first-browser-use`; mark task completed; add END entry; commit docs (`docs: finish C5-code`). Do not merge this branch into `feat/cdp-first-browser-use`.
 4. Remove worktree `wt/cf-c5-events-reporting-code`.
-

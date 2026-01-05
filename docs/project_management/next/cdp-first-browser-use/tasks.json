@@ -243,7 +243,7 @@
         "docs/project_management/next/cdp-first-browser-use/C3-spec.md"
       ],
       "acceptance_criteria": [
-        "Primary screenshot capture uses BrowserStateSummary when available; fallback uses browser_session.get_current_page().",
+        "Primary screenshot capture uses BrowserStateSummary screenshot payload when present; fallback uses browser_session.get_current_page().",
         "At least step 1 and last step screenshots are recorded; cap enforced."
       ],
       "start_checklist": [
@@ -357,7 +357,7 @@
         "docs/project_management/next/cdp-first-browser-use/C4-spec.md"
       ],
       "acceptance_criteria": [
-        "Streaming attaches via BrowserSession.get_or_create_cdp_session(focus=True) and ACKs frames.",
+        "Streaming attaches via BrowserSession.get_or_create_cdp_session() and targets commands/events with the returned CDPSession.session_id (no Playwright CDP sessions).",
         "At least one frame emits and one stream_sample stores when CDP is available.",
         "Streaming tears down cleanly on run end."
       ],
@@ -472,7 +472,7 @@
         "docs/project_management/next/cdp-first-browser-use/C5-spec.md"
       ],
       "acceptance_criteria": [
-        "Run events are captured without relying on brittle private handler registries.",
+        "Run events are captured via cdp_client.register.* handlers (not by mutating private handler registries).",
         "Ranking de-emphasizes noise and highlights likely-causal failures.",
         "web_eval_agent JSON includes bounded failure context (page + errors_top + next_actions)."
       ],
@@ -587,7 +587,7 @@
         "docs/project_management/next/cdp-first-browser-use/C6-spec.md"
       ],
       "acceptance_criteria": [
-        "Ctrl inputs dispatch via browser-use focused CDP session; stale targets are avoided.",
+        "Ctrl inputs dispatch via browser-use focused CDPSession (get_or_create_cdp_session) and are sent with session_id scoping; stale targets are avoided.",
         "Auto-pause on take-control is default; resume does not replay stale inputs.",
         "Rejected/accepted ctrl events are observable (bounded logging/events)."
       ],

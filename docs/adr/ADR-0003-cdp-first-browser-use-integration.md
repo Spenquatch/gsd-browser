@@ -99,9 +99,9 @@ In CDP-first browser-use runs, we should attach streaming to the browser-use CDP
 
 Work:
 - Introduce a CDP streaming adapter that can:
-  - obtain a `CDPSession` from `browser_session.get_or_create_cdp_session(focus=True)`
+  - obtain a focused `CDPSession` from `browser_session.get_or_create_cdp_session()` (defaults to the current `agent_focus_target_id`)
   - call `Page.startScreencast` on the session’s CDP client
-  - register a handler for `Page.screencastFrame`
+  - register a handler for `Page.screencastFrame` via `cdp_client.register.Page.screencastFrame(handler)` (handler signature includes `cdp_session_id` as a second arg)
   - ACK each frame with `Page.screencastFrameAck`
   - emit frames via Socket.IO (`/stream`) and sample frames into `ScreenshotManager` (`stream_sample`)
 - Support pause/resume and teardown:

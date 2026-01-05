@@ -41,6 +41,13 @@ These defaults are used in specs unless overridden:
 - Judge mode: opt-in (default off) until we have stable provider/model coverage.
 - Streaming: CDP-first where possible; fall back to screenshot mode if CDP cannot attach.
 
+## Non-ambiguous browser-use surfaces (>= 0.11)
+These API surfaces are the assumed “source of truth” for C4/C5/C6 and are referenced explicitly in the triad specs:
+- Focused target CDP session: `await BrowserSession.get_or_create_cdp_session()` (defaults to `agent_focus_target_id` when no `target_id` is provided).
+- Session object: `CDPSession` with `session_id` + `cdp_client`.
+- CDP commands: `await cdp_client.send.<Domain>.<method>(..., session_id=cdp_session.session_id)`.
+- CDP events: `cdp_client.register.<Domain>.<event>(handler)` where handler signature is `handler(event, cdp_session_id)`.
+
 ## Triad Overview
 1. **C1 – Lifecycle + budgets + status mapping**
    - Remove double-start of `BrowserSession`, enforce cleanup, and make timeouts predictable.
@@ -75,4 +82,3 @@ These defaults are used in specs unless overridden:
 3. Commit integration changes on the integration branch.
 4. Fast-forward merge the integration branch into `feat/cdp-first-browser-use`; update `tasks.json` and `session_log.md` with the END entry; commit docs (`docs: finish <task-id>`).
 5. Remove the worktree.
-

@@ -25,6 +25,7 @@ Implement `C1-spec`: remove `BrowserSession` double-start, add explicit budgets/
 - Ensure cleanup on exceptions/timeouts/cancellation.
 - Implement defaults from the plan; allow per-call overrides (args or settings) without breaking backward compatibility.
 - Ensure MCP stdio safety (no stdout logging).
+- Preserve the existing `gsd-browser.web_eval_agent.v1` response shape; only add optional fields specified in `C1-spec` (`timeouts`, `warnings`).
 
 ## Required commands (record output in END entry)
 - `uv run ruff format --check`
@@ -35,4 +36,3 @@ Implement `C1-spec`: remove `BrowserSession` double-start, add explicit budgets/
 2. Commit changes inside `wt/cf-c1-lifecycle-code` (no docs edits).
 3. Switch back to `feat/cdp-first-browser-use`; mark task completed; add END entry; commit docs (`docs: finish C1-code`). Do not merge this branch into `feat/cdp-first-browser-use`.
 4. Remove worktree `wt/cf-c1-lifecycle-code`.
-

@@ -25,6 +25,26 @@ Define a stable mapping for `web_eval_agent.status`:
 If browser-use surfaces intermittent step errors (e.g. structured output validation failures) but a final result exists, treat as:
 - `success` with warnings surfaced in the response (not `partial`)
 
+## Response Contract (web_eval_agent.v1)
+This triad is responsible for making lifecycle + budgets + status mapping deterministic without breaking the existing response shape.
+
+### Invariants (must remain true)
+`web_eval_agent` returns a single JSON object with:
+- `version`: `gsd-browser.web_eval_agent.v1`
+- `session_id`: UUID string (always present; used to fetch artifacts)
+- `tool_call_id`: UUID string (always present)
+- `url`, `task`, `mode`
+- `status`: one of `success` | `partial` | `failed`
+- `result`: string or null
+- `summary`: bounded string
+- `artifacts`: object with counts (`screenshots`, `stream_samples`, `run_events`)
+- `next_actions`: list of bounded strings
+
+### Contract deltas (additive; required by C1)
+These additions are allowed and should be used to remove ambiguity; they must be optional (clients can ignore them):
+- `timeouts`: `{ "budget_s": number, "step_timeout_s": number, "max_steps": number, "timed_out": boolean }`
+- `warnings`: list of short strings (bounded; e.g. provider validation errors encountered but recovered)
+
 ## Acceptance Criteria
 1. `web_eval_agent` no longer double-starts browser-use sessions; the agent owns session start/stop.
 2. Tool-level budget and `max_steps`/`step_timeout` defaults are enforced and configurable via tool args.
@@ -41,4 +61,3 @@ If browser-use surfaces intermittent step errors (e.g. structured output validat
 - CDP-first streaming (C4).
 - Run events and ranked failure reporting (C5).
 - Take-control dispatch target robustness (C6).
-

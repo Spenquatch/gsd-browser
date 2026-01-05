@@ -22,7 +22,7 @@ Each recorded `agent_step` screenshot must include:
 - url + title (best effort)
 - `has_error` boolean
 - `source`: `"browser_state_summary"` | `"current_page_fallback"`
-- optional flags derived from browser-use history/judgement (when available)
+- optional flags derived from browser-use history/judgement (only if judge mode is enabled and the fields are present)
 
 ## Acceptance Criteria
 1. Real-world harness runs produce `agent_step` screenshots consistently (non-zero for typical scenarios).
@@ -36,4 +36,3 @@ Each recorded `agent_step` screenshot must include:
 - Streaming frames (C4).
 - Run events capture/ranking (C5).
 - Take-control dispatch robustness (C6).
-
