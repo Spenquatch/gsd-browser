@@ -84,3 +84,12 @@ Only START/END entries. Docs edits happen on the orchestration branch only.
 - Worktree: wt/cf-c2-provider-prompt-integ
 - Commands planned: uv run ruff format --check; uv run ruff check; uv run pytest; make smoke
 - Notes: Local repo has no configured git remote/upstream for feat/cdp-first-browser-use, so git pull --ff-only cannot run as written.
+
+## C2-integ END
+- Timestamp: 2026-01-05T01:45:18Z
+- Role: integration
+- Worktree: wt/cf-c2-provider-prompt-integ
+- Branch: cf-c2-provider-prompt-integ
+- Final commit: 482e964
+- Commands executed: (in wt/cf-c2-provider-prompt-integ/gsd-browser) make dev (pass; created .venv and installed deps); uv run ruff format --check (pass; 46 files already formatted); uv run ruff check (pass; All checks passed!); uv run pytest (pass; 68 passed in 1.40s); make smoke (pass; 7 passed in 0.27s + CLI round trip "hello")
+- Result: pass
