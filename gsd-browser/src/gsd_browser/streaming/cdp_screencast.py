@@ -116,13 +116,28 @@ class CdpScreencastStreamer:
         async with self._lifecycle_lock:
             await self._stop_locked()
 
-            cdp_session = await self._get_or_create_browser_use_cdp_session(browser_session)
-            cdp_client = getattr(cdp_session, "cdp_client", None)
-            cdp_session_id = getattr(cdp_session, "session_id", None)
-            if cdp_client is None or not isinstance(cdp_session_id, str) or not cdp_session_id:
-                raise RuntimeError("browser-use CDPSession missing cdp_client/session_id")
+            try:
+                cdp_session = await self._get_or_create_browser_use_cdp_session(browser_session)
+                cdp_client = getattr(cdp_session, "cdp_client", None)
+                cdp_session_id = getattr(cdp_session, "session_id", None)
+                if cdp_client is None or not isinstance(cdp_session_id, str) or not cdp_session_id:
+                    raise RuntimeError("browser-use CDPSession missing cdp_client/session_id")
 
-            await self._register_browser_use_handlers(cdp_client)
+                await self._register_browser_use_handlers(cdp_client)
+                await self._browser_use_send(
+                    cdp_client=cdp_client,
+                    cdp_session_id=cdp_session_id,
+                    method="Page.startScreencast",
+                    params=_quality_to_cdp_params(self._quality),
+                )
+            except Exception as exc:  # noqa: BLE001
+                error = _truncate_cdp_error(exc)
+                self._stats.note_cdp_detached(error=error)
+                logger.info(
+                    "CDP screencast unavailable (browser-use)",
+                    extra={"session_id": session_id, "error": error},
+                )
+                return False
 
             self._active_run_session_id = session_id
             self._active_cdp_client = cdp_client
@@ -130,13 +145,6 @@ class CdpScreencastStreamer:
             self._running = True
             self._seq = 0
             self._drain_queue()
-
-            await self._browser_use_send(
-                cdp_client=cdp_client,
-                cdp_session_id=cdp_session_id,
-                method="Page.startScreencast",
-                params=_quality_to_cdp_params(self._quality),
-            )
 
             self._stats.note_cdp_attached(run_session_id=session_id, cdp_session_id=cdp_session_id)
             self._sender_task = asyncio.create_task(self._sender_loop(session_id=session_id))
@@ -247,12 +255,14 @@ class CdpScreencastStreamer:
         future = asyncio.run_coroutine_threadsafe(coro, target_loop)
         await asyncio.wrap_future(future)
 
+    async def _on_frame(self, *, params: dict[str, Any], session_id: str) -> None:
+        await self._on_playwright_frame(params=params, session_id=session_id)
+
     async def _on_playwright_frame(self, *, params: dict[str, Any], session_id: str) -> None:
-        if (
-            not self._running
-            or self._cdp_session is None
-            or self._active_run_session_id != session_id
-        ):
+        if not self._running or self._cdp_session is None:
+            return
+
+        if self._active_run_session_id is not None and self._active_run_session_id != session_id:
             return
 
         self._seq += 1

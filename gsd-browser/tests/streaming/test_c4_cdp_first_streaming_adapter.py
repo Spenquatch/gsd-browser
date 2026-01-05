@@ -156,8 +156,12 @@ def _discover_c4_streamer_class() -> type[Any]:
                 continue
             if obj.__module__ != module.__name__:
                 continue
-            start = getattr(obj, "start", None)
             stop = getattr(obj, "stop", None)
+            start_browser_use = getattr(obj, "start_browser_use", None)
+            if callable(start_browser_use) and callable(stop):
+                return obj
+
+            start = getattr(obj, "start", None)
             if not callable(start) or not callable(stop):
                 continue
             try:
@@ -190,9 +194,14 @@ def _construct_streamer(
 
 
 async def _call_start(streamer: Any, *, browser_session: Any, session_id: str) -> None:
+    start_browser_use = getattr(streamer, "start_browser_use", None)
+    if callable(start_browser_use):
+        await start_browser_use(browser_session=browser_session, session_id=session_id)
+        return
+
     start = getattr(streamer, "start", None)
     if not callable(start):
-        raise AssertionError("streamer has no start()")
+        raise AssertionError("streamer has no start()/start_browser_use()")
     sig = inspect.signature(start)
     kwargs: dict[str, Any] = {}
     if "browser_session" in sig.parameters:
@@ -262,36 +271,24 @@ def test_c4_backpressure_increments_drops_and_still_acks() -> None:
 
         streamer = _construct_streamer(streamer_cls, sio=sio, stats=stats, screenshots=screenshots)
 
-        on_frame = getattr(streamer, "_on_frame", None)
+        on_frame = getattr(streamer, "_on_browser_use_frame", None)
         if not callable(on_frame):
             pytest.xfail(
-                "C4 streamer does not expose _on_frame for deterministic backpressure tests."
+                "C4 streamer does not expose _on_browser_use_frame for deterministic "
+                "backpressure tests."
             )
 
-        for attr in ("_running", "_cdp_session", "_cdp"):
-            if hasattr(streamer, attr):
-                setattr(streamer, attr, True if attr == "_running" else cdp_session)
+        streamer._running = True  # noqa: SLF001
+        streamer._seq = 0  # noqa: SLF001
+        streamer._active_run_session_id = "sess-1"  # noqa: SLF001
+        streamer._active_cdp_session_id = cdp_session.session_id  # noqa: SLF001
+        streamer._active_cdp_client = cdp_session.cdp_client  # noqa: SLF001
 
         params_1 = {"data": "", "metadata": {}, "sessionId": "ack-1"}
         params_2 = {"data": "", "metadata": {}, "sessionId": "ack-2"}
 
-        def _call_kwargs(params: dict[str, Any]) -> dict[str, Any]:
-            sig = inspect.signature(on_frame)
-            kwargs: dict[str, Any] = {}
-            if "params" in sig.parameters:
-                kwargs["params"] = params
-            elif "event" in sig.parameters:
-                kwargs["event"] = params
-            if "session_id" in sig.parameters:
-                kwargs["session_id"] = "sess-1"
-            if "cdp_session_id" in sig.parameters:
-                kwargs["cdp_session_id"] = "cdp-1"
-            return kwargs
-
-        result = on_frame(**_call_kwargs(params_1))
-        await _maybe_await(result)
-        result = on_frame(**_call_kwargs(params_2))
-        await _maybe_await(result)
+        await _maybe_await(on_frame(params=params_1, cdp_session_id="cdp-1"))
+        await _maybe_await(on_frame(params=params_2, cdp_session_id="cdp-1"))
 
         assert stats.frames_received == 2
         assert stats.frames_dropped == 1
@@ -324,41 +321,34 @@ def test_c4_sampling_records_stream_sample_and_sampler_totals() -> None:
         streamer = _construct_streamer(streamer_cls, sio=sio, stats=stats, screenshots=screenshots)
 
         sender_loop = getattr(streamer, "_sender_loop", None)
-        on_frame = getattr(streamer, "_on_frame", None)
+        on_frame = getattr(streamer, "_on_browser_use_frame", None)
         if not callable(sender_loop) or not callable(on_frame):
             pytest.xfail(
-                "C4 streamer does not expose _sender_loop/_on_frame for deterministic sampling tests."
+                "C4 streamer does not expose _sender_loop/_on_browser_use_frame for deterministic "
+                "sampling tests."
             )
 
-        for attr in ("_running", "_cdp_session", "_cdp"):
-            if hasattr(streamer, attr):
-                setattr(streamer, attr, True if attr == "_running" else cdp_session)
+        streamer._running = True  # noqa: SLF001
+        streamer._seq = 0  # noqa: SLF001
+        streamer._active_run_session_id = "sess-1"  # noqa: SLF001
+        streamer._active_cdp_session_id = cdp_session.session_id  # noqa: SLF001
+        streamer._active_cdp_client = cdp_session.cdp_client  # noqa: SLF001
 
         sender_task = asyncio.create_task(sender_loop(session_id="sess-1"))
         try:
             image_bytes = b"not-a-real-jpeg"
             data_base64 = base64.b64encode(image_bytes).decode("ascii")
 
-            sig = inspect.signature(on_frame)
-            kwargs: dict[str, Any] = {}
-            if "params" in sig.parameters:
-                kwargs["params"] = {
-                    "data": data_base64,
-                    "metadata": {"k": "v"},
-                    "sessionId": "ack-1",
-                }
-            else:
-                kwargs["event"] = {
-                    "data": data_base64,
-                    "metadata": {"k": "v"},
-                    "sessionId": "ack-1",
-                }
-            if "session_id" in sig.parameters:
-                kwargs["session_id"] = "sess-1"
-            if "cdp_session_id" in sig.parameters:
-                kwargs["cdp_session_id"] = "cdp-1"
-
-            await _maybe_await(on_frame(**kwargs))
+            await _maybe_await(
+                on_frame(
+                    params={
+                        "data": data_base64,
+                        "metadata": {"k": "v"},
+                        "sessionId": "ack-1",
+                    },
+                    cdp_session_id="cdp-1",
+                )
+            )
             await _wait_for(
                 lambda: any(e["event"] == "frame" for e in sio.emits) or bool(sio.emits)
             )
