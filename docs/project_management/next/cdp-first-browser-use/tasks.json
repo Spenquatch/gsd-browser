@@ -45,7 +45,7 @@
       "name": "Lifecycle + budgets + status mapping (test)",
       "type": "test",
       "phase": "C1",
-      "status": "pending",
+      "status": "in_progress",
       "description": "Unit tests for status mapping and timeout/cancellation behavior.",
       "references": [
         "docs/project_management/next/cdp-first-browser-use/plan.md",
