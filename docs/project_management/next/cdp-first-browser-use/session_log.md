@@ -100,3 +100,10 @@ Only START/END entries. Docs edits happen on the orchestration branch only.
 - Worktree: wt/cf-c3-screenshots-code
 - Commands planned: uv run ruff format --check; uv run ruff check
 - Notes: `git pull --ff-only` cannot run as written because `feat/cdp-first-browser-use` has no configured remote/upstream locally.
+
+## C3-test START
+- Timestamp: 2026-01-05T01:53:12Z
+- Role: test
+- Worktree: wt/cf-c3-screenshots-test
+- Commands planned: uv run ruff format --check; uv run pytest gsd-browser/tests -k c3
+- Notes: `git pull --ff-only` cannot run as written because `feat/cdp-first-browser-use` has no configured remote/upstream locally.
