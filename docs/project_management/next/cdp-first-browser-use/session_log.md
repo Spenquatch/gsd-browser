@@ -252,6 +252,15 @@ Only START/END entries. Docs edits happen on the orchestration branch only.
 - Commands planned: uv run ruff format --check; uv run pytest gsd-browser/tests -k c6
 - Notes: `git pull --ff-only` cannot run as written because `feat/cdp-first-browser-use` has no configured remote/upstream locally.
 
+## C6-test END
+- Timestamp: 2026-01-05T03:42:22Z
+- Role: test
+- Worktree: wt/cf-c6-control-target-test
+- Branch: cf-c6-control-target-test
+- Commit: 3f0c1c7
+- Commands executed: (in wt/cf-c6-control-target-test/gsd-browser) make dev (pass; installed pytest/ruff); uv run ruff format --check (pass; 52 files already formatted); uv run pytest tests -k c6 (pass; 3 passed, 1 xfailed, 79 deselected in 0.55s)
+- Result: pass (1 xfailed pending C6-code implementation of target re-acquisition)
+
 ## C6-code END
 - Timestamp: 2026-01-05T03:35:02Z
 - Role: code
