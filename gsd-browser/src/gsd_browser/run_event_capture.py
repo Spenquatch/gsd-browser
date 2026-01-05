@@ -8,7 +8,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
-from urllib.parse import urlsplit
+from urllib.parse import urlsplit, urlunsplit
 
 from .run_event_store import RunEventStore
 
@@ -45,9 +45,9 @@ def _safe_url(url: str) -> str:
         parsed = urlsplit(url)
     except Exception:  # noqa: BLE001
         return url
-    if parsed.scheme and parsed.netloc:
+    if not parsed.scheme or not parsed.netloc:
         return url
-    return url
+    return urlunsplit((parsed.scheme, parsed.netloc, parsed.path or "", "", ""))
 
 
 def _extract_stack_location(stack: dict[str, Any] | None) -> dict[str, Any] | None:
@@ -62,7 +62,7 @@ def _extract_stack_location(stack: dict[str, Any] | None) -> dict[str, Any] | No
 
     location: dict[str, Any] = {}
     if frame.get("url"):
-        location["url"] = str(frame["url"])
+        location["url"] = _safe_url(str(frame["url"]))
     if frame.get("functionName"):
         location["function"] = str(frame["functionName"])
     if frame.get("lineNumber") is not None:
@@ -101,11 +101,16 @@ class CDPRunEventCapture:
     ) -> None:
         self._store = store
         self._session_id = session_id
+        self._register_router: _CDPClientRouter | None = None
+        self._register_mode = False
         self._registered: list[_RegisteredHandler] = []
         self._pending_requests: OrderedDict[str, dict[str, Any]] = OrderedDict()
         self._max_pending_requests = max(0, max_pending_requests)
 
     def attach(self, cdp_client: Any) -> None:
+        if self._try_attach_via_register(cdp_client):
+            return
+
         registry = getattr(cdp_client, "_event_registry", None)
         handlers = getattr(registry, "_handlers", None) if registry else None
         if not isinstance(handlers, dict):
@@ -119,6 +124,14 @@ class CDPRunEventCapture:
         self._wrap_handler(handlers, "Network.loadingFailed", self._on_loading_failed)
 
     def detach(self, cdp_client: Any) -> None:
+        if self._register_mode and self._register_router is not None:
+            if self._register_router.active_capture is self:
+                self._register_router.active_capture = None
+            self._register_router = None
+            self._register_mode = False
+            self._pending_requests.clear()
+            return
+
         registry = getattr(cdp_client, "_event_registry", None)
         handlers = getattr(registry, "_handlers", None) if registry else None
         if not isinstance(handlers, dict):
@@ -149,6 +162,102 @@ class CDPRunEventCapture:
         handlers[method] = wrapper
         self._registered.append(_RegisteredHandler(method=method, previous=previous))
 
+    def _try_attach_via_register(self, cdp_client: Any) -> bool:
+        register = getattr(cdp_client, "register", None)
+        runtime = getattr(register, "Runtime", None) if register is not None else None
+        network = getattr(register, "Network", None) if register is not None else None
+
+        register_console = (
+            getattr(runtime, "consoleAPICalled", None) if runtime is not None else None
+        )
+        register_exception = (
+            getattr(runtime, "exceptionThrown", None) if runtime is not None else None
+        )
+        register_request = (
+            getattr(network, "requestWillBeSent", None) if network is not None else None
+        )
+        register_response = (
+            getattr(network, "responseReceived", None) if network is not None else None
+        )
+        register_finished = (
+            getattr(network, "loadingFinished", None) if network is not None else None
+        )
+        register_failed = getattr(network, "loadingFailed", None) if network is not None else None
+
+        if not all(
+            callable(fn)
+            for fn in (
+                register_console,
+                register_exception,
+                register_request,
+                register_response,
+                register_finished,
+                register_failed,
+            )
+        ):
+            return False
+
+        client_id = id(cdp_client)
+        router = _REGISTER_ROUTERS_BY_ID.get(client_id)
+        if router is None:
+            router = _CDPClientRouter()
+            _REGISTER_ROUTERS_BY_ID[client_id] = router
+
+        router.active_capture = self
+        self._register_router = router
+        self._register_mode = True
+
+        if router.registered:
+            return True
+
+        def _handle_console(event: Any, cdp_session_id: str | None = None) -> None:
+            capture = router.active_capture
+            if capture is None:
+                return
+            capture._on_console_api_called(event if isinstance(event, dict) else {}, cdp_session_id)
+
+        def _handle_exception(event: Any, cdp_session_id: str | None = None) -> None:
+            capture = router.active_capture
+            if capture is None:
+                return
+            capture._on_exception_thrown(event if isinstance(event, dict) else {}, cdp_session_id)
+
+        def _handle_request(event: Any, cdp_session_id: str | None = None) -> None:
+            capture = router.active_capture
+            if capture is None:
+                return
+            capture._on_request_will_be_sent(
+                event if isinstance(event, dict) else {}, cdp_session_id
+            )
+
+        def _handle_response(event: Any, cdp_session_id: str | None = None) -> None:
+            capture = router.active_capture
+            if capture is None:
+                return
+            capture._on_response_received(event if isinstance(event, dict) else {}, cdp_session_id)
+
+        def _handle_finished(event: Any, cdp_session_id: str | None = None) -> None:
+            capture = router.active_capture
+            if capture is None:
+                return
+            capture._on_loading_finished(event if isinstance(event, dict) else {}, cdp_session_id)
+
+        def _handle_failed(event: Any, cdp_session_id: str | None = None) -> None:
+            capture = router.active_capture
+            if capture is None:
+                return
+            capture._on_loading_failed(event if isinstance(event, dict) else {}, cdp_session_id)
+
+        register_console(_handle_console)
+        register_exception(_handle_exception)
+        register_request(_handle_request)
+        register_response(_handle_response)
+        register_finished(_handle_finished)
+        register_failed(_handle_failed)
+
+        router.registered = True
+        return True
+
     def _on_console_api_called(self, event: dict[str, Any], _: str | None) -> None:
         level = str(event.get("type") or "log")
         message = _format_console_args(
@@ -177,7 +286,7 @@ class CDPRunEventCapture:
                 message = f"{message}: {description}"
         location: dict[str, Any] = {}
         if details.get("url"):
-            location["url"] = str(details["url"])
+            location["url"] = _safe_url(str(details["url"]))
         if details.get("lineNumber") is not None:
             try:
                 location["line"] = int(details["lineNumber"]) + 1
@@ -265,3 +374,12 @@ class CDPRunEventCapture:
             duration_ms=duration_ms,
             error=str(error_text),
         )
+
+
+class _CDPClientRouter:
+    def __init__(self) -> None:
+        self.registered = False
+        self.active_capture: CDPRunEventCapture | None = None
+
+
+_REGISTER_ROUTERS_BY_ID: dict[int, _CDPClientRouter] = {}

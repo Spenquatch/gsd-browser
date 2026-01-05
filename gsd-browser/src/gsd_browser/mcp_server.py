@@ -21,6 +21,7 @@ from mcp.types import ImageContent, TextContent
 from playwright.async_api import async_playwright
 
 from .config import load_settings
+from .failure_ranking import rank_failures_for_session
 from .llm.browser_use import create_browser_use_llms
 from .run_event_capture import CDPRunEventCapture
 from .run_event_store import RunEventStore
@@ -51,6 +52,19 @@ def _truncate(text: str, *, max_len: int) -> str:
     if len(text) <= max_len:
         return text
     return text[: max(0, max_len - 1)] + "…"
+
+
+def _public_url(url: str | None) -> str | None:
+    if not url:
+        return None
+    raw = str(url).strip()
+    if not raw:
+        return None
+    parsed = urlparse(raw)
+    if parsed.scheme and parsed.netloc:
+        cleaned = f"{parsed.scheme}://{parsed.netloc}{parsed.path or ''}"
+        return _truncate(cleaned, max_len=1000) or None
+    return _truncate(raw, max_len=1000) or None
 
 
 def _parse_timestamp(value: Any) -> float | None:
@@ -95,15 +109,20 @@ def _select_web_eval_agent_mode(*, normalized_url: str, explicit: str | None) ->
 
 
 def _dev_run_event_excerpts(
-    run_events: RunEventStore | None, *, session_id: str, max_per_type: int = 5
+    run_events: RunEventStore | None,
+    *,
+    session_id: str,
+    base_url: str | None = None,
+    history: Any | None = None,
+    max_per_type: int = 5,
 ) -> dict[str, Any]:
     max_value = min(max(int(max_per_type), 0), 10)
     if run_events is None or max_value <= 0:
-        return {"console_errors": [], "network_errors": []}
+        return {"console_errors": [], "network_errors": [], "errors_top": []}
 
     get_events = getattr(run_events, "get_events", None)
     if not callable(get_events):
-        return {"console_errors": [], "network_errors": []}
+        return {"console_errors": [], "network_errors": [], "errors_top": []}
 
     events: list[dict[str, Any]] = get_events(
         session_id=session_id,
@@ -125,7 +144,19 @@ def _dev_run_event_excerpts(
         if len(console_errors) >= max_value and len(network_errors) >= max_value:
             break
 
-    return {"console_errors": console_errors, "network_errors": network_errors}
+    errors_top = rank_failures_for_session(
+        run_events=run_events,
+        session_id=session_id,
+        base_url=base_url,
+        history=history,
+        max_items=10,
+    )
+
+    return {
+        "console_errors": console_errors,
+        "network_errors": network_errors,
+        "errors_top": errors_top,
+    }
 
 
 def _load_browser_use_classes() -> tuple[type[Any], type[Any]]:
@@ -402,6 +433,8 @@ async def web_eval_agent(
             "status": "failed",
             "result": None,
             "summary": _truncate(str(exc), max_len=2000),
+            "page": {"url": None, "title": None},
+            "errors_top": [],
             "timeouts": {
                 "budget_s": default_budget_s,
                 "step_timeout_s": default_step_timeout_s,
@@ -429,6 +462,8 @@ async def web_eval_agent(
             "status": "failed",
             "result": None,
             "summary": _truncate(str(exc), max_len=2000),
+            "page": {"url": None, "title": None},
+            "errors_top": [],
             "timeouts": {
                 "budget_s": effective_budget_s,
                 "step_timeout_s": effective_step_timeout_s,
@@ -1110,6 +1145,15 @@ async def web_eval_agent(
             ),
             max_len=2000,
         )
+
+        page = {"url": _public_url(last_page_url), "title": last_page_title or None}
+        errors_top = rank_failures_for_session(
+            run_events=run_events,
+            session_id=session_id,
+            base_url=normalized_url,
+            history=history,
+            max_items=8,
+        )
         payload = {
             "version": "gsd-browser.web_eval_agent.v1",
             "session_id": session_id,
@@ -1120,6 +1164,8 @@ async def web_eval_agent(
             "status": status,
             "result": result,
             "summary": summary,
+            "page": page,
+            "errors_top": errors_top,
             "timeouts": {
                 "budget_s": effective_budget_s,
                 "step_timeout_s": effective_step_timeout_s,
@@ -1156,7 +1202,11 @@ async def web_eval_agent(
         }
         if selected_mode == "dev":
             payload["dev_excerpts"] = _dev_run_event_excerpts(
-                run_events, session_id=session_id, max_per_type=5
+                run_events,
+                session_id=session_id,
+                base_url=normalized_url,
+                history=history,
+                max_per_type=5,
             )
 
         logger.info(
@@ -1198,6 +1248,14 @@ async def web_eval_agent(
             "summary": _truncate(
                 f"Timeout: tool budget exceeded (budget_s={effective_budget_s:g}).",
                 max_len=2000,
+            ),
+            "page": {"url": _public_url(last_page_url), "title": last_page_title or None},
+            "errors_top": rank_failures_for_session(
+                run_events=run_events,
+                session_id=session_id,
+                base_url=normalized_url,
+                history=history,
+                max_items=8,
             ),
             "timeouts": {
                 "budget_s": effective_budget_s,
@@ -1255,6 +1313,14 @@ async def web_eval_agent(
             "status": "failed",
             "result": None,
             "summary": _truncate("Cancelled.", max_len=2000),
+            "page": {"url": _public_url(last_page_url), "title": last_page_title or None},
+            "errors_top": rank_failures_for_session(
+                run_events=run_events,
+                session_id=session_id,
+                base_url=normalized_url,
+                history=history,
+                max_items=8,
+            ),
             "timeouts": {
                 "budget_s": effective_budget_s,
                 "step_timeout_s": effective_step_timeout_s,
@@ -1302,6 +1368,14 @@ async def web_eval_agent(
             "status": "failed",
             "result": None,
             "summary": _truncate(f"{type(exc).__name__}: {exc}", max_len=2000),
+            "page": {"url": _public_url(last_page_url), "title": last_page_title or None},
+            "errors_top": rank_failures_for_session(
+                run_events=run_events,
+                session_id=session_id,
+                base_url=normalized_url,
+                history=history,
+                max_items=8,
+            ),
             "timeouts": {
                 "budget_s": effective_budget_s,
                 "step_timeout_s": effective_step_timeout_s,
