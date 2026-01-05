@@ -159,7 +159,7 @@
       "name": "Provider compatibility + prompt wrapper (test)",
       "type": "test",
       "phase": "C2",
-      "status": "in_progress",
+      "status": "completed",
       "description": "Tests for provider/model validation and prompt wrapper content (stop conditions, anchoring).",
       "references": [
         "docs/project_management/next/cdp-first-browser-use/plan.md",

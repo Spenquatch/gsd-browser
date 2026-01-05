@@ -59,3 +59,12 @@ Only START/END entries. Docs edits happen on the orchestration branch only.
 - Worktree: wt/cf-c2-provider-prompt-test
 - Commands planned: uv run ruff format --check; uv run pytest gsd-browser/tests -k c2
 - Notes: Local repo has no configured git remote/upstream for feat/cdp-first-browser-use, so git pull --ff-only cannot run as written.
+
+## C2-test END
+- Timestamp: 2026-01-05T01:30:13Z
+- Role: test
+- Worktree: wt/cf-c2-provider-prompt-test
+- Branch: cf-c2-provider-prompt-test
+- Commit: 14f8a68
+- Commands executed: (in wt/cf-c2-provider-prompt-test/gsd-browser) make dev (pass; installed pytest/ruff); uv run ruff format --check (pass; 46 files already formatted); uv run pytest tests -k c2 (pass; 6 passed, 1 skipped, 61 deselected in 1.37s)
+- Result: pass (prompt wrapper test skipped until C2-code wires Agent system message wrapper)
