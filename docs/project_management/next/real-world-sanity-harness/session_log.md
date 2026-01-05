@@ -277,3 +277,10 @@ Only START/END entries. Docs edits happen on the orchestration branch only.
     ====================== 13 failed, 83 deselected in 0.74s =======================
     ```
 - Result: fail (expected until `R2-code` lands helper predicates + updated `_classify` signature)
+
+## R2-integ START
+- Timestamp: 2026-01-05T14:17:32Z
+- Role: integration
+- Worktree: wt/rw-r2-artifacts-integ
+- Commands planned: uv run ruff format --check; uv run ruff check; uv run pytest; make smoke
+- Notes: Local repo has no configured git remote/upstream, so `git pull --ff-only` cannot run as written.
