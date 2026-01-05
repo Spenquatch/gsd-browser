@@ -4,6 +4,13 @@ Only START/END entries. Docs edits happen on the orchestration branch only.
 
 ## Entries
 
+## R4-integ START
+- Timestamp: 2026-01-05T15:00:16Z
+- Role: integration
+- Worktree: wt/rw-r4-gates-integ
+- Commands planned: uv run ruff format --check; uv run ruff check; uv run pytest; make smoke
+- Notes: Local repo has no configured git remote/upstream for feat/real-world-sanity-harness, so git pull --ff-only cannot run as written.
+
 ## R4-code START
 - Timestamp: 2026-01-05T14:52:02Z
 - Role: code

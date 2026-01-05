@@ -422,7 +422,7 @@
       "name": "Quality gates (integration)",
       "type": "integration",
       "phase": "R4",
-      "status": "pending",
+      "status": "in_progress",
       "description": "Merge R4 code+tests, reconcile to spec, and make the slice green; then apply the PR checklist documentation on the orchestration branch.",
       "references": [
         "docs/project_management/next/real-world-sanity-harness/plan.md",
