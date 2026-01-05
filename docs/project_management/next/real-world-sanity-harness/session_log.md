@@ -34,6 +34,27 @@ Only START/END entries. Docs edits happen on the orchestration branch only.
 - Commands planned: uv run ruff format --check; uv run ruff check
 - Notes: Local repo has no configured git remote/upstream, so `git pull --ff-only` cannot run as written.
 
+## R3-code END
+- Timestamp: 2026-01-05T14:34:35Z
+- Role: code
+- Worktree: wt/rw-r3-report-code
+- Branch: rw-r3-report-code
+- Commit: 73205d0
+- Commands run:
+  - (cwd=wt/rw-r3-report-code/gsd-browser) `make dev` (to install ruff into `.venv`)
+  - (cwd=wt/rw-r3-report-code/gsd-browser) `uv run ruff format --check`
+  - (cwd=wt/rw-r3-report-code/gsd-browser) `uv run ruff check`
+- Command outputs:
+  - `uv run ruff format --check`:
+    ```
+    53 files already formatted
+    ```
+  - `uv run ruff check`:
+    ```
+    All checks passed!
+    ```
+- Result: pass
+
 ## R1-test START
 - Timestamp: 2026-01-05T13:46:21Z
 - Role: test

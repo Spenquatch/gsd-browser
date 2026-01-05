@@ -234,7 +234,7 @@
       "name": "Report formatting (code)",
       "type": "code",
       "phase": "R3",
-      "status": "in_progress",
+      "status": "completed",
       "description": "Emit a stable summary.json and PR-friendly report.md for a harness run.",
       "references": [
         "docs/adr/ADR-0004-real-world-sanity-harness-and-quality-gates.md",
