@@ -196,7 +196,7 @@
       "name": "Provider compatibility + prompt wrapper (integration)",
       "type": "integration",
       "phase": "C2",
-      "status": "pending",
+      "status": "in_progress",
       "description": "Merge C2 code+tests, reconcile to spec, and make the slice green.",
       "references": [
         "docs/project_management/next/cdp-first-browser-use/plan.md",
