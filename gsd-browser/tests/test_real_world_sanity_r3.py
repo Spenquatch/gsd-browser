@@ -76,7 +76,11 @@ def test_r3_summarize_errors_is_bounded_to_ten_events() -> None:
 
     highlights = _summarize_errors(payload, events)
 
-    assert highlights[:3] == ["summary: top level summary", "console_errors: 2", "network_errors: 1"]
+    assert highlights[:3] == [
+        "summary: top level summary",
+        "console_errors: 2",
+        "network_errors: 1",
+    ]
     assert "console: e0" in highlights
     assert "console: e9" in highlights
     assert "console: e10" not in highlights

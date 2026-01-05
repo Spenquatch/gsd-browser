@@ -199,61 +199,29 @@ def _classify(
     return "hard_fail"
 
 
-def _truncate_line(text: str, *, max_len: int) -> str:
-    if max_len <= 0:
-        return ""
-    if len(text) <= max_len:
-        return text
-    return text[: max(0, max_len - 1)] + "…"
-
-
-def _dedupe_lines(items: list[str]) -> list[str]:
-    seen: set[str] = set()
-    deduped: list[str] = []
-    for item in items:
-        if item in seen:
-            continue
-        seen.add(item)
-        deduped.append(item)
-    return deduped
-
-
-def _summarize_highlights(payload: dict[str, Any], events: list[dict[str, Any]]) -> list[str]:
-    max_items = 8
-    max_len = 260
-
+def _summarize_errors(payload: dict[str, Any], events: list[dict[str, Any]]) -> list[str]:
     lines: list[str] = []
-
-    errors_top = payload.get("errors_top")
-    if isinstance(errors_top, list):
-        for item in errors_top:
-            if not isinstance(item, dict):
-                continue
-            failure_type = str(item.get("type") or "").strip() or "unknown"
-            summary = str(item.get("summary") or "").strip()
-            step = item.get("step")
-            if summary:
-                suffix = ""
-                if isinstance(step, int):
-                    suffix = f" (step {step})"
-                lines.append(f"{failure_type}: {summary}{suffix}")
-
-    if not lines:
-        for event in events[:10]:
-            if not isinstance(event, dict):
-                continue
-            event_type = str(event.get("event_type") or event.get("type") or "unknown").strip()
-            msg = event.get("summary")
-            if isinstance(msg, str) and msg.strip():
-                lines.append(f"{event_type}: {msg.strip()}")
 
     summary = payload.get("summary")
     if isinstance(summary, str) and summary.strip():
         lines.append(f"summary: {summary.strip()}")
 
-    lines = [_truncate_line(line, max_len=max_len) for line in lines if line]
-    lines = _dedupe_lines(lines)
-    return lines[:max_items]
+    dev_excerpts = payload.get("dev_excerpts")
+    if isinstance(dev_excerpts, dict):
+        for key in ("console_errors", "network_errors"):
+            items = dev_excerpts.get(key)
+            if isinstance(items, list) and items:
+                lines.append(f"{key}: {len(items)}")
+
+    for event in events[:10]:
+        if not isinstance(event, dict):
+            continue
+        event_type = str(event.get("event_type") or event.get("type") or "unknown").strip()
+        msg = event.get("summary")
+        if isinstance(msg, str) and msg.strip():
+            lines.append(f"{event_type}: {msg.strip()}")
+
+    return lines
 
 
 def _relative_path(path: Path, *, base: Path) -> str:
@@ -261,14 +229,6 @@ def _relative_path(path: Path, *, base: Path) -> str:
         return path.relative_to(base).as_posix()
     except Exception:  # noqa: BLE001
         return os.path.relpath(path, start=base).replace(os.sep, "/")
-
-
-def _severity_rank(classification: str | None) -> int:
-    if classification == "hard_fail":
-        return 0
-    if classification == "soft_fail":
-        return 1
-    return 2
 
 
 async def _run_one(
@@ -368,13 +328,13 @@ async def _run_one(
             ),
         },
         "paths": {
-            "dir": bundle_dir,
+            "dir": str(out_dir),
             "response_json": f"{bundle_dir}/response.json",
             "events_json": f"{bundle_dir}/events.json",
             "screenshots_index": f"{bundle_dir}/screenshots.json",
             "screenshots_dir": f"{bundle_dir}/screenshots",
         },
-        "highlights": _summarize_highlights(payload, events),
+        "highlights": _summarize_errors(payload, events),
         "settings": {
             "llm_provider": settings.llm_provider,
             "model": settings.model,
@@ -426,28 +386,12 @@ def _render_markdown(summary: dict[str, Any]) -> str:
     lines.append(f"- Timestamp (UTC): `{summary['started_at']}`")
     lines.append(f"- Output dir: `{summary['out_dir']}`")
     lines.append("")
-    counts: dict[str, int] = {"pass": 0, "soft_fail": 0, "hard_fail": 0}
-    for run in summary.get("runs", []):
-        classification = run.get("result", {}).get("classification")
-        if isinstance(classification, str) and classification in counts:
-            counts[classification] += 1
-    lines.append(
-        "- Totals: "
-        f"`pass={counts['pass']}` "
-        f"`soft_fail={counts['soft_fail']}` "
-        f"`hard_fail={counts['hard_fail']}`"
-    )
-    lines.append("")
 
     runs = list(summary["runs"])
-    runs.sort(
-        key=lambda run: (
-            _severity_rank(run.get("result", {}).get("classification")),
-            str(run.get("scenario", {}).get("id") or ""),
-        )
-    )
+    for idx, item in enumerate(runs):
+        if idx:
+            lines.append("")
 
-    for item in runs:
         sid = item["scenario"]["id"]
         lines.append(f"## {sid}")
         lines.append("")
@@ -458,20 +402,18 @@ def _render_markdown(summary: dict[str, Any]) -> str:
         lines.append(f"- Session: `{item['result']['session_id']}`")
         lines.append(f"- Screenshots: `{item['result']['screenshots_written']}`")
         lines.append(f"- Error events: `{item['result']['events_with_error']}`")
-        lines.append(
-            "- Artifacts: "
-            f"[response.json]({item['paths']['response_json']}) | "
-            f"[events.json]({item['paths']['events_json']}) | "
-            f"[screenshots.json]({item['paths']['screenshots_index']}) | "
-            f"[screenshots/]({item['paths']['screenshots_dir']}/)"
-        )
-        lines.append("")
-        if item.get("highlights"):
-            lines.append("Highlights (bounded; errors-first):")
-            for hl in item["highlights"]:
-                lines.append(f"- {hl}")
+        lines.append(f"- Response: `{item['paths']['response_json']}`")
+        lines.append(f"- Events: `{item['paths']['events_json']}`")
+        lines.append(f"- Screenshots index: `{item['paths']['screenshots_index']}`")
+
+        highlights = item.get("highlights")
+        if isinstance(highlights, list) and highlights:
             lines.append("")
-    return "\n".join(lines).strip() + "\n"
+            lines.append("Highlights:")
+            for hl in highlights:
+                lines.append(f"- {hl}")
+
+    return "\n".join(lines).rstrip() + "\n"
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -525,11 +467,9 @@ def main(argv: list[str] | None = None) -> None:
         )
 
     summary = {
-        "schema_version": "real_world_sanity.summary.v1",
         "started_at": started_at,
         "out_dir": str(out_dir),
         "env_hint": env_hint,
-        "settings": {"llm_provider": settings.llm_provider, "model": settings.model},
         "runs": runs,
     }
 
