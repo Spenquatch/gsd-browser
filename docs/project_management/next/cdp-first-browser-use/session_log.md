@@ -203,3 +203,12 @@ Only START/END entries. Docs edits happen on the orchestration branch only.
 - Worktree: wt/cf-c5-events-reporting-test
 - Commands planned: uv run ruff format --check; uv run pytest gsd-browser/tests -k c5
 - Notes: Local repo has no configured git remote/upstream for feat/cdp-first-browser-use, so git pull --ff-only cannot run as written.
+
+## C5-test END
+- Timestamp: 2026-01-05T03:06:42Z
+- Role: test
+- Worktree: wt/cf-c5-events-reporting-test
+- Branch: cf-c5-events-reporting-test
+- Commit: e7d5e38
+- Commands executed: (in wt/cf-c5-events-reporting-test/gsd-browser) make dev (pass; installed pytest/ruff); uv run ruff format --check (pass; 49 files already formatted); uv run pytest tests -k c5 (pass; 1 passed, 2 xfailed, 76 deselected in 0.80s)
+- Result: pass (2 xfailed pending C5-code implementation)
