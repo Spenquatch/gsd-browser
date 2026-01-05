@@ -56,7 +56,11 @@ def test_o1a_web_eval_agent_json_shape_and_final_result_mapping(
 
     monkeypatch.setattr(mcp_server_mod, "get_runtime", lambda: _DummyRuntime())
     monkeypatch.setattr(mcp_server_mod, "load_settings", lambda *args, **kwargs: object())
-    monkeypatch.setattr(mcp_server_mod, "create_browser_use_llm", lambda *args, **kwargs: object())
+    monkeypatch.setattr(
+        mcp_server_mod,
+        "create_browser_use_llms",
+        lambda *args, **kwargs: type("DummyLLMs", (), {"primary": object(), "fallback": None})(),
+    )
 
     class DummyHistory:
         history: list[object] = []

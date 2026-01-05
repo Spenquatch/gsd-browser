@@ -51,7 +51,11 @@ class _DummyBrowserSession:
 def _setup_common_stubs(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(mcp_server_mod, "get_runtime", lambda: _DummyRuntime())
     monkeypatch.setattr(mcp_server_mod, "load_settings", lambda *args, **kwargs: object())
-    monkeypatch.setattr(mcp_server_mod, "create_browser_use_llm", lambda *args, **kwargs: object())
+    monkeypatch.setattr(
+        mcp_server_mod,
+        "create_browser_use_llms",
+        lambda *args, **kwargs: type("DummyLLMs", (), {"primary": object(), "fallback": None})(),
+    )
 
 
 def _c1_budget_kwargs(*, budget_s: float, max_steps: int, step_timeout_s: float) -> dict[str, Any]:

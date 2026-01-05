@@ -191,7 +191,11 @@ def test_o1b_records_agent_step_screenshots_and_updates_artifacts(
 
     monkeypatch.setattr(mcp_server_mod, "get_runtime", lambda: runtime)
     monkeypatch.setattr(mcp_server_mod, "load_settings", lambda *args, **kwargs: object())
-    monkeypatch.setattr(mcp_server_mod, "create_browser_use_llm", lambda *args, **kwargs: object())
+    monkeypatch.setattr(
+        mcp_server_mod,
+        "create_browser_use_llms",
+        lambda *args, **kwargs: type("DummyLLMs", (), {"primary": object(), "fallback": None})(),
+    )
     monkeypatch.setattr(
         mcp_server_mod, "_load_browser_use_classes", lambda: (_DummyAgent, _DummyBrowserSession)
     )
@@ -239,7 +243,11 @@ def test_o1b_pause_gate_blocks_between_steps_until_resumed(
 
     monkeypatch.setattr(mcp_server_mod, "get_runtime", lambda: runtime)
     monkeypatch.setattr(mcp_server_mod, "load_settings", lambda *args, **kwargs: object())
-    monkeypatch.setattr(mcp_server_mod, "create_browser_use_llm", lambda *args, **kwargs: object())
+    monkeypatch.setattr(
+        mcp_server_mod,
+        "create_browser_use_llms",
+        lambda *args, **kwargs: type("DummyLLMs", (), {"primary": object(), "fallback": None})(),
+    )
     monkeypatch.setattr(
         mcp_server_mod, "_load_browser_use_classes", lambda: (_DummyAgent, _DummyBrowserSession)
     )

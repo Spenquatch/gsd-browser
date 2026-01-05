@@ -185,6 +185,30 @@ def _normalize_history_result(value: Any) -> str | None:
     return result or None
 
 
+def _extract_wrapped_result(value: str | None) -> tuple[str | None, str | None, str | None]:
+    """Extract the prompt wrapper JSON payload if present.
+
+    Returns (result, status, notes) where result falls back to the original string when parsing
+    fails or the payload is missing expected keys.
+    """
+    if value is None:
+        return None, None, None
+    stripped = value.strip()
+    if not stripped.startswith("{"):
+        return value, None, None
+    try:
+        parsed = json.loads(stripped)
+    except json.JSONDecodeError:
+        return value, None, None
+    if not isinstance(parsed, dict):
+        return value, None, None
+
+    extracted_result = _normalize_history_result(parsed.get("result"))
+    extracted_status = _normalize_history_result(parsed.get("status"))
+    extracted_notes = _normalize_history_result(parsed.get("notes"))
+    return extracted_result or value, extracted_status, extracted_notes
+
+
 def _history_error_messages(history: Any, *, max_items: int = 8) -> list[str]:
     errors_attr = getattr(history, "errors", None)
     if callable(errors_attr):
@@ -698,6 +722,8 @@ async def web_eval_agent(
                     agent_kwargs["register_new_step_callback"] = on_new_step
                 if "extend_system_message" not in signature.parameters and not has_kwargs:
                     agent_kwargs.pop("extend_system_message", None)
+                    if "override_system_message" in signature.parameters:
+                        agent_kwargs["override_system_message"] = prompt_wrapper
                 if "fallback_llm" not in signature.parameters and not has_kwargs:
                     agent_kwargs.pop("fallback_llm", None)
                 if "initial_actions" not in signature.parameters and not has_kwargs:
@@ -778,10 +804,13 @@ async def web_eval_agent(
         if history is None:
             raise RuntimeError("browser-use run did not produce history")
 
-        result = _normalize_history_result(_history_final_result(history))
+        raw_result = _normalize_history_result(_history_final_result(history))
+        result, final_status, final_notes = _extract_wrapped_result(raw_result)
         error_count = _history_error_count(history)
         steps = _history_step_count(history)
         warnings.extend(_history_error_messages(history, max_items=8))
+        if final_notes is not None:
+            warnings.append(_truncate(f"final_notes={final_notes}", max_len=400))
         warnings = _dedupe(warnings)[:20]
 
         timed_out = False
@@ -792,6 +821,10 @@ async def web_eval_agent(
                 timed_out = True
 
         status = "success" if result is not None else "failed"
+        if final_status in {"login_required", "captcha", "impossible_task"}:
+            if result is not None:
+                status = "partial"
+            warnings = _dedupe([*warnings, f"partial_reason={final_status}"])[:20]
 
         judgement = getattr(history, "judgement", None)
         if result is not None and callable(judgement):

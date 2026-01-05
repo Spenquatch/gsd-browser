@@ -313,7 +313,11 @@ def test_o2a_web_eval_agent_updates_run_event_artifact_counts(
 
     monkeypatch.setattr(mcp_server_mod, "get_runtime", lambda: _DummyRuntime())
     monkeypatch.setattr(mcp_server_mod, "load_settings", lambda *args, **kwargs: object())
-    monkeypatch.setattr(mcp_server_mod, "create_browser_use_llm", lambda *args, **kwargs: object())
+    monkeypatch.setattr(
+        mcp_server_mod,
+        "create_browser_use_llms",
+        lambda *args, **kwargs: type("DummyLLMs", (), {"primary": object(), "fallback": None})(),
+    )
 
     class _DummyHistory:
         history: list[object] = []

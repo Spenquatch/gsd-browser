@@ -32,7 +32,11 @@ def test_c2_prompt_wrapper_includes_stop_conditions_and_anchor_guidance(
 ) -> None:
     monkeypatch.setattr(mcp_server_mod, "get_runtime", lambda: _DummyRuntime())
     monkeypatch.setattr(mcp_server_mod, "load_settings", lambda *args, **kwargs: object())
-    monkeypatch.setattr(mcp_server_mod, "create_browser_use_llm", lambda *args, **kwargs: object())
+    monkeypatch.setattr(
+        mcp_server_mod,
+        "create_browser_use_llms",
+        lambda *args, **kwargs: type("DummyLLMs", (), {"primary": object(), "fallback": None})(),
+    )
 
     created_kwargs: dict[str, Any] = {}
 

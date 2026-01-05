@@ -49,7 +49,11 @@ class _DummyRuntime:
 
 def _install_web_eval_agent_stubs(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(mcp_server_mod, "load_settings", lambda *args, **kwargs: object())
-    monkeypatch.setattr(mcp_server_mod, "create_browser_use_llm", lambda *args, **kwargs: object())
+    monkeypatch.setattr(
+        mcp_server_mod,
+        "create_browser_use_llms",
+        lambda *args, **kwargs: type("DummyLLMs", (), {"primary": object(), "fallback": None})(),
+    )
 
     class _DummyHistory:
         history: list[object] = []
