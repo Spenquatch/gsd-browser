@@ -120,7 +120,7 @@
       "name": "Artifact harvesting + classification (code)",
       "type": "code",
       "phase": "R2",
-      "status": "pending",
+      "status": "in_progress",
       "description": "Harvest screenshots and run events out-of-band and classify runs (pass/soft_fail/hard_fail).",
       "references": [
         "docs/adr/ADR-0004-real-world-sanity-harness-and-quality-gates.md",
