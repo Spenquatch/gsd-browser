@@ -1,0 +1,71 @@
+{
+  "started_at": "2026-01-05T00:00:00Z",
+  "out_dir": "artifacts/real_world_sanity/20260105-000000",
+  "env_hint": {
+    "GSD_BROWSER_LLM_PROVIDER": "openai",
+    "GSD_BROWSER_MODEL": "gpt-4o-mini",
+    "ANTHROPIC_API_KEY_set": false,
+    "OPENAI_API_KEY_set": true,
+    "BROWSER_USE_API_KEY_set": false,
+    "OLLAMA_HOST_set": false
+  },
+  "runs": [
+    {
+      "scenario": {
+        "id": "example-pass",
+        "url": "https://example.com/pass",
+        "expected": "pass"
+      },
+      "result": {
+        "status": "success",
+        "classification": "pass",
+        "session_id": "sess-123",
+        "screenshots_written": 2,
+        "events_with_error": 0,
+        "result_present": true
+      },
+      "paths": {
+        "dir": "artifacts/real_world_sanity/20260105-000000/example-pass",
+        "response_json": "example-pass/response.json",
+        "events_json": "example-pass/events.json",
+        "screenshots_index": "example-pass/screenshots.json",
+        "screenshots_dir": "example-pass/screenshots"
+      },
+      "highlights": [
+        "summary: got the first sentence",
+        "console: no errors observed"
+      ],
+      "settings": {
+        "llm_provider": "openai",
+        "model": "gpt-4o-mini"
+      }
+    },
+    {
+      "scenario": {
+        "id": "example-soft-fail",
+        "url": "https://example.com/soft-fail",
+        "expected": "soft_fail"
+      },
+      "result": {
+        "status": "failed",
+        "classification": "soft_fail",
+        "session_id": "sess-456",
+        "screenshots_written": 1,
+        "events_with_error": 3,
+        "result_present": false
+      },
+      "paths": {
+        "dir": "artifacts/real_world_sanity/20260105-000000/example-soft-fail",
+        "response_json": "example-soft-fail/response.json",
+        "events_json": "example-soft-fail/events.json",
+        "screenshots_index": "example-soft-fail/screenshots.json",
+        "screenshots_dir": "example-soft-fail/screenshots"
+      },
+      "highlights": [],
+      "settings": {
+        "llm_provider": "openai",
+        "model": "gpt-4o-mini"
+      }
+    }
+  ]
+}
