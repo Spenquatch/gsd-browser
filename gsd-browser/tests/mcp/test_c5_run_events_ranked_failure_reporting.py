@@ -29,20 +29,6 @@ def _parse_payload(response: list[Any]) -> dict[str, Any]:
     return payload
 
 
-def _web_eval_agent_source() -> str:
-    try:
-        return inspect.getsource(mcp_server_mod.web_eval_agent)
-    except Exception:  # noqa: BLE001
-        return ""
-
-
-def _c5_failure_fields_present() -> bool:
-    src = _web_eval_agent_source()
-    errors_key_present = '"errors_top"' in src or "'errors_top'" in src
-    page_key_present = '"page"' in src or "'page'" in src
-    return errors_key_present and page_key_present
-
-
 def test_c5_run_event_store_helpers_enforce_bounds_and_truncate() -> None:
     store = RunEventStore(max_events_per_session_type=2, max_len=12)
     session_id = "s-1"
@@ -192,9 +178,6 @@ def _install_web_eval_agent_stubs(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_c5_web_eval_agent_failure_payload_includes_failure_fields(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    if not _c5_failure_fields_present():
-        pytest.xfail("C5 failure context fields not implemented in this branch yet")
-
     session_uuid = uuid.UUID(int=2)
     store = RunEventStore()
     store.ensure_session(str(session_uuid), created_at=0.0)
@@ -252,9 +235,6 @@ def test_c5_web_eval_agent_failure_payload_includes_failure_fields(
 
 
 def test_c5_ranked_errors_downrank_blocked_by_client(monkeypatch: pytest.MonkeyPatch) -> None:
-    if not _c5_failure_fields_present():
-        pytest.xfail("C5 error ranking not implemented in this branch yet")
-
     session_uuid = uuid.UUID(int=2)
     session_id = str(session_uuid)
     store = RunEventStore()
@@ -308,8 +288,7 @@ def test_c5_ranked_errors_downrank_blocked_by_client(monkeypatch: pytest.MonkeyP
     )
 
     errors_top = payload.get("errors_top")
-    if not isinstance(errors_top, list):
-        pytest.xfail("C5 errors_top payload not available yet")
+    assert isinstance(errors_top, list)
 
     primary_idx = next(
         (
