@@ -1,0 +1,9 @@
+{
+  "status": "failed",
+  "errors_top": [
+    {
+      "type": "judge",
+      "summary": "HTTP 403 from target site"
+    }
+  ]
+}
