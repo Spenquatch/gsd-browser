@@ -618,7 +618,7 @@
       "name": "Take-control target robustness (test)",
       "type": "test",
       "phase": "C6",
-      "status": "pending",
+      "status": "in_progress",
       "description": "Unit tests for ctrl gating, target re-acquisition, and resume behavior.",
       "references": [
         "docs/project_management/next/cdp-first-browser-use/plan.md",
