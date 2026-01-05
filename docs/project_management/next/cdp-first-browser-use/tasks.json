@@ -273,7 +273,7 @@
       "name": "Step screenshots guarantee (test)",
       "type": "test",
       "phase": "C3",
-      "status": "in_progress",
+      "status": "completed",
       "description": "Unit tests for screenshot fallback and per-session caps/metadata.",
       "references": [
         "docs/project_management/next/cdp-first-browser-use/plan.md",
