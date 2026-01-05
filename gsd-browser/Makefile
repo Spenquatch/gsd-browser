@@ -1,6 +1,8 @@
 .PHONY: help dev lint test smoke diagnose sanity-real docker-build docker-run
 
 UV ?= uv
+SANITY_REAL_CONFIRM ?=
+SANITY_REAL_ARGS ?=
 
 help:
 	@echo ""
@@ -9,7 +11,7 @@ help:
 	@echo "  make lint        Run Ruff lint (requires dev)"
 	@echo "  make test        Run Pytest (requires dev)"
 	@echo "  make smoke       Run smoke test script"
-	@echo "  make sanity-real Run real-world sanity harness (requires dev)"
+	@echo "  make sanity-real Run real-world sanity harness (manual; requires credentials + internet)"
 	@echo "  make diagnose    Run diagnostics script"
 	@echo "  make docker-build Build docker image"
 	@echo "  make docker-run   Run docker image"
@@ -43,8 +45,14 @@ smoke:
 	./scripts/smoke-test.sh
 
 sanity-real:
+	@if [ "$(SANITY_REAL_CONFIRM)" != "1" ]; then \
+		echo "Refusing to run: this harness hits external websites and requires credentials + internet."; \
+		echo "To run anyway: SANITY_REAL_CONFIRM=1 make sanity-real"; \
+		echo "Optional args: SANITY_REAL_ARGS='--scenario <id> --out <dir>'"; \
+		exit 2; \
+	fi
 	@if [ -x .venv/bin/python ]; then \
-		. .venv/bin/activate && python ./scripts/real_world_sanity.py; \
+		. .venv/bin/activate && python ./scripts/real_world_sanity.py $(SANITY_REAL_ARGS); \
 	else \
 		echo "Run 'make dev' first to create .venv"; \
 		exit 1; \

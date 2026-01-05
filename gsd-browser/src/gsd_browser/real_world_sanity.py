@@ -418,6 +418,17 @@ def _render_markdown(summary: dict[str, Any]) -> str:
 
 def main(argv: list[str] | None = None) -> None:
     args = _parse_args(argv)
+
+    print(
+        "NOTE: This is an opt-in harness that hits external websites and "
+        "requires credentials + internet.",
+        file=sys.stderr,
+    )
+    print(
+        "NOTE: It is intentionally not part of default CI, pytest, or make smoke.",
+        file=sys.stderr,
+    )
+
     out_dir: Path = args.out
     out_dir.mkdir(parents=True, exist_ok=True)
 
