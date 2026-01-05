@@ -86,6 +86,15 @@ Add a “manual checklist” gate for PRs that touch orchestration/streaming:
 - attach the generated report directory (or paste the Markdown summary)
 - confirm screenshots exist for each step and failure modes are understandable.
 
+Suggested PR checklist text (manual; opt-in; not CI):
+- I ran the real-world sanity harness locally:
+  - From repo root: `make py-dev` then `SANITY_REAL_CONFIRM=1 make py-sanity-real`
+  - Or from `gsd-browser/`: `make dev` then `SANITY_REAL_CONFIRM=1 make sanity-real`
+  - Optional: `SANITY_REAL_ARGS="--out <dir> --scenario <id>"` to control output/scenarios.
+- I attached the generated run directory (or pasted `report.md`) into the PR.
+- For expected-pass scenarios, there are step screenshots and they are non-zero.
+- Any failures are classified as `soft_fail` (not `hard_fail`) and include actionable reasons (errors-first run events and/or tool failure reason).
+
 ### 5) Deterministic tests remain separate
 Continue to enforce deterministic CI gates with:
 - contract tests (O1a)
@@ -105,4 +114,3 @@ The harness should be used to drive iteration, not to block CI by default.
 - `docs/adr/ADR-0002-operator-dashboard-streaming-and-take-control.md`
 - `~/web-eval-agent/webEvalAgent/src/tool_handlers.py` (report formatting patterns; errors-first + timeline + truncation)
 - DeepWiki review of `browser-use/browser-use` Agent hooks and history error/judgement APIs
-
