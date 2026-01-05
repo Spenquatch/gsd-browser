@@ -39,13 +39,17 @@ def get_browser_use_llm(
     merged = dict(env or {})
     if llm_provider is not None:
         merged["GSD_BROWSER_LLM_PROVIDER"] = llm_provider
-    if (
-        "GSD_BROWSER_MODEL" not in merged
-        and merged.get("GSD_BROWSER_LLM_PROVIDER") == "chatbrowseruse"
-    ):
-        # Ensure CLI provider overrides don't inherit an incompatible model from the
-        # ambient environment.
-        merged["GSD_BROWSER_MODEL"] = "bu-latest"
+    if "GSD_BROWSER_MODEL" not in merged:
+        provider = merged.get("GSD_BROWSER_LLM_PROVIDER")
+        # Ensure provider overrides don't inherit an incompatible default model.
+        if provider == "chatbrowseruse":
+            merged["GSD_BROWSER_MODEL"] = "bu-latest"
+        elif provider == "openai":
+            merged["GSD_BROWSER_MODEL"] = "gpt-4o-mini"
+        elif provider == "ollama":
+            merged["GSD_BROWSER_MODEL"] = "llama3.2"
+        elif provider == "anthropic":
+            merged["GSD_BROWSER_MODEL"] = "claude-haiku-4-5"
 
     # This helper is used by tests and CLI override plumbing; keep it deterministic by
     # honoring the provided env mapping only (do not load a local ".env" file).
