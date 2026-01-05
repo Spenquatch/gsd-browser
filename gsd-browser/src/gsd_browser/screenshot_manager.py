@@ -16,6 +16,7 @@ class Screenshot:
     id: str
     timestamp: float
     screenshot_type: str
+    source: str | None
     session_id: str | None
     has_error: bool
     metadata: dict[str, Any]
@@ -28,7 +29,9 @@ class Screenshot:
         payload: dict[str, Any] = {
             "id": self.id,
             "timestamp": self.timestamp,
+            "captured_at": self.timestamp,
             "type": self.screenshot_type,
+            "source": self.source,
             "session_id": self.session_id,
             "has_error": self.has_error,
             "metadata": self.metadata,
@@ -44,9 +47,10 @@ class Screenshot:
 class ScreenshotManager:
     SAMPLING_RATE = 10
 
-    def __init__(self, *, max_screenshots: int = 500) -> None:
+    def __init__(self, *, max_screenshots: int = 500, max_agent_step_per_session: int = 50) -> None:
         self._max_screenshots = max_screenshots
-        self._items: deque[Screenshot] = deque(maxlen=max_screenshots)
+        self._max_agent_step_per_session = max_agent_step_per_session
+        self._items: deque[Screenshot] = deque()
         self._lock = Lock()
 
         # Compatibility attributes expected by downstream tooling/tests.
@@ -57,10 +61,51 @@ class ScreenshotManager:
         self.current_session_id: str | None = None
         self.current_session_start: float | None = None
 
+    def _remove_item(self, item: Screenshot) -> None:
+        try:
+            self._items.remove(item)
+        except ValueError:
+            return
+        if item.image_bytes is not None:
+            self.total_size_bytes = max(0, self.total_size_bytes - len(item.image_bytes))
+
+    def _evict_left(self) -> None:
+        try:
+            item = self._items.popleft()
+        except IndexError:
+            return
+        if item.image_bytes is not None:
+            self.total_size_bytes = max(0, self.total_size_bytes - len(item.image_bytes))
+
+    def _enforce_agent_step_session_cap(self, *, session_id: str) -> None:
+        cap = int(self._max_agent_step_per_session)
+        if cap <= 0:
+            return
+
+        kept = 0
+        to_remove: list[Screenshot] = []
+        for shot in reversed(self._items):
+            if shot.screenshot_type != "agent_step" or shot.session_id != session_id:
+                continue
+            kept += 1
+            if kept > cap:
+                to_remove.append(shot)
+
+        for shot in to_remove:
+            self._remove_item(shot)
+
+    def _enforce_global_cap(self) -> None:
+        cap = int(self._max_screenshots)
+        if cap <= 0:
+            return
+        while len(self._items) > cap:
+            self._evict_left()
+
     def record_screenshot(
         self,
         *,
         screenshot_type: str,
+        source: str | None = None,
         image_bytes: bytes | None,
         mime_type: str | None = None,
         session_id: str | None = None,
@@ -75,6 +120,7 @@ class ScreenshotManager:
             id=str(uuid.uuid4()),
             timestamp=timestamp,
             screenshot_type=screenshot_type,
+            source=source,
             session_id=session_id,
             has_error=has_error,
             metadata=dict(metadata or {}),
@@ -87,6 +133,9 @@ class ScreenshotManager:
             self._items.append(shot)
             if image_bytes is not None:
                 self.total_size_bytes += len(image_bytes)
+            if screenshot_type == "agent_step" and session_id is not None:
+                self._enforce_agent_step_session_cap(session_id=session_id)
+            self._enforce_global_cap()
         return shot
 
     async def add_key_screenshot(
@@ -189,6 +238,7 @@ class ScreenshotManager:
         return {
             "total_screenshots": total,
             "max_screenshots": self._max_screenshots,
+            "max_agent_step_per_session": self._max_agent_step_per_session,
             "total_size_bytes": size_bytes,
             "sampling_rate": self.SAMPLING_RATE,
             "stream_counter": self.stream_counter,

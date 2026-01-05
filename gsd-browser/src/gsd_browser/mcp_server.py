@@ -468,18 +468,115 @@ async def web_eval_agent(
     state_path = _browser_state_path()
     storage_state: str | None = str(state_path) if state_path.exists() else None
     step_screenshot_count = 0
+    recorded_step_numbers: set[int] = set()
+    last_step_observed: int | None = None
+    last_page_url: str | None = None
+    last_page_title: str | None = None
+    last_browser_errors: list[Any] = []
+    last_has_error = False
 
     try:
         Agent, BrowserSession = _load_browser_use_classes()
         cdp_capture = CDPRunEventCapture(store=run_events, session_id=session_id)
+        history: Any | None = None
+        browser_session: Any | None = None
+
+        def _coerce_step(value: Any) -> int | None:
+            if value is None or isinstance(value, bool):
+                return None
+            if isinstance(value, int):
+                return value
+            try:
+                return int(str(value).strip())
+            except (TypeError, ValueError):
+                return None
+
+        async def _capture_current_page_screenshot(
+            session: Any,
+        ) -> tuple[bytes | None, str | None, str | None]:
+            get_current_page = getattr(session, "get_current_page", None)
+            if not callable(get_current_page):
+                return None, None, None
+
+            try:
+                page = get_current_page()
+                if inspect.isawaitable(page):
+                    page = await page
+            except Exception:  # noqa: BLE001
+                return None, None, None
+
+            if page is None:
+                return None, None, None
+
+            image_bytes: bytes | None = None
+            for options in (
+                {"format": "jpeg", "quality": 80},
+                {"type": "jpeg", "quality": 80},
+                {},
+            ):
+                try:
+                    screenshot = page.screenshot(**options)
+                    image_bytes = (
+                        await screenshot if inspect.isawaitable(screenshot) else screenshot
+                    )
+                    if image_bytes:
+                        break
+                except TypeError:
+                    continue
+                except Exception:  # noqa: BLE001
+                    return None, None, None
+
+            if not image_bytes:
+                return None, None, None
+
+            page_url: str | None = None
+            try:
+                url_value = getattr(page, "url", None)
+                page_url = str(url_value() if callable(url_value) else url_value or "") or None
+            except Exception:  # noqa: BLE001
+                page_url = None
+
+            page_title: str | None = None
+            try:
+                title_value = getattr(page, "title", None)
+                if callable(title_value):
+                    title_result = title_value()
+                    page_title = (
+                        str(await title_result)
+                        if inspect.isawaitable(title_result)
+                        else str(title_result)
+                    ) or None
+                else:
+                    page_title = str(title_value or "") or None
+            except Exception:  # noqa: BLE001
+                page_title = None
+
+            return image_bytes, page_url, page_title
 
         async def record_step_screenshot(*args: Any, **kwargs: Any) -> None:
             nonlocal step_screenshot_count
+            nonlocal \
+                last_step_observed, \
+                last_page_url, \
+                last_page_title, \
+                last_browser_errors, \
+                last_has_error
 
             browser_state_summary = args[0] if args else kwargs.get("browser_state_summary")
             step = kwargs.get("step")
             if step is None and len(args) >= 3:
                 step = args[2]
+
+            step_number = _coerce_step(step)
+            if step_number is None and browser_state_summary is not None:
+                step_number = _coerce_step(getattr(browser_state_summary, "step", None))
+                if step_number is None and hasattr(browser_state_summary, "get"):
+                    try:
+                        step_number = _coerce_step(browser_state_summary.get("step"))
+                    except Exception:  # noqa: BLE001
+                        step_number = None
+            if step_number is not None:
+                last_step_observed = step_number
 
             screenshot_base64 = None
             if browser_state_summary is not None:
@@ -499,27 +596,6 @@ async def web_eval_agent(
 
             if screenshot_base64 is None:
                 screenshot_base64 = kwargs.get("screenshot")
-
-            if step is None and browser_state_summary is not None:
-                step = getattr(browser_state_summary, "step", None)
-                if step is None and hasattr(browser_state_summary, "get"):
-                    try:
-                        step = browser_state_summary.get("step")
-                    except Exception:  # noqa: BLE001
-                        step = None
-
-            image_bytes = (
-                _decode_base64_image(screenshot_base64)
-                if isinstance(screenshot_base64, str)
-                else None
-            )
-            if not image_bytes:
-                return
-
-            screenshots_manager = getattr(runtime, "screenshots", None)
-            record = getattr(screenshots_manager, "record_screenshot", None)
-            if not callable(record):
-                return
 
             page_url_value = getattr(browser_state_summary, "url", None)
             if page_url_value is None and hasattr(browser_state_summary, "get"):
@@ -542,21 +618,127 @@ async def web_eval_agent(
                 except Exception:  # noqa: BLE001
                     browser_errors = None
 
-            page_url = str(page_url_value or "")
-            page_title = str(page_title_value or "")
-            has_error = bool(browser_errors)
+            page_url = str(page_url_value or "") or None
+            page_title = str(page_title_value or "") or None
+            browser_error_list: list[Any]
+            if isinstance(browser_errors, (list, tuple)):
+                browser_error_list = list(browser_errors)
+            elif browser_errors:
+                browser_error_list = [browser_errors]
+            else:
+                browser_error_list = []
+            has_error = bool(browser_error_list)
+            if page_url:
+                last_page_url = page_url
+            if page_title:
+                last_page_title = page_title
+            last_browser_errors = browser_error_list
+            last_has_error = has_error
+
+            image_bytes = (
+                _decode_base64_image(screenshot_base64)
+                if isinstance(screenshot_base64, str)
+                else None
+            )
+            source = "browser_state_summary"
+            mime_type = "image/png"
+
+            if not image_bytes:
+                (
+                    fallback_bytes,
+                    fallback_url,
+                    fallback_title,
+                ) = await _capture_current_page_screenshot(browser_session)
+                if not fallback_bytes:
+                    return
+                image_bytes = fallback_bytes
+                source = "current_page_fallback"
+                mime_type = "image/jpeg"
+                if not page_url and fallback_url:
+                    page_url = fallback_url
+                    last_page_url = fallback_url
+                if not page_title and fallback_title:
+                    page_title = fallback_title
+                    last_page_title = fallback_title
+
+            screenshots_manager = getattr(runtime, "screenshots", None)
+            record = getattr(screenshots_manager, "record_screenshot", None)
+            if not callable(record):
+                return
             record(
                 screenshot_type="agent_step",
                 image_bytes=image_bytes,
-                mime_type="image/png",
+                source=source,
+                mime_type=mime_type,
                 session_id=session_id,
                 captured_at=datetime.now(UTC).timestamp(),
                 has_error=has_error,
-                metadata={"title": page_title, "browser_errors": browser_errors or []},
-                url=page_url or None,
+                metadata={
+                    "title": str(page_title or ""),
+                    "browser_errors": list(browser_error_list),
+                    "source": source,
+                },
+                url=page_url,
+                step=step_number,
+            )
+            step_screenshot_count += 1
+            if step_number is not None:
+                recorded_step_numbers.add(step_number)
+
+        async def record_guarantee_step_screenshot(*, step: int, reason: str) -> None:
+            nonlocal step_screenshot_count
+
+            screenshots_manager = getattr(runtime, "screenshots", None)
+            record = getattr(screenshots_manager, "record_screenshot", None)
+            if not callable(record):
+                return
+
+            image_bytes, page_url, page_title = await _capture_current_page_screenshot(
+                browser_session
+            )
+            if not image_bytes:
+                return
+
+            url = last_page_url or page_url
+            title = last_page_title or page_title or ""
+            record(
+                screenshot_type="agent_step",
+                source="current_page_fallback",
+                image_bytes=image_bytes,
+                mime_type="image/jpeg",
+                session_id=session_id,
+                captured_at=datetime.now(UTC).timestamp(),
+                has_error=last_has_error,
+                metadata={
+                    "title": str(title),
+                    "browser_errors": list(last_browser_errors),
+                    "source": "current_page_fallback",
+                    "capture_reason": reason,
+                },
+                url=url,
                 step=step,
             )
             step_screenshot_count += 1
+            recorded_step_numbers.add(step)
+
+        async def ensure_required_step_screenshots() -> None:
+            if 1 not in recorded_step_numbers:
+                await record_guarantee_step_screenshot(step=1, reason="guarantee_step_1")
+
+            final_step: int | None = None
+            if history is not None:
+                final_step = _history_step_count(history)
+            if final_step is None:
+                final_step = last_step_observed
+
+            if (
+                final_step is not None
+                and final_step > 0
+                and final_step not in recorded_step_numbers
+            ):
+                await record_guarantee_step_screenshot(
+                    step=final_step, reason="guarantee_final_step"
+                )
 
         def record_step_event(*args: Any, **kwargs: Any) -> None:
             browser_state_summary = args[0] if args else kwargs.get("browser_state_summary")
@@ -798,6 +980,12 @@ async def web_eval_agent(
                 clear_active_session = getattr(control_state, "clear_active_session", None)
                 if callable(clear_active_session):
                     clear_active_session(session_id=session_id)
+
+            if browser_session is not None:
+                try:
+                    await ensure_required_step_screenshots()
+                except Exception:  # noqa: BLE001
+                    logger.debug("Failed to guarantee step screenshots", exc_info=True)
 
             await asyncio.shield(stop_browser_session())
 
