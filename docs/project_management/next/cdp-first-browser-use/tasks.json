@@ -464,7 +464,7 @@
       "name": "Run events + ranked failure reporting (code)",
       "type": "code",
       "phase": "C5",
-      "status": "pending",
+      "status": "in_progress",
       "description": "Improve run event capture robustness, implement error ranking, and include bounded failure context in tool responses.",
       "references": [
         "docs/adr/ADR-0003-cdp-first-browser-use-integration.md",
@@ -503,7 +503,7 @@
       "name": "Run events + ranked failure reporting (test)",
       "type": "test",
       "phase": "C5",
-      "status": "pending",
+      "status": "in_progress",
       "description": "Unit tests for run event bounds and ranking + failure context fields in the response.",
       "references": [
         "docs/project_management/next/cdp-first-browser-use/plan.md",

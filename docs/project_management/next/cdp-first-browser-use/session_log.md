@@ -189,3 +189,17 @@ Only START/END entries. Docs edits happen on the orchestration branch only.
 - Final commit: 37d7b76
 - Commands executed: (in wt/cf-c4-streaming-integ/gsd-browser) make dev (pass; created .venv and installed pytest/ruff); uv run ruff format --check (pass; 48 files already formatted); uv run ruff check (pass; All checks passed!); uv run pytest (pass; 76 passed in 1.10s); make smoke (pass; 7 passed in 0.28s + CLI round trip "hello")
 - Result: pass
+
+## C5-code START
+- Timestamp: 2026-01-05T02:54:23Z
+- Role: code
+- Worktree: wt/cf-c5-events-reporting-code
+- Commands planned: uv run ruff format --check; uv run ruff check
+- Notes: `git pull --ff-only` cannot run as written because `feat/cdp-first-browser-use` has no configured remote/upstream locally.
+
+## C5-test START
+- Timestamp: 2026-01-05T02:55:17Z
+- Role: test
+- Worktree: wt/cf-c5-events-reporting-test
+- Commands planned: uv run ruff format --check; uv run pytest gsd-browser/tests -k c5
+- Notes: Local repo has no configured git remote/upstream for feat/cdp-first-browser-use, so git pull --ff-only cannot run as written.
