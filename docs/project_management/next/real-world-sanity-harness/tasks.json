@@ -386,7 +386,7 @@
       "name": "Quality gates ergonomics (test)",
       "type": "test",
       "phase": "R4",
-      "status": "pending",
+      "status": "in_progress",
       "description": "Any minimal tests needed by R4 code changes (only if necessary).",
       "references": [
         "docs/project_management/next/real-world-sanity-harness/plan.md",

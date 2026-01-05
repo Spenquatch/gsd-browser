@@ -27,6 +27,13 @@ Only START/END entries. Docs edits happen on the orchestration branch only.
 - Commands executed: (in wt/rw-r1-harness-code/gsd-browser) make dev (pass; installed ruff); uv run ruff format --check (pass; 52 files already formatted); uv run ruff check (pass; All checks passed!)
 - Result: pass
 
+## R4-test START
+- Timestamp: 2026-01-05T14:52:29Z
+- Role: test
+- Worktree: wt/rw-r4-gates-test
+- Commands planned: uv run ruff format --check; uv run pytest gsd-browser/tests -k r4
+- Notes: No git remote/upstream configured in this repo, so `git pull --ff-only` cannot run as written.
+
 ## R3-integ START
 - Timestamp: 2026-01-05T14:39:53Z
 - Role: integration
