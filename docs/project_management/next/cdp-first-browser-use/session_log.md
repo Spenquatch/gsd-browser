@@ -269,3 +269,10 @@ Only START/END entries. Docs edits happen on the orchestration branch only.
 - Commit: 7debada
 - Commands executed: (in wt/cf-c6-control-target-code/gsd-browser) make dev (pass; installed ruff/pytest); uv run ruff format --check (pass; 50 files already formatted); uv run ruff check (pass; All checks passed!)
 - Result: pass
+
+## C6-integ START
+- Timestamp: 2026-01-05T04:07:55Z
+- Role: integration
+- Worktree: wt/cf-c6-control-target-integ
+- Commands planned: uv run ruff format --check; uv run ruff check; uv run pytest; make smoke
+- Notes: `git pull --ff-only` cannot run as written because `feat/cdp-first-browser-use` has no configured remote/upstream locally.
