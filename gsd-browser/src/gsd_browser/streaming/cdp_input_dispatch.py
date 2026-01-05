@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import inspect
 import logging
+from collections.abc import Awaitable, Callable
 from typing import Any
 
 logger = logging.getLogger("gsd_browser.streaming")
@@ -92,14 +93,36 @@ def _default_code_for_key(key: str) -> str | None:
     return None
 
 
-async def _cdp_send(cdp_client: Any, method: str, params: dict[str, Any]) -> None:
-    send = getattr(cdp_client, "send", None)
-    if send is None:
+async def _cdp_send(
+    *,
+    cdp_client: Any,
+    cdp_session_id: str,
+    method: str,
+    params: dict[str, Any],
+) -> None:
+    send_obj = getattr(cdp_client, "send", None)
+    if send_obj is None:
         raise RuntimeError("cdp_client_missing_send")
 
-    result = send(method, params)
-    if inspect.isawaitable(result):
-        await result
+    domain, _, command = method.partition(".")
+    typed_domain = getattr(send_obj, domain, None)
+    typed_method = getattr(typed_domain, command, None) if typed_domain is not None else None
+    if callable(typed_method):
+        result = typed_method(params=params, session_id=cdp_session_id)
+        if inspect.isawaitable(result):
+            await result
+        return
+
+    if callable(send_obj):
+        try:
+            result = send_obj(method, params, session_id=cdp_session_id)
+        except TypeError:
+            result = send_obj(method, params=params, session_id=cdp_session_id)
+        if inspect.isawaitable(result):
+            await result
+        return
+
+    raise RuntimeError(f"cdp_client_missing_send_surface:{method}")
 
 
 def _mouse_button(button: str) -> str:
@@ -127,8 +150,8 @@ def _modifier_bit_for_key(*, key: str, code: str | None = None) -> int:
 class CDPInputDispatcher:
     """Stateful CDP input dispatcher to preserve modifier semantics across events."""
 
-    def __init__(self, *, cdp_client: Any) -> None:
-        self._cdp_client = cdp_client
+    def __init__(self, *, send: Callable[[str, dict[str, Any]], Awaitable[None]]) -> None:
+        self._send = send
         self._held_modifiers = 0
 
     async def dispatch(self, event: str, payload: dict[str, Any]) -> None:
@@ -140,12 +163,13 @@ class CDPInputDispatcher:
         code_str = str(code) if isinstance(code, str) else ""
         modifier_bit = _modifier_bit_for_key(key=key, code=code_str)
 
+        next_held_modifiers = self._held_modifiers
         if event == "input_keydown" and modifier_bit:
-            self._held_modifiers |= modifier_bit
+            next_held_modifiers |= modifier_bit
         elif event == "input_keyup" and modifier_bit:
-            self._held_modifiers &= ~modifier_bit
+            next_held_modifiers &= ~modifier_bit
 
-        combined_modifiers = self._held_modifiers | _modifiers_from_payload(payload)
+        combined_modifiers = next_held_modifiers | _modifiers_from_payload(payload)
         if event == "input_keyup" and modifier_bit:
             combined_modifiers &= ~modifier_bit
         elif event == "input_keydown" and modifier_bit:
@@ -153,18 +177,24 @@ class CDPInputDispatcher:
 
         merged_payload = dict(payload)
         merged_payload["modifiers"] = combined_modifiers
-        await dispatch_ctrl_input_event(
-            cdp_client=self._cdp_client, event=event, payload=merged_payload
-        )
+        await self._send(event, merged_payload)
+        self._held_modifiers = next_held_modifiers
 
     async def dispatch_input(self, event: str, payload: dict[str, Any]) -> None:
         await self.dispatch(event, payload)
 
 
+class CtrlTargetUnavailableError(RuntimeError):
+    pass
+
+
 async def dispatch_ctrl_input_event(
-    *, cdp_client: Any, event: str, payload: dict[str, Any]
+    *, cdp_client: Any, cdp_session_id: str, event: str, payload: dict[str, Any]
 ) -> None:
     """Dispatch a validated /ctrl input event to the active CDP target."""
+
+    if not isinstance(cdp_session_id, str) or not cdp_session_id.strip():
+        raise CtrlTargetUnavailableError("target_unavailable")
 
     modifiers = _modifiers_from_payload(payload)
 
@@ -174,17 +204,19 @@ async def dispatch_ctrl_input_event(
 
         if event == "input_move":
             await _cdp_send(
-                cdp_client,
-                "Input.dispatchMouseEvent",
-                {"type": "mouseMoved", "x": x, "y": y, "modifiers": modifiers},
+                cdp_client=cdp_client,
+                cdp_session_id=cdp_session_id,
+                method="Input.dispatchMouseEvent",
+                params={"type": "mouseMoved", "x": x, "y": y, "modifiers": modifiers},
             )
             return
 
         if event == "input_wheel":
             await _cdp_send(
-                cdp_client,
-                "Input.dispatchMouseEvent",
-                {
+                cdp_client=cdp_client,
+                cdp_session_id=cdp_session_id,
+                method="Input.dispatchMouseEvent",
+                params={
                     "type": "mouseWheel",
                     "x": x,
                     "y": y,
@@ -198,9 +230,10 @@ async def dispatch_ctrl_input_event(
         button = _mouse_button(str(payload.get("button") or "left"))
         click_count = int(payload.get("click_count") or 1)
         await _cdp_send(
-            cdp_client,
-            "Input.dispatchMouseEvent",
-            {
+            cdp_client=cdp_client,
+            cdp_session_id=cdp_session_id,
+            method="Input.dispatchMouseEvent",
+            params={
                 "type": "mousePressed",
                 "x": x,
                 "y": y,
@@ -210,9 +243,10 @@ async def dispatch_ctrl_input_event(
             },
         )
         await _cdp_send(
-            cdp_client,
-            "Input.dispatchMouseEvent",
-            {
+            cdp_client=cdp_client,
+            cdp_session_id=cdp_session_id,
+            method="Input.dispatchMouseEvent",
+            params={
                 "type": "mouseReleased",
                 "x": x,
                 "y": y,
@@ -247,22 +281,29 @@ async def dispatch_ctrl_input_event(
             base["autoRepeat"] = auto_repeat
 
         if event == "input_keyup":
-            await _cdp_send(cdp_client, "Input.dispatchKeyEvent", {"type": "keyUp", **base})
+            await _cdp_send(
+                cdp_client=cdp_client,
+                cdp_session_id=cdp_session_id,
+                method="Input.dispatchKeyEvent",
+                params={"type": "keyUp", **base},
+            )
             return
 
         if key == "Enter":
             await _cdp_send(
-                cdp_client,
-                "Input.dispatchKeyEvent",
-                {
+                cdp_client=cdp_client,
+                cdp_session_id=cdp_session_id,
+                method="Input.dispatchKeyEvent",
+                params={
                     "type": "rawKeyDown",
                     **base,
                 },
             )
             await _cdp_send(
-                cdp_client,
-                "Input.dispatchKeyEvent",
-                {
+                cdp_client=cdp_client,
+                cdp_session_id=cdp_session_id,
+                method="Input.dispatchKeyEvent",
+                params={
                     "type": "char",
                     "text": "\r",
                     "unmodifiedText": "\r",
@@ -276,7 +317,12 @@ async def dispatch_ctrl_input_event(
             return
 
         key_type = "rawKeyDown" if key in _SPECIAL_VKEYS else "keyDown"
-        await _cdp_send(cdp_client, "Input.dispatchKeyEvent", {"type": key_type, **base})
+        await _cdp_send(
+            cdp_client=cdp_client,
+            cdp_session_id=cdp_session_id,
+            method="Input.dispatchKeyEvent",
+            params={"type": key_type, **base},
+        )
         return
 
     if event == "input_type":
@@ -288,11 +334,13 @@ async def dispatch_ctrl_input_event(
             if char in {"\n", "\r"}:
                 await dispatch_ctrl_input_event(
                     cdp_client=cdp_client,
+                    cdp_session_id=cdp_session_id,
                     event="input_keydown",
                     payload={"key": "Enter", "modifiers": modifiers},
                 )
                 await dispatch_ctrl_input_event(
                     cdp_client=cdp_client,
+                    cdp_session_id=cdp_session_id,
                     event="input_keyup",
                     payload={"key": "Enter", "modifiers": modifiers},
                 )
@@ -311,7 +359,12 @@ async def dispatch_ctrl_input_event(
                 params["key"] = char
                 params["code"] = _default_code_for_key(char)
 
-            await _cdp_send(cdp_client, "Input.dispatchKeyEvent", params)
+            await _cdp_send(
+                cdp_client=cdp_client,
+                cdp_session_id=cdp_session_id,
+                method="Input.dispatchKeyEvent",
+                params=params,
+            )
         return
 
     logger.debug("Unhandled ctrl input event", extra={"event": event})

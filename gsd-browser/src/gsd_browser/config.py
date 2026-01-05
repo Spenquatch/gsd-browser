@@ -52,6 +52,8 @@ class Settings(BaseModel):
     web_eval_max_steps: int = Field(25, alias="GSD_BROWSER_WEB_EVAL_MAX_STEPS")
     web_eval_step_timeout_s: float = Field(15.0, alias="GSD_BROWSER_WEB_EVAL_STEP_TIMEOUT_S")
 
+    auto_pause_on_take_control: bool = Field(True, alias="GSD_BROWSER_AUTO_PAUSE_ON_TAKE_CONTROL")
+
     model_config = ConfigDict(populate_by_name=True)
 
     def _mcp_env(self) -> dict[str, str]:
@@ -189,6 +191,10 @@ def load_settings(
         if merged.get("GSD_BROWSER_WEB_EVAL_STEP_TIMEOUT_S") is not None:
             payload["GSD_BROWSER_WEB_EVAL_STEP_TIMEOUT_S"] = merged[
                 "GSD_BROWSER_WEB_EVAL_STEP_TIMEOUT_S"
+            ]
+        if merged.get("GSD_BROWSER_AUTO_PAUSE_ON_TAKE_CONTROL") is not None:
+            payload["GSD_BROWSER_AUTO_PAUSE_ON_TAKE_CONTROL"] = merged[
+                "GSD_BROWSER_AUTO_PAUSE_ON_TAKE_CONTROL"
             ]
 
         return Settings.model_validate(payload, strict=strict)

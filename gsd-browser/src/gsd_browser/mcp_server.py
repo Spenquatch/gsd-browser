@@ -26,7 +26,12 @@ from .llm.browser_use import create_browser_use_llms
 from .run_event_capture import CDPRunEventCapture
 from .run_event_store import RunEventStore
 from .runtime import DEFAULT_DASHBOARD_HOST, DEFAULT_DASHBOARD_PORT, get_runtime
-from .streaming.cdp_input_dispatch import CDPInputDispatcher
+from .streaming.cdp_input_dispatch import (
+    CDPInputDispatcher,
+    CtrlTargetUnavailableError,
+    dispatch_ctrl_input_event,
+)
+from .streaming.security import get_security_logger
 
 logger = logging.getLogger("gsd_browser.mcp")
 
@@ -843,11 +848,56 @@ async def web_eval_agent(
 
         active_session_set = False
         cdp_dispatcher: CDPInputDispatcher | None = None
+        security_logger = get_security_logger()
         if control_state is not None:
             set_active_session = getattr(control_state, "set_active_session", None)
             if callable(set_active_session):
                 set_active_session(session_id=session_id)
                 active_session_set = True
+            get_or_create_cdp_session = getattr(browser_session, "get_or_create_cdp_session", None)
+
+            async def _send_ctrl_input(event: str, payload: dict[str, Any]) -> None:
+                if not callable(get_or_create_cdp_session):
+                    raise CtrlTargetUnavailableError("target_unavailable")
+
+                for attempt in range(2):
+                    try:
+                        cdp_session = get_or_create_cdp_session()
+                        if inspect.isawaitable(cdp_session):
+                            cdp_session = await cdp_session
+                    except Exception as exc:  # noqa: BLE001
+                        if attempt == 0:
+                            await asyncio.sleep(0.05)
+                            continue
+                        raise CtrlTargetUnavailableError("target_unavailable") from exc
+
+                    cdp_client = getattr(cdp_session, "cdp_client", None)
+                    cdp_session_id = getattr(cdp_session, "session_id", None)
+                    if (
+                        cdp_client is None
+                        or not isinstance(cdp_session_id, str)
+                        or not cdp_session_id
+                    ):
+                        if attempt == 0:
+                            await asyncio.sleep(0.05)
+                            continue
+                        raise CtrlTargetUnavailableError("target_unavailable")
+
+                    try:
+                        await dispatch_ctrl_input_event(
+                            cdp_client=cdp_client,
+                            cdp_session_id=cdp_session_id,
+                            event=event,
+                            payload=payload,
+                        )
+                        return
+                    except Exception:  # noqa: BLE001
+                        if attempt == 0:
+                            await asyncio.sleep(0.05)
+                            continue
+                        raise
+
+            cdp_dispatcher = CDPInputDispatcher(send=_send_ctrl_input)
 
         cdp_attached = False
 
@@ -884,12 +934,11 @@ async def web_eval_agent(
                     note_detached(error=streaming_disabled_reason)
 
         async def attach_cdp_when_ready() -> None:
-            nonlocal cdp_dispatcher, cdp_attached
+            nonlocal cdp_attached
             while True:
                 cdp_client = getattr(browser_session, "cdp_client", None)
                 if cdp_client is not None:
                     try:
-                        cdp_dispatcher = CDPInputDispatcher(cdp_client=cdp_client)
                         cdp_capture.attach(cdp_client)
                         cdp_attached = True
                     except Exception:  # noqa: BLE001
@@ -935,6 +984,14 @@ async def web_eval_agent(
                     await wait_until_unpaused()
                 return
 
+            def _payload_meta(*, event: str, payload: dict[str, Any]) -> dict[str, Any]:
+                meta: dict[str, Any] = {"payload_keys": sorted(payload.keys())}
+                if event == "input_type":
+                    text = payload.get("text")
+                    if isinstance(text, str):
+                        meta["text_len"] = len(text)
+                return meta
+
             while _paused():
                 drained = drain_input_events(max_items=100)
                 for record in drained:
@@ -942,13 +999,35 @@ async def web_eval_agent(
                     payload = record.get("payload")
                     if not isinstance(event, str) or not isinstance(payload, dict):
                         continue
+                    record_sid = record.get("sid")
+                    record_seq = record.get("seq")
+                    meta = _payload_meta(event=event, payload=payload)
                     try:
                         await cdp_dispatcher.dispatch(event, payload)
-                    except Exception:  # noqa: BLE001
-                        logger.debug(
-                            "Failed to dispatch ctrl input event",
-                            exc_info=True,
-                            extra={"session_id": session_id, "event": event},
+                    except CtrlTargetUnavailableError:
+                        security_logger.info(
+                            "ctrl_target_unavailable",
+                            extra={
+                                "session_id": session_id,
+                                "sid": record_sid,
+                                "seq": record_seq,
+                                "event": event,
+                                "reason": "target_unavailable",
+                                **meta,
+                            },
+                        )
+                    except Exception as exc:  # noqa: BLE001
+                        security_logger.info(
+                            "ctrl_dispatch_error",
+                            extra={
+                                "session_id": session_id,
+                                "sid": record_sid,
+                                "seq": record_seq,
+                                "event": event,
+                                "reason": "dispatch_error",
+                                "error": _truncate(f"{type(exc).__name__}: {exc}", max_len=300),
+                                **meta,
+                            },
                         )
 
                 if not drained:
