@@ -158,7 +158,7 @@
       "name": "Artifact harvesting + classification (test)",
       "type": "test",
       "phase": "R2",
-      "status": "pending",
+      "status": "in_progress",
       "description": "Unit tests for classification and “actionable reason” predicates using fixtures (no network).",
       "references": [
         "docs/project_management/next/real-world-sanity-harness/plan.md",

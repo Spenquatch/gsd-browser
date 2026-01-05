@@ -59,3 +59,10 @@ Only START/END entries. Docs edits happen on the orchestration branch only.
 - Worktree: wt/rw-r2-artifacts-code
 - Commands planned: uv run ruff format --check; uv run ruff check
 - Notes: `git pull --ff-only` failed because feat/real-world-sanity-harness has no tracking upstream configured.
+
+## R2-test START
+- Timestamp: 2026-01-05T14:03:11Z
+- Role: test
+- Worktree: wt/rw-r2-artifacts-test
+- Commands planned: uv run ruff format --check; uv run pytest gsd-browser/tests -k r2
+- Notes: Local repo has no configured git remote/upstream, so `git pull --ff-only` cannot run as written.
