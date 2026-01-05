@@ -388,7 +388,7 @@
       "name": "CDP-first streaming adapter (test)",
       "type": "test",
       "phase": "C4",
-      "status": "in_progress",
+      "status": "completed",
       "description": "Unit tests for streaming lifecycle and sampling/backpressure.",
       "references": [
         "docs/project_management/next/cdp-first-browser-use/plan.md",
