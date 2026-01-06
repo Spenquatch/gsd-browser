@@ -215,7 +215,7 @@
       "name": "Pre-teardown screenshot guarantee (integration)",
       "type": "integration",
       "phase": "A2",
-      "status": "pending",
+      "status": "in_progress",
       "description": "Integrate A2 code+tests, reconcile to spec, and ensure ruff+pytest+smoke are green.",
       "references": [
         "docs/project_management/next/browser-use-contract-alignment/plan.md",

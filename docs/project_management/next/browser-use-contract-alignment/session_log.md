@@ -276,3 +276,10 @@ Only START/END entries. Docs edits happen on the orchestration branch only.
     ```
 - Result: pass
 - Notes: Added 3 new A2-specific tests (test_a2_early_abort_guarantees_step_1_screenshot, test_a2_early_abort_with_error_guarantees_screenshot, test_a2_multi_step_no_screenshots_guarantees_step_1_and_final) to validate screenshot guarantee on early abort paths.
+
+## A2-integ START
+- Timestamp: 2026-01-06T03:15:38Z
+- Role: integration
+- Worktree: wt/buca-a2-screenshot-integ
+- Commands planned: uv run ruff format --check; uv run ruff check; uv run pytest; make smoke
+- Notes: Local repo has no configured git remote/upstream for `feat/browser-use-contract-alignment`, so `git pull --ff-only` cannot run as written.
