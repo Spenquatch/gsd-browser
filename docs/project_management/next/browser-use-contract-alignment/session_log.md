@@ -375,6 +375,28 @@ Only START/END entries. Docs edits happen on the orchestration branch only.
 - Commands planned: uv run ruff format --check; uv run ruff check
 - Notes: Local repo has no configured git remote/upstream for `feat/browser-use-contract-alignment`, so `git pull --ff-only` cannot run as written.
 
+## A3-code END
+- Timestamp: 2026-01-06T07:50:00Z
+- Role: code
+- Worktree: wt/buca-a3-run-events-code
+- Branch: buca-a3-run-events-code
+- Commit: 4aba50c
+- Commands run:
+  - (cwd=wt/buca-a3-run-events-code/gsd-browser) `make dev` (to install ruff)
+  - (cwd=root) `uv run ruff format --check`
+  - (cwd=root) `uv run ruff check`
+- Command outputs:
+  - `uv run ruff format --check`:
+    ```
+    55 files already formatted
+    ```
+  - `uv run ruff check`:
+    ```
+    All checks passed!
+    ```
+- Result: pass
+- Implementation: Updated `RunEventStore.record_agent_event` to accept `has_error` parameter; added error detection logic in `web_eval_agent` exception handler to detect and record schema validation and provider errors as agent events with `has_error=true`.
+
 ## A3-test START
 - Timestamp: 2026-01-06T08:15:00Z
 - Role: test
