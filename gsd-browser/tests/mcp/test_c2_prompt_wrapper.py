@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import inspect
+import re
 from typing import Any
 
 import pytest
@@ -27,9 +28,7 @@ class _DummyRuntime:
         return None
 
 
-def test_c2_prompt_wrapper_includes_stop_conditions_and_anchor_guidance(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def _capture_prompt_wrapper(monkeypatch: pytest.MonkeyPatch) -> str | None:
     monkeypatch.setattr(mcp_server_mod, "get_runtime", lambda: _DummyRuntime())
     monkeypatch.setattr(mcp_server_mod, "load_settings", lambda *args, **kwargs: object())
     monkeypatch.setattr(
@@ -94,6 +93,15 @@ def test_c2_prompt_wrapper_includes_stop_conditions_and_anchor_guidance(
         "extend_system_message"
     )
     if not isinstance(prompt_wrapper, str):
+        return None
+    return prompt_wrapper
+
+
+def test_c2_prompt_wrapper_includes_stop_conditions_and_anchor_guidance(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    prompt_wrapper = _capture_prompt_wrapper(monkeypatch)
+    if prompt_wrapper is None:
         pytest.skip("C2 prompt wrapper not yet wired via browser-use Agent system message surfaces")
 
     lowered = prompt_wrapper.lower()
@@ -105,7 +113,6 @@ def test_c2_prompt_wrapper_includes_stop_conditions_and_anchor_guidance(
     assert "stop" in lowered
     assert any(token in lowered for token in ("captcha", "bot wall", "botwall", "bot"))
     assert any(token in lowered for token in ("impossible", "site restriction", "restricted"))
-    assert "result" in lowered
     assert "retry" in lowered
 
     assert any(
@@ -121,3 +128,31 @@ def test_c2_prompt_wrapper_includes_stop_conditions_and_anchor_guidance(
             "do not leave",
         )
     )
+
+
+def test_c2_prompt_wrapper_does_not_instruct_alternate_output_schema(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    prompt_wrapper = _capture_prompt_wrapper(monkeypatch)
+    if prompt_wrapper is None:
+        pytest.skip("C2 prompt wrapper not yet wired via browser-use Agent system message surfaces")
+
+    lowered = prompt_wrapper.lower()
+    assert "single-line json object only" not in lowered
+    assert "do not wrap the json" not in lowered
+
+    assert re.search(r'\{\s*"result"\s*:', prompt_wrapper) is None
+    assert re.search(r'"status"\s*:', prompt_wrapper) is None
+    assert re.search(r'"notes"\s*:', prompt_wrapper) is None
+
+
+def test_c2_prompt_wrapper_instructs_done_action_semantics(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    prompt_wrapper = _capture_prompt_wrapper(monkeypatch)
+    if prompt_wrapper is None:
+        pytest.skip("C2 prompt wrapper not yet wired via browser-use Agent system message surfaces")
+
+    lowered = prompt_wrapper.lower()
+    assert re.search(r"done\s*\(\s*success\s*=\s*true", lowered) is not None
+    assert re.search(r"done\s*\(\s*success\s*=\s*false", lowered) is not None
