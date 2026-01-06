@@ -1103,6 +1103,15 @@ async def web_eval_agent(
                 except (TypeError, ValueError):
                     pass
 
+            register_done_callback = getattr(agent, "register_done_callback", None)
+            if callable(register_done_callback):
+                try:
+                    callback_sig = inspect.signature(register_done_callback)
+                    if len(callback_sig.parameters) == 1:
+                        register_done_callback(ensure_required_step_screenshots)
+                except (TypeError, ValueError):
+                    pass
+
             run_kwargs: dict[str, Any] = {}
             try:
                 signature = inspect.signature(agent.run)

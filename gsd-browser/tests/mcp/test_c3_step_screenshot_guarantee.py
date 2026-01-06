@@ -326,3 +326,171 @@ def test_c3_agent_step_per_session_cap_evicts_oldest() -> None:
     )
     assert len(shots) == 50
     assert [shot["step"] for shot in shots] == list(range(11, 61))
+
+
+def test_a2_early_abort_guarantees_step_1_screenshot(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    src = _web_eval_agent_source()
+    if "ensure_required_step_screenshots" not in src:
+        pytest.xfail("A2 screenshot guarantee not implemented in this branch yet")
+
+    screenshots = _DummyScreenshotManager()
+    runtime = _DummyRuntime(screenshots=screenshots)
+
+    class _EarlyAbortAgent(_DummyAgent):
+        async def run(self, *args: Any, **kwargs: Any) -> _DummyHistory:
+            info = _StepInfo(
+                step=1,
+                url="https://example.com",
+                title="Example",
+                screenshot=None,
+            )
+            if self._step_callback is not None:
+                try:
+                    result = self._step_callback(info, None, info.step)
+                    if inspect.isawaitable(result):
+                        await result
+                except TypeError:
+                    result = self._step_callback(info)
+                    if inspect.isawaitable(result):
+                        await result
+            return _DummyHistory()
+
+    monkeypatch.setattr(mcp_server_mod, "get_runtime", lambda: runtime)
+    monkeypatch.setattr(mcp_server_mod, "load_settings", lambda *args, **kwargs: object())
+    monkeypatch.setattr(
+        mcp_server_mod,
+        "create_browser_use_llms",
+        lambda *args, **kwargs: type("DummyLLMs", (), {"primary": object(), "fallback": None})(),
+    )
+    monkeypatch.setattr(
+        mcp_server_mod,
+        "_load_browser_use_classes",
+        lambda: (_EarlyAbortAgent, _DummyBrowserSession),
+    )
+
+    _DummyAgent.created.clear()
+    _DummyBrowserSession.created.clear()
+    response = _run(
+        mcp_server_mod.web_eval_agent(
+            url="example.com",
+            task="do something",
+            ctx=object(),
+            headless_browser=True,
+        )
+    )
+    payload = _parse_payload(response)
+    assert payload["status"] in ("success", "partial", "failed")
+
+    assert screenshots.record_calls, "expected at least one screenshot to be recorded"
+    step_1_shots = [call for call in screenshots.record_calls if call.get("step") == 1]
+    assert step_1_shots, "expected step 1 screenshot to be guaranteed"
+
+    call = step_1_shots[0]
+    assert call.get("screenshot_type") == "agent_step"
+    assert call.get("session_id"), "expected session_id on recorded screenshot"
+
+
+def test_a2_early_abort_with_error_guarantees_screenshot(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    src = _web_eval_agent_source()
+    if "ensure_required_step_screenshots" not in src:
+        pytest.xfail("A2 screenshot guarantee not implemented in this branch yet")
+
+    screenshots = _DummyScreenshotManager()
+    runtime = _DummyRuntime(screenshots=screenshots)
+
+    class _ErrorAgent(_DummyAgent):
+        async def run(self, *args: Any, **kwargs: Any) -> _DummyHistory:
+            raise RuntimeError("agent error")
+
+    monkeypatch.setattr(mcp_server_mod, "get_runtime", lambda: runtime)
+    monkeypatch.setattr(mcp_server_mod, "load_settings", lambda *args, **kwargs: object())
+    monkeypatch.setattr(
+        mcp_server_mod,
+        "create_browser_use_llms",
+        lambda *args, **kwargs: type("DummyLLMs", (), {"primary": object(), "fallback": None})(),
+    )
+    monkeypatch.setattr(
+        mcp_server_mod, "_load_browser_use_classes", lambda: (_ErrorAgent, _DummyBrowserSession)
+    )
+
+    _DummyAgent.created.clear()
+    _DummyBrowserSession.created.clear()
+    response = _run(
+        mcp_server_mod.web_eval_agent(
+            url="example.com",
+            task="do something",
+            ctx=object(),
+            headless_browser=True,
+        )
+    )
+    payload = _parse_payload(response)
+    assert payload["status"] in ("success", "partial", "failed")
+
+    assert screenshots.record_calls, "expected at least one screenshot despite error"
+
+
+def test_a2_multi_step_no_screenshots_guarantees_step_1_and_final(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    src = _web_eval_agent_source()
+    if "ensure_required_step_screenshots" not in src:
+        pytest.xfail("A2 screenshot guarantee not implemented in this branch yet")
+
+    screenshots = _DummyScreenshotManager()
+    runtime = _DummyRuntime(screenshots=screenshots)
+
+    class _MultiStepAgent(_DummyAgent):
+        async def run(self, *args: Any, **kwargs: Any) -> _DummyHistory:
+            for step in [1, 2, 3]:
+                info = _StepInfo(
+                    step=step,
+                    url="https://example.com",
+                    title=f"Example {step}",
+                    screenshot=None,
+                )
+                if self._step_callback is not None:
+                    try:
+                        result = self._step_callback(info, None, info.step)
+                        if inspect.isawaitable(result):
+                            await result
+                    except TypeError:
+                        result = self._step_callback(info)
+                        if inspect.isawaitable(result):
+                            await result
+            return _DummyHistory()
+
+    monkeypatch.setattr(mcp_server_mod, "get_runtime", lambda: runtime)
+    monkeypatch.setattr(mcp_server_mod, "load_settings", lambda *args, **kwargs: object())
+    monkeypatch.setattr(
+        mcp_server_mod,
+        "create_browser_use_llms",
+        lambda *args, **kwargs: type("DummyLLMs", (), {"primary": object(), "fallback": None})(),
+    )
+    monkeypatch.setattr(
+        mcp_server_mod, "_load_browser_use_classes", lambda: (_MultiStepAgent, _DummyBrowserSession)
+    )
+
+    _DummyAgent.created.clear()
+    _DummyBrowserSession.created.clear()
+    response = _run(
+        mcp_server_mod.web_eval_agent(
+            url="example.com",
+            task="do something",
+            ctx=object(),
+            headless_browser=True,
+        )
+    )
+    payload = _parse_payload(response)
+    assert payload["status"] in ("success", "partial", "failed")
+
+    assert screenshots.record_calls, "expected at least one screenshot to be recorded"
+
+    step_1_shots = [call for call in screenshots.record_calls if call.get("step") == 1]
+    assert step_1_shots, "expected step 1 screenshot to be guaranteed"
+
+    step_3_shots = [call for call in screenshots.record_calls if call.get("step") == 3]
+    assert step_3_shots, "expected final step (step 3) screenshot to be guaranteed"
