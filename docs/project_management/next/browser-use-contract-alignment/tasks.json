@@ -431,7 +431,7 @@
       "name": "Harness actionable classification for agent failures (test)",
       "type": "test",
       "phase": "A4",
-      "status": "in_progress",
+      "status": "done",
       "description": "Add fixture-based tests validating harness classification for agent/provider/schema failures.",
       "references": [
         "docs/project_management/next/browser-use-contract-alignment/plan.md",

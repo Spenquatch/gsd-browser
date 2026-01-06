@@ -549,6 +549,49 @@ Only START/END entries. Docs edits happen on the orchestration branch only.
 - Commands planned: uv run ruff format --check; uv run pytest gsd-browser/tests -k "real_world_sanity"
 - Notes: Local repo has no configured git remote/upstream for `feat/browser-use-contract-alignment`, so `git pull --ff-only` cannot run as written.
 
+## A4-test END
+- Timestamp: 2026-01-06T12:30:00Z
+- Role: test
+- Worktree: wt/buca-a4-harness-classify-test
+- Branch: buca-a4-harness-classify-test
+- Commit: 3cb098b
+- Commands run:
+  - (cwd=wt/buca-a4-harness-classify-test/gsd-browser) `make dev` (to install ruff/pytest)
+  - (cwd=wt/buca-a4-harness-classify-test/gsd-browser) `uv run ruff format --check`
+  - (cwd=wt/buca-a4-harness-classify-test/gsd-browser) `uv run pytest tests -k "real_world_sanity"`
+- Command outputs:
+  - `uv run ruff format --check`:
+    ```
+    56 files already formatted
+    Uninstalled 3 packages in 3ms
+    Installed 3 packages in 4ms
+    ```
+  - `uv run pytest tests -k "real_world_sanity"`:
+    ```
+    ============================= test session starts ==============================
+    platform linux -- Python 3.11.14, pytest-9.0.2, pluggy-1.6.0
+    rootdir: /home/inboxgreen/gsd-browser/wt/buca-a4-harness-classify-test/gsd-browser
+    configfile: pyproject.toml
+    plugins: anyio-4.12.0
+    collected 113 items / 85 deselected / 28 selected
+
+    tests/test_real_world_sanity_a4.py FFFFF....F                            [ 35%]
+    tests/test_real_world_sanity_r2.py .............                         [ 82%]
+    tests/test_real_world_sanity_r3.py ...                                   [ 92%]
+    tests/test_real_world_sanity_r4.py ..                                    [100%]
+
+    =========================== FAILURES ===================================
+    FAILED tests/test_real_world_sanity_a4.py::test_a4_agent_event_with_has_error_is_actionable
+    FAILED tests/test_real_world_sanity_a4.py::test_a4_agent_provider_error_event_is_actionable
+    FAILED tests/test_real_world_sanity_a4.py::test_a4_schema_validation_failure_summary_is_actionable
+    FAILED tests/test_real_world_sanity_a4.py::test_a4_provider_error_summary_is_actionable
+    FAILED tests/test_real_world_sanity_a4.py::test_a4_pydantic_error_summary_is_actionable
+    FAILED tests/test_real_world_sanity_a4.py::test_a4_integration_agent_events_make_classification_actionable
+    ================= 6 failed, 22 passed, 85 deselected in 1.57s ==================
+    ```
+- Result: fail (expected until A4-code harness changes are integrated)
+- Notes: Added test_real_world_sanity_a4.py with 10 fixture-based tests covering: agent events with has_error=True being actionable, schema/provider/pydantic failure summary detection, and classification outcomes (schema validation + artifacts → soft_fail, provider error + artifacts → soft_fail, failed + no artifacts → hard_fail). Tests fail as expected since A4-code implementation is not yet integrated.
+
 ## A4-code END
 - Timestamp: 2026-01-06T12:15:00Z
 - Role: code
