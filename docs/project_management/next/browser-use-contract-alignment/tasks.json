@@ -47,7 +47,7 @@
       "name": "Prompt wrapper contract alignment (test)",
       "type": "test",
       "phase": "A1",
-      "status": "pending",
+      "status": "in_progress",
       "description": "Update/add deterministic tests asserting the prompt wrapper does not instruct alternate schemas and does instruct done-action semantics.",
       "references": [
         "docs/project_management/next/browser-use-contract-alignment/plan.md",
