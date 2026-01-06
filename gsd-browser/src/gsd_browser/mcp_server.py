@@ -1439,6 +1439,53 @@ async def web_eval_agent(
         duration_s = max(0.0, datetime.now(UTC).timestamp() - started)
         warnings = _dedupe([*warnings, _truncate(f"{type(exc).__name__}: {exc}", max_len=400)])[:20]
 
+        exc_type_name = type(exc).__name__
+        exc_message = str(exc)
+        is_validation_error = False
+        is_provider_error = False
+
+        if "validationerror" in exc_type_name.lower() or "pydantic" in exc_type_name.lower():
+            is_validation_error = True
+        elif any(
+            keyword in exc_type_name.lower()
+            for keyword in ["provider", "model", "llm", "openai", "anthropic", "ollama"]
+        ):
+            is_provider_error = True
+        elif any(
+            keyword in exc_message.lower()
+            for keyword in [
+                "validation",
+                "invalid action",
+                "schema",
+                "provider",
+                "api key",
+                "rate limit",
+                "model",
+            ]
+        ):
+            if "validation" in exc_message.lower() or "invalid action" in exc_message.lower():
+                is_validation_error = True
+            else:
+                is_provider_error = True
+
+        if is_validation_error or is_provider_error:
+            try:
+                failure_type = "schema_validation" if is_validation_error else "provider_error"
+                error_summary = _truncate(f"{failure_type}: {exc_type_name}", max_len=1000)
+                record_agent_event_fn = getattr(run_events, "record_agent_event", None)
+                if callable(record_agent_event_fn):
+                    record_agent_event_fn(
+                        session_id,
+                        captured_at=datetime.now(UTC).timestamp(),
+                        step=last_step_observed,
+                        url=last_page_url,
+                        title=last_page_title,
+                        summary=error_summary,
+                        has_error=True,
+                    )
+            except Exception:  # noqa: BLE001
+                logger.debug("Failed to record agent error event", exc_info=True)
+
         logger.exception(
             "web_eval_agent failed",
             extra={
