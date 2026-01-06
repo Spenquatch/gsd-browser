@@ -123,7 +123,8 @@ def test_a4_failed_with_artifacts_but_no_actionable_reason_classifies_hard_fail(
 
 
 def test_a4_integration_agent_events_make_classification_actionable() -> None:
-    """A4: Integration test - agent events with has_error=True contribute to actionable classification."""
+    """A4: Integration test - agent events with has_error=True contribute to actionable
+    classification."""
     from gsd_browser.real_world_sanity import (
         _classify,
         _has_actionable_error_events,
