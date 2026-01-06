@@ -113,3 +113,10 @@ Only START/END entries. Docs edits happen on the orchestration branch only.
     ================= 2 failed, 1 passed, 100 deselected in 1.60s ==================
     ```
 - Result: fail (expected until A1-code prompt wrapper changes are integrated)
+
+## A1-integ START
+- Timestamp: 2026-01-06T02:42:06Z
+- Role: integration
+- Worktree: wt/buca-a1-prompt-integ
+- Commands planned: uv run ruff format --check; uv run ruff check; uv run pytest; make smoke
+- Notes: Local repo has no configured git remote/upstream for `feat/browser-use-contract-alignment`, so `git pull --ff-only` cannot run as written.
