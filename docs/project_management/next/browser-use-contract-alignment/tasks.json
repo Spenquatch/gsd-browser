@@ -131,7 +131,7 @@
       "name": "Pre-teardown screenshot guarantee (code)",
       "type": "code",
       "phase": "A2",
-      "status": "pending",
+      "status": "in_progress",
       "description": "Guarantee at least one step screenshot is captured before browser-use session teardown (especially on early aborts).",
       "references": [
         "docs/adr/ADR-0005-browser-use-contract-alignment-and-artifact-reliability.md",
