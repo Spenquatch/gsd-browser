@@ -309,11 +309,13 @@ def _browser_use_prompt_wrapper(*, base_url: str) -> str:
         "flows), STOP.\n"
         "- You may retry a transient UI failure 1–2 times (timeouts, missed clicks), but do not "
         "loop.\n\n"
-        "When you STOP (or when you finish), respond with a single-line JSON object only:\n"
-        '{"result":"<short user-facing answer>",'
-        '"status":"success|login_required|captcha|impossible_task|failed",'
-        '"notes":"<optional>"}\n'
-        "Do not wrap the JSON in Markdown fences and do not include extra text.\n"
+        "Output contract (browser-use):\n"
+        "- Always respond with a browser-use action; never respond with a custom JSON schema.\n"
+        "- Never return an empty action list.\n"
+        "- To stop for any reason (including completion), respond with exactly one action:\n"
+        "  - done(success=true, text=<final answer>) when the task is completed successfully.\n"
+        "  - done(success=false, text=<why you are stopping + what the user should do next>) "
+        "for stop conditions/failures (login required, CAPTCHA/bot wall, impossible task).\n"
     )
 
 
