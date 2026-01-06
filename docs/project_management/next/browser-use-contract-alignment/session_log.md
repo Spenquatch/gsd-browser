@@ -616,3 +616,10 @@ Only START/END entries. Docs edits happen on the orchestration branch only.
 - Result: pass
 - Implementation: Updated `_has_actionable_error_events` to check for agent events with `has_error=True`; added `_has_agent_provider_schema_failure` to detect agent/provider/schema failures in payload summary; combined all actionable checks so agent/provider/schema failures classify as `soft_fail` when artifacts exist.
 
+## A4-integ START
+- Timestamp: 2026-01-06T13:00:00Z
+- Role: integration
+- Worktree: wt/buca-a4-harness-classify-integ
+- Commands planned: uv run ruff format --check; uv run ruff check; uv run pytest; make smoke
+- Notes: Local repo has no configured git remote/upstream for `feat/browser-use-contract-alignment`, so `git pull --ff-only` cannot run as written.
+
