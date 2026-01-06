@@ -1,0 +1,8 @@
+[
+  {
+    "event_type": "agent",
+    "has_error": true,
+    "summary": "Provider error: Rate limit exceeded",
+    "details": {}
+  }
+]
