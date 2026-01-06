@@ -131,7 +131,7 @@
       "name": "Pre-teardown screenshot guarantee (code)",
       "type": "code",
       "phase": "A2",
-      "status": "in_progress",
+      "status": "done",
       "description": "Guarantee at least one step screenshot is captured before browser-use session teardown (especially on early aborts).",
       "references": [
         "docs/adr/ADR-0005-browser-use-contract-alignment-and-artifact-reliability.md",
@@ -174,7 +174,7 @@
       "name": "Pre-teardown screenshot guarantee (test)",
       "type": "test",
       "phase": "A2",
-      "status": "in_progress",
+      "status": "done",
       "description": "Add deterministic tests simulating early abort paths and asserting at least one screenshot is recorded.",
       "references": [
         "docs/project_management/next/browser-use-contract-alignment/plan.md",
