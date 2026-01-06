@@ -303,7 +303,7 @@
       "name": "Persist agent/provider failures as run events (test)",
       "type": "test",
       "phase": "A3",
-      "status": "pending",
+      "status": "in_progress",
       "description": "Add deterministic tests asserting that schema/provider failures emit `has_error=true` agent run events.",
       "references": [
         "docs/project_management/next/browser-use-contract-alignment/plan.md",
