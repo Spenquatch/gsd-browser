@@ -241,3 +241,38 @@ Only START/END entries. Docs edits happen on the orchestration branch only.
 - Worktree: wt/buca-a2-screenshot-test
 - Commands planned: uv run ruff format --check; uv run pytest gsd-browser/tests -k "screenshot"
 - Notes: Local repo has no configured git remote/upstream for `feat/browser-use-contract-alignment`, so `git pull --ff-only` cannot run as written.
+
+## A2-test END
+- Timestamp: 2026-01-06T03:20:00Z
+- Role: test
+- Worktree: wt/buca-a2-screenshot-test
+- Branch: buca-a2-screenshot-test
+- Commit: fa0fe28
+- Commands run:
+  - (cwd=wt/buca-a2-screenshot-test/gsd-browser) `make dev` (to install ruff/pytest)
+  - (cwd=/home/inboxgreen/gsd-browser/wt/buca-a2-screenshot-test/gsd-browser) `uv run ruff format --check`
+  - (cwd=/home/inboxgreen/gsd-browser/wt/buca-a2-screenshot-test/gsd-browser) `uv run pytest tests -k "screenshot"`
+- Command outputs:
+  - `uv run ruff format --check`:
+    ```
+    55 files already formatted
+    ```
+  - `uv run pytest tests -k "screenshot"`:
+    ```
+    ============================= test session starts ==============================
+    platform linux -- Python 3.11.14, pytest-9.0.2, pluggy-1.6.0
+    rootdir: /home/inboxgreen/gsd-browser/wt/buca-a2-screenshot-test/gsd-browser
+    configfile: pyproject.toml
+    plugins: anyio-4.12.0
+    collected 106 items / 91 deselected / 15 selected
+
+    tests/mcp/test_c3_step_screenshot_guarantee.py .......                   [ 46%]
+    tests/mcp/test_o1b_pause_gating_and_screenshots.py ..                    [ 60%]
+    tests/mcp/test_screenshot_tool.py ....                                   [ 86%]
+    tests/smoke/test_streaming.py .                                          [ 93%]
+    tests/streaming/test_cdp_wiring.py .                                     [100%]
+
+    ====================== 15 passed, 91 deselected in 0.63s =======================
+    ```
+- Result: pass
+- Notes: Added 3 new A2-specific tests (test_a2_early_abort_guarantees_step_1_screenshot, test_a2_early_abort_with_error_guarantees_screenshot, test_a2_multi_step_no_screenshots_guarantees_step_1_and_final) to validate screenshot guarantee on early abort paths.
