@@ -440,3 +440,10 @@ Only START/END entries. Docs edits happen on the orchestration branch only.
     ```
 - Result: fail (expected until A3-code run event recording is integrated)
 - Notes: Added test_a3_agent_provider_run_events.py with 2 deterministic tests asserting schema/provider failures emit has_error=true agent events. Tests fail as expected since A3-code implementation is not yet integrated.
+
+## A3-integ START
+- Timestamp: 2026-01-06T11:45:00Z
+- Role: integration
+- Worktree: wt/buca-a3-run-events-integ
+- Commands planned: uv run ruff format --check; uv run ruff check; uv run pytest; make smoke
+- Notes: Local repo has no configured git remote/upstream for `feat/browser-use-contract-alignment`, so `git pull --ff-only` cannot run as written.
