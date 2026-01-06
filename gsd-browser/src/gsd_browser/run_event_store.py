@@ -242,6 +242,7 @@ class RunEventStore:
         url: str | None = None,
         title: str | None = None,
         summary: str | None = None,
+        has_error: bool = False,
     ) -> None:
         details: dict[str, Any] = {}
         if step is not None:
@@ -257,7 +258,7 @@ class RunEventStore:
             timestamp=captured_at,
             summary=_truncate(str(summary or ""), max_len=self._config.max_summary_len),
             details=details or None,
-            has_error=False,
+            has_error=bool(has_error),
         )
 
     def record_console_event(
