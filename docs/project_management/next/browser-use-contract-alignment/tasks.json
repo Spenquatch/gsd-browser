@@ -344,7 +344,7 @@
       "name": "Persist agent/provider failures as run events (integration)",
       "type": "integration",
       "phase": "A3",
-      "status": "in_progress",
+      "status": "done",
       "description": "Integrate A3 code+tests, reconcile to spec, and ensure ruff+pytest+smoke are green.",
       "references": [
         "docs/project_management/next/browser-use-contract-alignment/plan.md",
