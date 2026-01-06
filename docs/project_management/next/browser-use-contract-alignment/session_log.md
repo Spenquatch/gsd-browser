@@ -542,6 +542,13 @@ Only START/END entries. Docs edits happen on the orchestration branch only.
 - Commands planned: uv run ruff format --check; uv run ruff check
 - Notes: Local repo has no configured git remote/upstream for `feat/browser-use-contract-alignment`, so `git pull --ff-only` cannot run as written.
 
+## A4-test START
+- Timestamp: 2026-01-06T12:00:00Z
+- Role: test
+- Worktree: wt/buca-a4-harness-classify-test
+- Commands planned: uv run ruff format --check; uv run pytest gsd-browser/tests -k "real_world_sanity"
+- Notes: Local repo has no configured git remote/upstream for `feat/browser-use-contract-alignment`, so `git pull --ff-only` cannot run as written.
+
 ## A4-code END
 - Timestamp: 2026-01-06T12:15:00Z
 - Role: code
