@@ -120,3 +120,89 @@ Only START/END entries. Docs edits happen on the orchestration branch only.
 - Worktree: wt/buca-a1-prompt-integ
 - Commands planned: uv run ruff format --check; uv run ruff check; uv run pytest; make smoke
 - Notes: Local repo has no configured git remote/upstream for `feat/browser-use-contract-alignment`, so `git pull --ff-only` cannot run as written.
+
+## A1-integ END
+- Timestamp: 2026-01-06T02:45:20Z
+- Role: integration
+- Worktree: wt/buca-a1-prompt-integ
+- Branch: buca-a1-prompt-integ
+- Commit: b4e0161
+- Commands run:
+  - (cwd=wt/buca-a1-prompt-integ/gsd-browser) `make dev` (to install ruff/pytest deps)
+  - (cwd=wt/buca-a1-prompt-integ/gsd-browser) `uv run ruff format --check`
+  - (cwd=wt/buca-a1-prompt-integ/gsd-browser) `uv run ruff check`
+  - (cwd=wt/buca-a1-prompt-integ/gsd-browser) `uv run pytest`
+  - (cwd=wt/buca-a1-prompt-integ/gsd-browser) `make smoke`
+- Command outputs:
+  - `uv run ruff format --check`:
+    ```
+    Uninstalled 3 packages in 3ms
+    Installed 3 packages in 6ms
+    55 files already formatted
+    ```
+  - `uv run ruff check`:
+    ```
+    All checks passed!
+    ```
+  - `uv run pytest`:
+    ```
+    ============================= test session starts ==============================
+    platform linux -- Python 3.11.14, pytest-9.0.2, pluggy-1.6.0
+    rootdir: /home/inboxgreen/gsd-browser/wt/buca-a1-prompt-integ/gsd-browser
+    configfile: pyproject.toml
+    testpaths: tests
+    plugins: anyio-4.12.0
+    collected 103 items
+
+    tests/dashboard/test_o3c_dashboard_input_wiring.py ...                   [  2%]
+    tests/dashboard/test_security.py .....                                   [  7%]
+    tests/llm/test_browseruse_providers.py ....                              [ 11%]
+    tests/llm/test_c2_provider_model_validation.py ......                    [ 17%]
+    tests/mcp/test_c1_lifecycle_budgets_status.py ....                       [ 21%]
+    tests/mcp/test_c2_prompt_wrapper.py ...                                  [ 24%]
+    tests/mcp/test_c3_step_screenshot_guarantee.py ....                      [ 28%]
+    tests/mcp/test_c5_run_events_ranked_failure_reporting.py ...             [ 31%]
+    tests/mcp/test_c6_control_target_robustness.py ..                        [ 33%]
+    tests/mcp/test_o1a_web_eval_agent_contract.py ..                         [ 34%]
+    tests/mcp/test_o1b_pause_gating_and_screenshots.py ..                    [ 36%]
+    tests/mcp/test_o2a_run_event_store.py ....                               [ 40%]
+    tests/mcp/test_o2b_get_run_events_and_mode.py ......                     [ 46%]
+    tests/mcp/test_screenshot_tool.py ....                                   [ 50%]
+    tests/smoke/test_stdio.py .                                              [ 51%]
+    tests/smoke/test_streaming.py ...                                        [ 54%]
+    tests/smoke/test_telemetry.py ...                                        [ 57%]
+    tests/streaming/test_c4_cdp_first_streaming_adapter.py ....              [ 61%]
+    tests/streaming/test_c6_ctrl_input_gating.py ..                          [ 63%]
+    tests/streaming/test_cdp_wiring.py .....                                 [ 67%]
+    tests/streaming/test_control_pause.py ......                             [ 73%]
+    tests/streaming/test_o3a_ctrl_input_gating.py ....                       [ 77%]
+    tests/streaming/test_o3b_cdp_dispatch_mapping.py .....                   [ 82%]
+    tests/test_real_world_sanity_r2.py .............                         [ 95%]
+    tests/test_real_world_sanity_r3.py ...                                   [ 98%]
+    tests/test_real_world_sanity_r4.py ..                                    [100%]
+
+    ============================= 103 passed in 2.66s ==============================
+    ```
+  - `make smoke`:
+    ```
+    ./scripts/smoke-test.sh
+    ============================= test session starts ==============================
+    platform linux -- Python 3.11.14, pytest-9.0.2, pluggy-1.6.0
+    rootdir: /home/inboxgreen/gsd-browser/wt/buca-a1-prompt-integ/gsd-browser
+    configfile: pyproject.toml
+    plugins: anyio-4.12.0
+    collected 7 items
+
+    tests/smoke/test_stdio.py .                                              [ 14%]
+    tests/smoke/test_streaming.py ...                                        [ 57%]
+    tests/smoke/test_telemetry.py ...                                        [100%]
+
+    ============================== 7 passed in 0.28s ===============================
+
+    [smoke] CLI round trip...
+    [INFO] gsd_browser.server: Starting gsd-browser placeholder server
+    [INFO] gsd_browser.server: Once flag set; stopping after single message
+    [INFO] gsd_browser.server: Server exiting
+    hello
+    ```
+- Result: pass
