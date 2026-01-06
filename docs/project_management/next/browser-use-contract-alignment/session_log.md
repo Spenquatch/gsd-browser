@@ -403,3 +403,40 @@ Only START/END entries. Docs edits happen on the orchestration branch only.
 - Worktree: wt/buca-a3-run-events-test
 - Commands planned: uv run ruff format --check; uv run pytest gsd-browser/tests -k "run_event"
 - Notes: Local repo has no configured git remote/upstream for `feat/browser-use-contract-alignment`, so `git pull --ff-only` cannot run as written.
+
+## A3-test END
+- Timestamp: 2026-01-06T08:30:00Z
+- Role: test
+- Worktree: wt/buca-a3-run-events-test
+- Branch: buca-a3-run-events-test
+- Commit: 77c03f5
+- Commands run:
+  - (cwd=wt/buca-a3-run-events-test/gsd-browser) `make dev` (to install ruff/pytest)
+  - (cwd=wt/buca-a3-run-events-test/gsd-browser) `uv run ruff format --check`
+  - (cwd=wt/buca-a3-run-events-test/gsd-browser) `uv run pytest tests -k "run_event"`
+- Command outputs:
+  - `uv run ruff format --check`:
+    ```
+    56 files already formatted
+    ```
+  - `uv run pytest tests -k "run_event"`:
+    ```
+    ============================= test session starts ==============================
+    platform linux -- Python 3.11.14, pytest-9.0.2, pluggy-1.6.0
+    rootdir: /home/inboxgreen/gsd-browser/wt/buca-a3-run-events-test/gsd-browser
+    configfile: pyproject.toml
+    plugins: anyio-4.12.0
+    collected 105 items / 90 deselected / 15 selected
+
+    tests/mcp/test_a3_agent_provider_run_events.py FF                        [ 13%]
+    tests/mcp/test_c5_run_events_ranked_failure_reporting.py ...             [ 33%]
+    tests/mcp/test_o2a_run_event_store.py ....                               [ 60%]
+    tests/mcp/test_o2b_get_run_events_and_mode.py ......                     [100%]
+
+    =================================== FAILURES ===================================
+    FAILED tests/mcp/test_a3_agent_provider_run_events.py::test_a3_schema_validation_failure_emits_has_error_agent_event
+    FAILED tests/mcp/test_a3_agent_provider_run_events.py::test_a3_provider_error_emits_has_error_agent_event
+    ================= 2 failed, 13 passed, 90 deselected in 1.60s ==================
+    ```
+- Result: fail (expected until A3-code run event recording is integrated)
+- Notes: Added test_a3_agent_provider_run_events.py with 2 deterministic tests asserting schema/provider failures emit has_error=true agent events. Tests fail as expected since A3-code implementation is not yet integrated.
