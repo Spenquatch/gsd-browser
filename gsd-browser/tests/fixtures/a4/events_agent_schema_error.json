@@ -1,0 +1,8 @@
+[
+  {
+    "event_type": "agent",
+    "has_error": true,
+    "summary": "Validation error: field 'action' is required",
+    "details": {}
+  }
+]
