@@ -123,6 +123,10 @@ def _has_actionable_error_events(events: list[dict[str, Any]]) -> bool:
         event_type = _event_type(event)
         details = _event_details(event)
 
+        if event_type == "agent":
+            if event.get("has_error") is True:
+                return True
+
         if event_type == "console":
             level = str(details.get("level") or "").strip().lower()
             if level in {"error", "exception", "fatal"}:
@@ -141,6 +145,29 @@ def _has_actionable_error_events(events: list[dict[str, Any]]) -> bool:
 
 
 _FAILURE_REASON_KEYS = {"failure_reason", "failureReason"}
+
+
+def _has_agent_provider_schema_failure(payload: dict[str, Any]) -> bool:
+    """Check if payload indicates an agent/provider/schema validation failure."""
+    summary = str(payload.get("summary") or "").lower()
+    if not summary:
+        return False
+
+    # Common indicators of agent/provider/schema failures
+    agent_failure_indicators = [
+        "validation error",
+        "pydantic",
+        "schema",
+        "provider error",
+        "api error",
+        "rate limit",
+        "authentication",
+        "invalid response",
+        "parsing error",
+        "json decode",
+    ]
+
+    return any(indicator in summary for indicator in agent_failure_indicators)
 
 
 def _has_payload_failure_reason(payload: dict[str, Any]) -> bool:
@@ -304,7 +331,11 @@ async def _run_one(
     _write_json(events_path, events)
     _write_json(screenshots_index, written)
 
-    actionable = _has_actionable_error_events(events) or _has_payload_failure_reason(payload)
+    actionable = (
+        _has_actionable_error_events(events)
+        or _has_payload_failure_reason(payload)
+        or _has_agent_provider_schema_failure(payload)
+    )
 
     classification = _classify(
         payload=payload,
