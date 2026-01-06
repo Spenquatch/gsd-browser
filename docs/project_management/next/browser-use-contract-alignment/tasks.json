@@ -388,7 +388,7 @@
       "name": "Harness actionable classification for agent failures (code)",
       "type": "code",
       "phase": "A4",
-      "status": "in_progress",
+      "status": "done",
       "description": "Update the real-world harness actionable predicate so agent/provider/schema failures are considered actionable and classify as soft_fail when artifacts exist.",
       "references": [
         "docs/adr/ADR-0005-browser-use-contract-alignment-and-artifact-reliability.md",

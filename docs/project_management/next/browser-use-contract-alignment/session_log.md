@@ -542,3 +542,27 @@ Only START/END entries. Docs edits happen on the orchestration branch only.
 - Commands planned: uv run ruff format --check; uv run ruff check
 - Notes: Local repo has no configured git remote/upstream for `feat/browser-use-contract-alignment`, so `git pull --ff-only` cannot run as written.
 
+## A4-code END
+- Timestamp: 2026-01-06T12:15:00Z
+- Role: code
+- Worktree: wt/buca-a4-harness-classify-code
+- Branch: buca-a4-harness-classify-code
+- Commit: 73f122d
+- Commands run:
+  - (cwd=wt/buca-a4-harness-classify-code/gsd-browser) `make dev` (to install ruff)
+  - (cwd=root) `uv run ruff format --check`
+  - (cwd=root) `uv run ruff check`
+- Command outputs:
+  - `uv run ruff format --check`:
+    ```
+    55 files already formatted
+    Uninstalled 3 packages in 3ms
+    Installed 3 packages in 7ms
+    ```
+  - `uv run ruff check`:
+    ```
+    All checks passed!
+    ```
+- Result: pass
+- Implementation: Updated `_has_actionable_error_events` to check for agent events with `has_error=True`; added `_has_agent_provider_schema_failure` to detect agent/provider/schema failures in payload summary; combined all actionable checks so agent/provider/schema failures classify as `soft_fail` when artifacts exist.
+
