@@ -5,7 +5,7 @@
       "name": "Prompt wrapper contract alignment (code)",
       "type": "code",
       "phase": "A1",
-      "status": "in_progress",
+      "status": "done",
       "description": "Update the browser-use prompt wrapper so stop conditions and completion are expressed via the `done` action (no conflicting alternate JSON schema).",
       "references": [
         "docs/adr/ADR-0005-browser-use-contract-alignment-and-artifact-reliability.md",
