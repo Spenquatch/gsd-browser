@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -413,6 +414,11 @@ def ensure_browser(
         "--install/--no-install",
         help="Install Playwright Chromium if no local browser is detected",
     ),
+    write_config: bool = typer.Option(
+        False,
+        "--write-config/--no-write-config",
+        help="Persist detected browser path to the user .env file.",
+    ),
     with_deps: bool | None = typer.Option(
         None,
         "--with-deps/--no-with-deps",
@@ -423,6 +429,14 @@ def ensure_browser(
     found = detect_local_browser_executable()
     if found:
         console.print(f"[green]✓ Browser found[/green]: {found}")
+        if write_config:
+            env_file = (os.getenv("GSD_BROWSER_ENV_FILE") or "").strip()
+            env_path = Path(env_file).expanduser() if env_file else default_env_path()
+            ensure_env_file(path=env_path, overwrite=False)
+            update_env_file(
+                path=env_path, updates={"GSD_BROWSER_BROWSER_EXECUTABLE_PATH": str(found)}
+            )
+            console.print(f"[dim]Pinned in config[/dim]: {env_path}")
         return
 
     console.print("[yellow]! No local browser executable detected[/yellow]")
@@ -446,12 +460,27 @@ def ensure_browser(
 
     found_after = detect_local_browser_executable()
     if not found_after:
+        pw_path = (os.getenv("PLAYWRIGHT_BROWSERS_PATH") or "").strip()
         console.print(
             "[red]✗ Playwright install finished, but no browser executable was detected[/red]"
         )
+        if pw_path:
+            console.print(f"[yellow]PLAYWRIGHT_BROWSERS_PATH[/yellow]: {pw_path}")
+        if result.stdout.strip():
+            console.print("[dim]playwright stdout:[/dim]")
+            console.print(result.stdout.strip())
+        if result.stderr.strip():
+            console.print("[dim]playwright stderr:[/dim]")
+            console.print(result.stderr.strip())
         raise typer.Exit(code=2)
 
     console.print(f"[green]✓ Browser installed[/green]: {found_after}")
+    if write_config:
+        env_file = (os.getenv("GSD_BROWSER_ENV_FILE") or "").strip()
+        env_path = Path(env_file).expanduser() if env_file else default_env_path()
+        ensure_env_file(path=env_path, overwrite=False)
+        update_env_file(path=env_path, updates={"GSD_BROWSER_BROWSER_EXECUTABLE_PATH": found_after})
+        console.print(f"[dim]Pinned in config[/dim]: {env_path}")
 
 
 @app.command("mcp-config-add")

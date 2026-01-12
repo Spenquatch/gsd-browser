@@ -78,13 +78,13 @@ if [ -n "$BIN" ] && [ -x "$BIN" ]; then
     if read -r -p "Install Playwright Chromium if missing? [Y/n] " ans; then
       ans="${ans:-Y}"
       if [[ "$ans" =~ ^[Yy]$ ]]; then
-        "$BIN" ensure-browser || true
+        "$BIN" ensure-browser --write-config
       else
-        "$BIN" ensure-browser --no-install || true
+        "$BIN" ensure-browser --no-install --write-config || true
       fi
     fi
   else
-    "$BIN" ensure-browser || true
+    "$BIN" ensure-browser --write-config
   fi
 
   if command -v codex >/dev/null 2>&1; then
