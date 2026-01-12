@@ -11,6 +11,11 @@ import typer
 from rich.console import Console
 
 from . import __version__
+from .browser_install import (
+    detect_local_browser_executable,
+    install_playwright_chromium,
+    should_use_with_deps,
+)
 from .config import load_settings
 from .logging_utils import setup_logging
 from .main import serve_stdio
@@ -399,6 +404,54 @@ def configure(
         console.print(f"[green]✓ Updated[/green]: {path}")
     else:
         console.print(f"[green]✓ Ready[/green]: {path}")
+
+
+@app.command("ensure-browser")
+def ensure_browser(
+    install: bool = typer.Option(
+        True,
+        "--install/--no-install",
+        help="Install Playwright Chromium if no local browser is detected",
+    ),
+    with_deps: bool | None = typer.Option(
+        None,
+        "--with-deps/--no-with-deps",
+        help="Use `playwright install --with-deps` on Linux (root-only).",
+    ),
+) -> None:
+    """Ensure a local Chromium/Chrome executable exists for browser-use."""
+    found = detect_local_browser_executable()
+    if found:
+        console.print(f"[green]✓ Browser found[/green]: {found}")
+        return
+
+    console.print("[yellow]! No local browser executable detected[/yellow]")
+    if not install:
+        raise typer.Exit(code=1)
+
+    deps = should_use_with_deps() if with_deps is None else bool(with_deps)
+    if deps and should_use_with_deps() is False and with_deps is True:
+        console.print(
+            "[yellow]! --with-deps requested but not available; continuing without it[/yellow]"
+        )
+        deps = False
+
+    console.print("[dim]Installing Playwright Chromium...[/dim]")
+    result = install_playwright_chromium(with_deps=deps)
+    if result.returncode != 0:
+        console.print("[red]✗ Failed to install Chromium via Playwright[/red]")
+        if result.stderr:
+            console.print(result.stderr.strip())
+        raise typer.Exit(code=result.returncode)
+
+    found_after = detect_local_browser_executable()
+    if not found_after:
+        console.print(
+            "[red]✗ Playwright install finished, but no browser executable was detected[/red]"
+        )
+        raise typer.Exit(code=2)
+
+    console.print(f"[green]✓ Browser installed[/green]: {found_after}")
 
 
 @app.command("mcp-config-add")

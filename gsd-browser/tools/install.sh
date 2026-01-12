@@ -73,6 +73,20 @@ if [ -n "$BIN" ] && [ -x "$BIN" ]; then
   echo "Config path: $HOME/.config/$PACKAGE/.env"
   echo "Tip: run '$PACKAGE configure' to add API keys."
 
+  echo "Ensuring a local browser is available (Chromium/Chrome)..."
+  if [ -t 0 ] && [ -t 1 ]; then
+    if read -r -p "Install Playwright Chromium if missing? [Y/n] " ans; then
+      ans="${ans:-Y}"
+      if [[ "$ans" =~ ^[Yy]$ ]]; then
+        "$BIN" ensure-browser || true
+      else
+        "$BIN" ensure-browser --no-install || true
+      fi
+    fi
+  else
+    "$BIN" ensure-browser || true
+  fi
+
   if command -v codex >/dev/null 2>&1; then
     if [ -t 0 ] && [ -t 1 ]; then
       if read -r -p "Add gsd-browser MCP server to Codex config? [Y/n] " ans; then

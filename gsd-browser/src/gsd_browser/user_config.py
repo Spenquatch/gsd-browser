@@ -34,6 +34,9 @@ BROWSER_USE_LLM_URL=
 #
 # Optional: local model provider (Ollama)
 OLLAMA_HOST=http://localhost:11434
+#
+# Optional: pin a specific browser binary path (otherwise browser-use auto-detects)
+GSD_BROWSER_BROWSER_EXECUTABLE_PATH=
 """
 
 

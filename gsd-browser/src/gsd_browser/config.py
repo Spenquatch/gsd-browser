@@ -49,6 +49,7 @@ class Settings(BaseModel):
     browser_use_api_key: str = Field("", alias="BROWSER_USE_API_KEY")
     browser_use_llm_url: str = Field("", alias="BROWSER_USE_LLM_URL")
     ollama_host: str = Field("http://localhost:11434", alias="OLLAMA_HOST")
+    browser_executable_path: str = Field("", alias="GSD_BROWSER_BROWSER_EXECUTABLE_PATH")
 
     log_level: str = Field("INFO", alias="LOG_LEVEL")
     json_logs: bool = Field(False, alias="GSD_BROWSER_JSON_LOGS")
@@ -207,6 +208,10 @@ def load_settings(
             payload["BROWSER_USE_LLM_URL"] = merged["BROWSER_USE_LLM_URL"]
         if merged.get("OLLAMA_HOST") is not None:
             payload["OLLAMA_HOST"] = merged["OLLAMA_HOST"]
+        if merged.get("GSD_BROWSER_BROWSER_EXECUTABLE_PATH") is not None:
+            payload["GSD_BROWSER_BROWSER_EXECUTABLE_PATH"] = merged[
+                "GSD_BROWSER_BROWSER_EXECUTABLE_PATH"
+            ]
 
         model_value = merged.get("GSD_BROWSER_MODEL")
         model_value = model_value.strip() if isinstance(model_value, str) else None

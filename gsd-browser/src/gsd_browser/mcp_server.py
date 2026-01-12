@@ -370,7 +370,8 @@ def _browser_use_prompt_wrapper(*, base_url: str) -> str:
         "- Start at the Base URL and stay on the same site unless the task explicitly "
         "requires leaving.\n"
         "- If the site requires login and you cannot proceed without credentials, STOP.\n"
-        "- If you encounter a CAPTCHA, bot wall, or similar automated-access restriction, STOP.\n"
+        "- If you encounter a CAPTCHA, bot wall, or similar automated-access restriction, "
+        "STOP.\n"
         "- If the task is impossible due to site restrictions (permissions, paywall, blocked "
         "flows), STOP.\n"
         "- You may retry a transient UI failure 1–2 times (timeouts, missed clicks), but do not "
@@ -378,7 +379,8 @@ def _browser_use_prompt_wrapper(*, base_url: str) -> str:
         "Output contract (browser-use):\n"
         "- You MUST respond with valid JSON containing an 'action' field that is a list (array).\n"
         "- The 'action' field must contain at least one action object.\n"
-        "- CRITICAL: When using the done action, it must be wrapped in the action array like this:\n"
+        "- CRITICAL: When using the done action, it must be wrapped in the action array "
+        "like this:\n"
         '  {"action": [{"done": {"success": true, "text": "your message"}}]}\n'
         "- To stop for any reason (including completion), use the done action:\n"
         '  - {"action": [{"done": {"success": true, "text": "final answer"}}]} '
@@ -433,11 +435,12 @@ def _get_enhanced_system_prompt(*, base_url: str) -> str | None:
             "- Start at the Base URL and stay on the same site unless the task explicitly "
             "requires leaving.\n"
             "- If the site requires login and you cannot proceed without credentials, STOP.\n"
-            "- If you encounter a CAPTCHA, bot wall, or similar automated-access restriction, STOP.\n"
+            "- If you encounter a CAPTCHA, bot wall, or similar automated-access restriction, "
+            "STOP.\n"
             "- If the task is impossible due to site restrictions (permissions, paywall, blocked "
             "flows), STOP.\n"
-            "- You may retry a transient UI failure 1–2 times (timeouts, missed clicks), but do not "
-            "loop.\n"
+            "- You may retry a transient UI failure 1–2 times (timeouts, missed clicks), "
+            "but do not loop.\n"
             "- To stop for any reason (including completion), use the done action:\n"
             '  - {"action": [{"done": {"success": true, "text": "final answer"}}]} '
             "when completed successfully.\n"
@@ -522,8 +525,14 @@ async def web_eval_agent(
           - "compact": minimal summary + references (default for non-localhost)
           - "dev": includes bounded console/network excerpts (default for localhost/127.0.0.1)
         budget_s: Optional. Tool-level budget in seconds (overall wall-clock).
+            IMPORTANT: Do not set this unless the user explicitly asks to override timeouts.
+            Leave it unset to use the server defaults (`GSD_BROWSER_WEB_EVAL_BUDGET_S`).
         max_steps: Optional. Maximum number of browser-use steps.
+            IMPORTANT: Do not set this unless the user explicitly asks to override limits.
+            Leave it unset to use the server defaults (`GSD_BROWSER_WEB_EVAL_MAX_STEPS`).
         step_timeout_s: Optional. Per-step timeout in seconds.
+            IMPORTANT: Do not set this unless the user explicitly asks to override timeouts.
+            Leave it unset to use the server defaults (`GSD_BROWSER_WEB_EVAL_STEP_TIMEOUT_S`).
 
     Returns:
         list[TextContent]: A single JSON payload encoded as text (no inline images).
@@ -981,7 +990,12 @@ async def web_eval_agent(
         # Let browser-use handle model-specific timeouts (90s for Claude, 60s default)
         llms = create_browser_use_llms(settings)
         llm = llms.primary
-        browser_session = BrowserSession(headless=headless_browser, storage_state=storage_state)
+        browser_executable_path = getattr(settings, "browser_executable_path", "") or None
+        browser_session = BrowserSession(
+            headless=headless_browser,
+            storage_state=storage_state,
+            executable_path=browser_executable_path,
+        )
 
         streaming_attach_task: asyncio.Task[None] | None = None
 
@@ -1313,7 +1327,8 @@ async def web_eval_agent(
                 run_kwargs["on_step_end"] = pause_gate
 
             # Apply budget timeout to agent.run() execution only
-            # Don't count setup overhead (browser creation, CDP, agent initialization) against user's budget
+            # Don't count setup overhead (browser creation, CDP, agent initialization)
+            # against user's budget.
             async with asyncio.timeout(effective_budget_s):
                 history = await agent.run(**run_kwargs)
         finally:
