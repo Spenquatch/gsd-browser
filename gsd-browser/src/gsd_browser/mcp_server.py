@@ -246,6 +246,72 @@ def _extract_wrapped_result(value: str | None) -> tuple[str | None, str | None, 
     return extracted_result or value, extracted_status, extracted_notes
 
 
+def _record_history_errors_as_events(
+    *,
+    history: Any,
+    run_events: Any,
+    session_id: str,
+    last_page_url: str | None,
+    last_page_title: str | None,
+) -> None:
+    """Record validation and agent errors from history as agent events with has_error=True."""
+    if run_events is None:
+        return
+
+    record_agent_event_fn = getattr(run_events, "record_agent_event", None)
+    if not callable(record_agent_event_fn):
+        return
+
+    errors_attr = getattr(history, "errors", None)
+    if callable(errors_attr):
+        errors_iter = errors_attr()
+    else:
+        errors_iter = errors_attr
+
+    if errors_iter is None:
+        return
+
+    try:
+        iterator = iter(errors_iter)
+    except TypeError:
+        iterator = iter([errors_iter])
+
+    for error in iterator:
+        if not error:
+            continue
+
+        error_text = str(error).strip()
+        if not error_text:
+            continue
+
+        # Check if this is a validation error or provider error
+        error_lower = error_text.lower()
+        is_validation_error = any(
+            keyword in error_lower
+            for keyword in ["validation", "pydantic", "schema", "field required", "invalid"]
+        )
+        is_provider_error = any(
+            keyword in error_lower
+            for keyword in ["provider", "api", "rate limit", "authentication", "model"]
+        )
+
+        if is_validation_error or is_provider_error:
+            try:
+                failure_type = "schema_validation" if is_validation_error else "provider_error"
+                error_summary = _truncate(f"{failure_type}: {error_text}", max_len=1000)
+                record_agent_event_fn(
+                    session_id,
+                    captured_at=datetime.now(UTC).timestamp(),
+                    step=None,
+                    url=last_page_url,
+                    title=last_page_title,
+                    summary=error_summary,
+                    has_error=True,
+                )
+            except Exception:  # noqa: BLE001
+                logger.debug("Failed to record history error as agent event", exc_info=True)
+
+
 def _history_error_messages(history: Any, *, max_items: int = 8) -> list[str]:
     errors_attr = getattr(history, "errors", None)
     if callable(errors_attr):
@@ -310,13 +376,83 @@ def _browser_use_prompt_wrapper(*, base_url: str) -> str:
         "- You may retry a transient UI failure 1–2 times (timeouts, missed clicks), but do not "
         "loop.\n\n"
         "Output contract (browser-use):\n"
-        "- Always respond with a browser-use action; never respond with a custom JSON schema.\n"
-        "- Never return an empty action list.\n"
-        "- To stop for any reason (including completion), respond with exactly one action:\n"
-        "  - done(success=true, text=<final answer>) when the task is completed successfully.\n"
-        "  - done(success=false, text=<why you are stopping + what the user should do next>) "
-        "for stop conditions/failures (login required, CAPTCHA/bot wall, impossible task).\n"
+        "- You MUST respond with valid JSON containing an 'action' field that is a list (array).\n"
+        "- The 'action' field must contain at least one action object.\n"
+        "- CRITICAL: When using the done action, it must be wrapped in the action array like this:\n"
+        '  {"action": [{"done": {"success": true, "text": "your message"}}]}\n'
+        "- To stop for any reason (including completion), use the done action:\n"
+        '  - {"action": [{"done": {"success": true, "text": "final answer"}}]} '
+        "when completed successfully.\n"
+        '  - {"action": [{"done": {"success": false, "text": "reason for stopping"}}]} '
+        "for failures (login required, CAPTCHA/bot wall, impossible task).\n"
+        "- NEVER output done at the top level - it must always be inside the action array.\n"
     )
+
+
+def _get_enhanced_system_prompt(*, base_url: str) -> str | None:
+    """Load enhanced system prompt from file if override mode is enabled.
+
+    Returns enhanced prompt string if GSD_BROWSER_OVERRIDE_SYSTEM_PROMPT=1,
+    otherwise returns None.
+
+    Modes:
+    - LITE (default): Double reinforcement (early + end), minimal size increase
+    - FULL: Triple reinforcement (early, middle, end), +47% size increase
+
+    The enhanced prompt is based on browser-use v0.11.2 system_prompt.md with:
+    - LITE: Short JSON reminder after intro + original output section
+    - FULL: Triple reinforcement with 6 examples and visual markers
+
+    See: artifacts/real_world_sanity/SYSTEM_PROMPT_OVERRIDE_PROPOSAL.md
+    """
+    if os.getenv("GSD_BROWSER_OVERRIDE_SYSTEM_PROMPT") != "1":
+        return None
+
+    try:
+        # Check if FULL mode is requested, otherwise use LITE
+        use_full = os.getenv("GSD_BROWSER_OVERRIDE_FULL") == "1"
+        filename = "system_prompt_enhanced.md" if use_full else "system_prompt_enhanced_lite.md"
+        prompt_path = Path(__file__).parent / "custom_prompts" / filename
+
+        if not prompt_path.exists():
+            logger.warning(
+                "enhanced_prompt_not_found",
+                extra={"path": str(prompt_path), "override_mode": "enabled", "use_full": use_full},
+            )
+            return None
+
+        enhanced_prompt = prompt_path.read_text(encoding="utf-8")
+
+        # Append our MCP-specific rules to the enhanced prompt
+        mcp_rules = (
+            "\n\n"
+            "MCP Tool Context:\n"
+            "You are an automated browser agent running inside an MCP tool call.\n"
+            f"Base URL: {base_url}\n\n"
+            "Rules:\n"
+            "- Start at the Base URL and stay on the same site unless the task explicitly "
+            "requires leaving.\n"
+            "- If the site requires login and you cannot proceed without credentials, STOP.\n"
+            "- If you encounter a CAPTCHA, bot wall, or similar automated-access restriction, STOP.\n"
+            "- If the task is impossible due to site restrictions (permissions, paywall, blocked "
+            "flows), STOP.\n"
+            "- You may retry a transient UI failure 1–2 times (timeouts, missed clicks), but do not "
+            "loop.\n"
+            "- To stop for any reason (including completion), use the done action:\n"
+            '  - {"action": [{"done": {"success": true, "text": "final answer"}}]} '
+            "when completed successfully.\n"
+            '  - {"action": [{"done": {"success": false, "text": "reason for stopping"}}]} '
+            "for failures (login required, CAPTCHA/bot wall, impossible task).\n"
+        )
+
+        return enhanced_prompt + mcp_rules
+    except Exception as exc:  # noqa: BLE001
+        logger.error(
+            "failed_to_load_enhanced_prompt",
+            extra={"error": str(exc)},
+            exc_info=True,
+        )
+        return None
 
 
 def _agent_output_summary(agent_output: Any) -> str | None:
@@ -842,7 +978,8 @@ async def web_eval_agent(
             except Exception:  # noqa: BLE001
                 logger.debug("Failed to record agent step event", exc_info=True)
 
-        llms = create_browser_use_llms(settings, timeout_s=effective_step_timeout_s)
+        # Let browser-use handle model-specific timeouts (90s for Claude, 60s default)
+        llms = create_browser_use_llms(settings)
         llm = llms.primary
         browser_session = BrowserSession(headless=headless_browser, storage_state=storage_state)
 
@@ -1048,16 +1185,45 @@ async def web_eval_agent(
 
         history: Any | None = None
         try:
+            # Check if override mode is enabled
+            enhanced_prompt = _get_enhanced_system_prompt(base_url=normalized_url)
+            use_override_mode = enhanced_prompt is not None
+
+            if use_override_mode:
+                logger.info(
+                    "using_enhanced_system_prompt",
+                    extra={"session_id": session_id, "prompt_length": len(enhanced_prompt)},
+                )
+
+            # Prepare agent configuration
             prompt_wrapper = _browser_use_prompt_wrapper(base_url=normalized_url)
+
+            # Convert use_vision from string to proper type
+            use_vision_raw = str(getattr(settings, "use_vision", "auto")).lower()
+            use_vision: bool | str
+            if use_vision_raw == "true":
+                use_vision = True
+            elif use_vision_raw == "false":
+                use_vision = False
+            else:
+                use_vision = "auto"
+
             agent_kwargs: dict[str, Any] = {
                 "task": task,
                 "llm": llm,
                 "browser_session": browser_session,
                 "fallback_llm": llms.fallback,
-                "extend_system_message": prompt_wrapper,
                 "initial_actions": [{"navigate": {"url": normalized_url, "new_tab": False}}],
                 "max_failures": 2,
+                "use_vision": use_vision,
             }
+
+            # Set prompt mode: override (enhanced) or extend (wrapper)
+            if use_override_mode:
+                agent_kwargs["override_system_message"] = enhanced_prompt
+            else:
+                agent_kwargs["extend_system_message"] = prompt_wrapper
+
             try:
                 signature = inspect.signature(Agent)
                 has_kwargs = any(
@@ -1066,10 +1232,26 @@ async def web_eval_agent(
                 )
                 if "register_new_step_callback" in signature.parameters:
                     agent_kwargs["register_new_step_callback"] = on_new_step
-                if "extend_system_message" not in signature.parameters and not has_kwargs:
-                    agent_kwargs.pop("extend_system_message", None)
-                    if "override_system_message" in signature.parameters:
-                        agent_kwargs["override_system_message"] = prompt_wrapper
+
+                # Handle browser-use version compatibility
+                if use_override_mode:
+                    # Using override mode - remove extend if not supported
+                    if "extend_system_message" in agent_kwargs:
+                        agent_kwargs.pop("extend_system_message")
+                    if "override_system_message" not in signature.parameters and not has_kwargs:
+                        # Fallback: override not supported, use extend instead
+                        agent_kwargs.pop("override_system_message", None)
+                        agent_kwargs["extend_system_message"] = prompt_wrapper
+                        logger.warning(
+                            "override_not_supported_fallback_to_extend",
+                            extra={"session_id": session_id},
+                        )
+                else:
+                    # Using extend mode - handle fallback to override if needed
+                    if "extend_system_message" not in signature.parameters and not has_kwargs:
+                        agent_kwargs.pop("extend_system_message", None)
+                        if "override_system_message" in signature.parameters:
+                            agent_kwargs["override_system_message"] = prompt_wrapper
                 if "fallback_llm" not in signature.parameters and not has_kwargs:
                     agent_kwargs.pop("fallback_llm", None)
                 if "initial_actions" not in signature.parameters and not has_kwargs:
@@ -1082,14 +1264,15 @@ async def web_eval_agent(
                     warnings.append(
                         "browser-use Agent does not support max_steps; default not enforced"
                     )
-                if "step_timeout" in signature.parameters or has_kwargs:
-                    agent_kwargs["step_timeout"] = effective_step_timeout_s
-                else:
-                    warnings.append(
-                        "browser-use Agent does not support step_timeout; default not enforced"
-                    )
-                if "llm_timeout" in signature.parameters or has_kwargs:
-                    agent_kwargs["llm_timeout"] = effective_step_timeout_s
+                # Let browser-use use its defaults: step_timeout=180s, llm_timeout=90s (for Claude)
+                # if "step_timeout" in signature.parameters or has_kwargs:
+                #     agent_kwargs["step_timeout"] = effective_step_timeout_s
+                # else:
+                #     warnings.append(
+                #         "browser-use Agent does not support step_timeout; default not enforced"
+                #     )
+                # if "llm_timeout" in signature.parameters or has_kwargs:
+                #     agent_kwargs["llm_timeout"] = effective_step_timeout_s
             except (TypeError, ValueError):
                 pass
 
@@ -1123,14 +1306,15 @@ async def web_eval_agent(
                     run_kwargs["on_step_end"] = pause_gate
                 if "max_steps" in signature.parameters or has_kwargs:
                     run_kwargs.setdefault("max_steps", effective_max_steps)
-                if "step_timeout" in signature.parameters or has_kwargs:
-                    run_kwargs.setdefault("step_timeout", effective_step_timeout_s)
+                # Let browser-use use its default step_timeout (180s)
+                # if "step_timeout" in signature.parameters or has_kwargs:
+                #     run_kwargs.setdefault("step_timeout", effective_step_timeout_s)
             except (TypeError, ValueError):
                 run_kwargs["on_step_end"] = pause_gate
 
-            elapsed_s = max(0.0, datetime.now(UTC).timestamp() - started)
-            remaining_budget_s = max(0.1, effective_budget_s - elapsed_s)
-            async with asyncio.timeout(remaining_budget_s):
+            # Apply budget timeout to agent.run() execution only
+            # Don't count setup overhead (browser creation, CDP, agent initialization) against user's budget
+            async with asyncio.timeout(effective_budget_s):
                 history = await agent.run(**run_kwargs)
         finally:
             cdp_attach_task.cancel()
@@ -1181,6 +1365,15 @@ async def web_eval_agent(
 
         if history is None:
             raise RuntimeError("browser-use run did not produce history")
+
+        # Record validation and provider errors from history as agent events
+        _record_history_errors_as_events(
+            history=history,
+            run_events=run_events,
+            session_id=session_id,
+            last_page_url=last_page_url,
+            last_page_title=last_page_title,
+        )
 
         raw_result = _normalize_history_result(_history_final_result(history))
         result, final_status, final_notes = _extract_wrapped_result(raw_result)

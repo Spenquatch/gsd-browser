@@ -2,6 +2,11 @@
 
 from __future__ import annotations
 
+import json
+import subprocess
+import sys
+from pathlib import Path
+
 import typer
 from rich.console import Console
 
@@ -9,6 +14,7 @@ from . import __version__
 from .config import load_settings
 from .logging_utils import setup_logging
 from .main import serve_stdio
+from .user_config import default_env_path, ensure_env_file, update_env_file
 
 console = Console()
 app = typer.Typer(help="GSD Browser MCP server CLI", invoke_without_command=True)
@@ -294,14 +300,313 @@ def mcp_tool_smoke(
 @app.command("mcp-config")
 def mcp_config(
     format: str = typer.Option("json", "--format", help="Output format", case_sensitive=False),
+    include_key_placeholders: bool = typer.Option(
+        False,
+        "--include-key-placeholders",
+        help="Emit ${VAR} placeholders for API keys (some MCP hosts expand these; Codex does not).",
+    ),
 ) -> None:
     """Print MCP configuration snippet for the CLI."""
     settings = load_settings(strict=False)
     fmt_normalized = format.lower()
     if fmt_normalized == "toml":
-        console.print(settings.to_mcp_toml())
+        typer.echo(settings.to_mcp_toml(include_key_placeholders=include_key_placeholders))
     else:
-        console.print(settings.to_mcp_snippet())
+        typer.echo(settings.to_mcp_snippet(include_key_placeholders=include_key_placeholders))
+
+
+@app.command("init-env")
+def init_env(
+    path: Path | None = typer.Option(  # noqa: B008
+        None,
+        "--path",
+        help=(
+            "Optional destination path for the user .env file "
+            "(default: ~/.config/gsd-browser/.env)"
+        ),
+    ),
+    overwrite: bool = typer.Option(
+        False,
+        "--overwrite",
+        is_flag=True,
+        help="Overwrite the env file if it already exists",
+    ),
+) -> None:
+    """Create a user-level env file for production installs."""
+    env_path = ensure_env_file(path=path, overwrite=overwrite)
+    console.print(f"[green]✓ Wrote env file[/green]: {env_path}")
+    console.print("[dim]Edit this file to add API keys (ANTHROPIC_API_KEY / OPENAI_API_KEY).[/dim]")
+
+
+@app.command("configure")
+def configure(
+    env_path: Path | None = typer.Option(  # noqa: B008
+        None,
+        "--env-path",
+        help="Path to the user env file (default: ~/.config/gsd-browser/.env)",
+    ),
+    anthropic_api_key: str | None = typer.Option(
+        None,
+        "--anthropic-api-key",
+        help="Write ANTHROPIC_API_KEY to the env file (use with care; stored on disk).",
+    ),
+    openai_api_key: str | None = typer.Option(
+        None,
+        "--openai-api-key",
+        help="Write OPENAI_API_KEY to the env file (use with care; stored on disk).",
+    ),
+    browser_use_api_key: str | None = typer.Option(
+        None,
+        "--browser-use-api-key",
+        help="Write BROWSER_USE_API_KEY to the env file (use with care; stored on disk).",
+    ),
+    non_interactive: bool = typer.Option(
+        False,
+        "--non-interactive",
+        is_flag=True,
+        help="Do not prompt; only apply provided flags",
+    ),
+) -> None:
+    """Initialize and/or update user config at a stable location."""
+    path = env_path or default_env_path()
+    ensure_env_file(path=path, overwrite=False)
+
+    updates: dict[str, str] = {}
+    if anthropic_api_key is not None:
+        updates["ANTHROPIC_API_KEY"] = anthropic_api_key
+    if openai_api_key is not None:
+        updates["OPENAI_API_KEY"] = openai_api_key
+    if browser_use_api_key is not None:
+        updates["BROWSER_USE_API_KEY"] = browser_use_api_key
+
+    if not updates and not non_interactive:
+        if sys.stdin.isatty():
+            if typer.confirm("Set ANTHROPIC_API_KEY now?", default=False):
+                updates["ANTHROPIC_API_KEY"] = typer.prompt(
+                    "ANTHROPIC_API_KEY", hide_input=True, confirmation_prompt=True
+                )
+            if typer.confirm("Set OPENAI_API_KEY now?", default=False):
+                updates["OPENAI_API_KEY"] = typer.prompt(
+                    "OPENAI_API_KEY", hide_input=True, confirmation_prompt=True
+                )
+            if typer.confirm("Set BROWSER_USE_API_KEY now?", default=False):
+                updates["BROWSER_USE_API_KEY"] = typer.prompt(
+                    "BROWSER_USE_API_KEY", hide_input=True, confirmation_prompt=True
+                )
+
+    if updates:
+        update_env_file(path=path, updates=updates)
+        console.print(f"[green]✓ Updated[/green]: {path}")
+    else:
+        console.print(f"[green]✓ Ready[/green]: {path}")
+
+
+@app.command("mcp-config-add")
+def mcp_config_add(
+    target: str = typer.Argument(
+        ...,
+        help="Target CLI to add config to: 'claude' or 'codex'",
+    ),
+) -> None:
+    """Add gsd-browser MCP server config to Claude Code or Codex."""
+    target_normalized = target.lower()
+
+    if target_normalized not in ["claude", "codex"]:
+        console.print(f"[red]Error: Unknown target '{target}'. Use 'claude' or 'codex'.[/red]")
+        raise typer.Exit(1)
+
+    env_path = ensure_env_file(overwrite=False)
+    console.print(f"[dim]Using user env file: {env_path}[/dim]")
+
+    settings = load_settings(strict=False)
+
+    # Try using native CLI commands first
+    if target_normalized == "claude":
+        success = _add_to_claude_via_cli(settings)
+        if not success:
+            console.print(
+                "[yellow]Native 'claude mcp add' command not found, "
+                "trying direct file modification...[/yellow]"
+            )
+            _add_to_claude_direct(settings)
+    else:  # codex
+        success = _add_to_codex_via_cli(settings)
+        if not success:
+            console.print(
+                "[yellow]Native 'codex mcp add' command not found, "
+                "trying direct file modification...[/yellow]"
+            )
+            _add_to_codex_direct(settings)
+
+
+def _add_to_claude_via_cli(settings) -> bool:
+    """Try to add MCP config using 'claude mcp add' command."""
+    try:
+        # Check if claude command exists
+        result = subprocess.run(
+            ["claude", "--version"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        if result.returncode != 0:
+            return False
+
+        # Try to add the MCP server
+        mcp_json = settings.to_mcp_snippet()
+        config_data = json.loads(mcp_json)
+        server_config = config_data["mcpServers"]["gsd-browser"]
+
+        # Build command: claude mcp add --transport stdio -e KEY=value -- name command args
+        # IMPORTANT: The -- separator comes BEFORE the server name, command, and args
+        cmd = ["claude", "mcp", "add", "--transport", "stdio"]
+
+        # Add environment variables with -e flag
+        for key, value in server_config["env"].items():
+            cmd.extend(["-e", f"{key}={value}"])
+
+        # Add -- separator (comes BEFORE server name)
+        cmd.append("--")
+
+        # Add server name, then command and args
+        cmd.append("gsd-browser")
+        cmd.append(server_config["command"])
+        cmd.extend(server_config["args"])
+
+        # Debug: print the command being run
+        typer.echo(f"Running command: {' '.join(cmd)}", err=True)
+
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
+
+        if result.returncode == 0:
+            console.print("[green]✓ Successfully added gsd-browser to Claude Code config![/green]")
+            return True
+        else:
+            console.print(f"[yellow]'claude mcp add' failed: {result.stderr.strip()}[/yellow]")
+            return False
+
+    except subprocess.TimeoutExpired:
+        console.print("[yellow]Timeout running 'claude mcp add' command[/yellow]")
+        return False
+    except FileNotFoundError:
+        console.print("[yellow]'claude' command not found in PATH[/yellow]")
+        return False
+    except Exception as e:
+        console.print(f"[yellow]Unexpected error running 'claude mcp add': {e}[/yellow]")
+        return False
+
+
+def _add_to_codex_via_cli(settings) -> bool:
+    """Try to add MCP config using 'codex mcp add' command."""
+    try:
+        # Check if codex command exists
+        result = subprocess.run(
+            ["codex", "--version"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        if result.returncode != 0:
+            return False
+
+        # Ensure the user env file exists so the server can boot even if the shell env is empty.
+        ensure_env_file(overwrite=False)
+
+        # Build command: codex mcp add gsd-browser --env KEY=VALUE -- gsd-browser serve
+        env = settings._mcp_env()
+        cmd = ["codex", "mcp", "add", "gsd-browser"]
+        for key, value in env.items():
+            cmd.extend(["--env", f"{key}={value}"])
+        cmd.append("--")
+        cmd.extend(["gsd-browser", "serve"])
+
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=15)
+
+        if result.returncode == 0:
+            console.print("[green]✓ Successfully added gsd-browser to Codex config![/green]")
+            return True
+        else:
+            console.print(f"[yellow]Codex command failed: {result.stderr}[/yellow]")
+            return False
+
+    except (subprocess.TimeoutExpired, FileNotFoundError, Exception):
+        return False
+
+
+def _add_to_claude_direct(settings) -> None:
+    """Directly modify Claude Code config file."""
+    # Common Claude Code config locations
+    possible_paths = [
+        Path.home() / ".claude" / "config.json",
+        Path.home() / ".config" / "claude" / "config.json",
+        Path.home() / ".claude.json",
+    ]
+
+    config_path = None
+    for path in possible_paths:
+        if path.exists():
+            config_path = path
+            break
+
+    if not config_path:
+        # Create default location
+        config_path = Path.home() / ".claude" / "config.json"
+        config_path.parent.mkdir(parents=True, exist_ok=True)
+
+    # Load or create config
+    if config_path.exists():
+        with open(config_path) as f:
+            config = json.load(f)
+    else:
+        config = {}
+
+    # Ensure mcpServers exists
+    if "mcpServers" not in config:
+        config["mcpServers"] = {}
+
+    # Add gsd-browser config
+    mcp_json = settings.to_mcp_snippet()
+    config_data = json.loads(mcp_json)
+    config["mcpServers"]["gsd-browser"] = config_data["mcpServers"]["gsd-browser"]
+
+    # Write back
+    with open(config_path, "w") as f:
+        json.dump(config, f, indent=2)
+
+    console.print(f"[green]✓ Successfully added gsd-browser to {config_path}![/green]")
+
+
+def _add_to_codex_direct(settings) -> None:
+    """Directly modify Codex config file."""
+    config_path = Path.home() / ".codex" / "config.toml"
+
+    if not config_path.parent.exists():
+        config_path.parent.mkdir(parents=True, exist_ok=True)
+
+    mcp_toml = settings.to_mcp_toml()
+
+    # Check if file exists and has gsd-browser already
+    if config_path.exists():
+        content = config_path.read_text()
+        if "[mcp_servers.gsd-browser]" in content:
+            console.print(
+                "[yellow]! gsd-browser already exists in Codex config, skipping.[/yellow]"
+            )
+            console.print(f"[yellow]  Edit manually at: {config_path}[/yellow]")
+            return
+
+        # Append to existing file
+        with open(config_path, "a") as f:
+            f.write("\n\n# GSD Browser MCP Server\n")
+            f.write(mcp_toml)
+    else:
+        # Create new file
+        with open(config_path, "w") as f:
+            f.write("# Codex MCP Configuration\n\n")
+            f.write("# GSD Browser MCP Server\n")
+            f.write(mcp_toml)
+
+    console.print(f"[green]✓ Successfully added gsd-browser to {config_path}![/green]")
 
 
 if __name__ == "__main__":

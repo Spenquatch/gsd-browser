@@ -62,6 +62,44 @@ if command -v "$PACKAGE" >/dev/null 2>&1; then
   "$PACKAGE" --version || true
 fi
 
+BIN="$(command -v "$PACKAGE" || true)"
+if [ -z "$BIN" ] && [ -x "$HOME/.local/bin/$PACKAGE" ]; then
+  BIN="$HOME/.local/bin/$PACKAGE"
+fi
+
+if [ -n "$BIN" ] && [ -x "$BIN" ]; then
+  echo "Ensuring user config exists at ~/.config/$PACKAGE/.env ..."
+  "$BIN" init-env >/dev/null || true
+  echo "Config path: $HOME/.config/$PACKAGE/.env"
+  echo "Tip: run '$PACKAGE configure' to add API keys."
+
+  if command -v codex >/dev/null 2>&1; then
+    if [ -t 0 ] && [ -t 1 ]; then
+      if read -r -p "Add gsd-browser MCP server to Codex config? [Y/n] " ans; then
+        ans="${ans:-Y}"
+        if [[ "$ans" =~ ^[Yy]$ ]]; then
+          "$BIN" mcp-config-add codex || true
+        fi
+      fi
+    else
+      echo "Tip: run '$PACKAGE mcp-config-add codex' to add the MCP server to Codex."
+    fi
+  fi
+
+  if command -v claude >/dev/null 2>&1; then
+    if [ -t 0 ] && [ -t 1 ]; then
+      if read -r -p "Add gsd-browser MCP server to Claude Code config? [Y/n] " ans; then
+        ans="${ans:-Y}"
+        if [[ "$ans" =~ ^[Yy]$ ]]; then
+          "$BIN" mcp-config-add claude || true
+        fi
+      fi
+    else
+      echo "Tip: run '$PACKAGE mcp-config-add claude' to add the MCP server to Claude Code."
+    fi
+  fi
+fi
+
 PIPX_ENV=$(python3 - <<'PY'
 import json
 import subprocess

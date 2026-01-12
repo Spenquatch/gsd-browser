@@ -54,6 +54,8 @@ Upgrade/reinstall as needed:
 ```bash
 ./tools/upgrade.sh
 ./tools/uninstall.sh
+# (optional) remove user config too
+./tools/uninstall.sh --purge-config
 ```
 
 ## Docker
@@ -68,7 +70,13 @@ gsd-browser mcp-config --format json   # or toml
 # or use the helper script
 ./scripts/print-mcp-config.py --format toml
 ```
-Copy the output into your Claude MCP settings file. The snippet is also stored at `config/mcp-config-example.json`.
+Copy the output into your MCP host config (Codex or Claude Code).
+
+By default, the snippet points at `~/.config/gsd-browser/.env` via `GSD_BROWSER_ENV_FILE` so it works regardless of working directory.
+Initialize/update that file with:
+```bash
+gsd-browser configure
+```
 
 Notes:
 - The MCP server command is `gsd-browser serve` (the snippet includes `args: ["serve"]`).

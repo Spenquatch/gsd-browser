@@ -4,6 +4,12 @@ set -euo pipefail
 
 PACKAGE="gsd-browser"
 MANIFEST_FILE="$HOME/.config/$PACKAGE/install.json"
+CONFIG_DIR="$HOME/.config/$PACKAGE"
+
+PURGE_CONFIG=0
+if [ "${1:-}" = "--purge-config" ]; then
+  PURGE_CONFIG=1
+fi
 
 if command -v pipx >/dev/null 2>&1; then
   pipx uninstall "$PACKAGE" || true
@@ -14,6 +20,11 @@ fi
 if [ -f "$MANIFEST_FILE" ]; then
   rm -f "$MANIFEST_FILE"
   echo "Removed manifest $MANIFEST_FILE"
+fi
+
+if [ "$PURGE_CONFIG" -eq 1 ] && [ -d "$CONFIG_DIR" ]; then
+  rm -rf "$CONFIG_DIR"
+  echo "Removed config dir $CONFIG_DIR"
 fi
 
 echo "Uninstall complete. Remove ~/.local/bin from PATH manually if desired."

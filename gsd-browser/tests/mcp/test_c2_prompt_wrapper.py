@@ -154,5 +154,9 @@ def test_c2_prompt_wrapper_instructs_done_action_semantics(
         pytest.skip("C2 prompt wrapper not yet wired via browser-use Agent system message surfaces")
 
     lowered = prompt_wrapper.lower()
-    assert re.search(r"done\s*\(\s*success\s*=\s*true", lowered) is not None
-    assert re.search(r"done\s*\(\s*success\s*=\s*false", lowered) is not None
+    # Check for JSON format with done action in action array
+    assert re.search(r'"done"\s*:\s*\{.*"success"\s*:\s*true', lowered, re.DOTALL) is not None
+    assert re.search(r'"done"\s*:\s*\{.*"success"\s*:\s*false', lowered, re.DOTALL) is not None
+    # Verify it's in an action array
+    assert '"action"' in lowered
+    assert 'action array' in lowered

@@ -55,11 +55,72 @@ DEFAULT_SCENARIOS: tuple[Scenario, ...] = (
         expected="pass",
     ),
     Scenario(
-        id="github-cdp-heading",
-        url="https://github.com/browser-use/browser-use",
+        id="github-search-and-stars",
+        url="https://github.com/search?q=browser+automation&type=repositories",
         task=(
-            "Open the README and find the section that mentions CDP. "
-            "Return the heading text and the anchor URL (the URL with #...)."
+            "Find the first repository in the search results, open it, and return the "
+            "repository name and the number of stars it has."
+        ),
+        expected="pass",
+    ),
+    Scenario(
+        id="wikipedia-link-navigation",
+        url="https://en.wikipedia.org/wiki/Artificial_intelligence",
+        task=(
+            "Find the first link in the main article content (not in the sidebar or infobox) "
+            "that goes to another Wikipedia article. Click it and return the title of the new "
+            "article and its URL."
+        ),
+        expected="pass",
+    ),
+    Scenario(
+        id="stackoverflow-question-check",
+        url="https://stackoverflow.com/questions/tagged/python",
+        task=(
+            "Find the first question on the page (not pinned or featured), open it, and report: "
+            "the question title, whether it has an accepted answer (yes/no), and the final URL."
+        ),
+        expected="pass",
+    ),
+    Scenario(
+        id="npm-package-downloads",
+        url="https://www.npmjs.com/search?q=playwright",
+        task=(
+            "Find the first package in the search results (should be 'playwright'), open it, "
+            "and return the package name and weekly download count."
+        ),
+        expected="pass",
+    ),
+    Scenario(
+        id="github-issue-investigation",
+        url="https://github.com/microsoft/playwright/issues",
+        task=(
+            "Navigate to the Issues tab (if not already there), filter to show only open issues "
+            "with the 'bug' label, open the first matching issue, check if it's assigned to someone, "
+            "count how many comments it has, and return: issue number, title, assignment status "
+            "(assigned/unassigned), and comment count."
+        ),
+        expected="soft_fail",  # Complex 7+ step task - may timeout
+    ),
+    Scenario(
+        id="wikipedia-research-chain",
+        url="https://en.wikipedia.org/wiki/Python_(programming_language)",
+        task=(
+            "Starting from this page: (1) Find and click the link to 'Guido van Rossum' in the main "
+            "article content. (2) On his page, find and click the link to 'Netherlands'. "
+            "(3) On the Netherlands page, find and click the link to 'Amsterdam'. "
+            "(4) Extract the population of Amsterdam and return it along with the final URL."
+        ),
+        expected="soft_fail",  # Complex 7+ step task - may timeout
+    ),
+    Scenario(
+        id="npm-package-deep-research",
+        url="https://www.npmjs.com/package/playwright",
+        task=(
+            "From the playwright package page: (1) Note the weekly download count. "
+            "(2) Find and click the 'Repository' link to go to GitHub. (3) On GitHub, find the number "
+            "of stars. (4) Click on the 'Issues' tab. (5) Count the number of open issues (look for the "
+            "count in the UI). (6) Return: package name, weekly downloads, GitHub stars, and open issues count."
         ),
         expected="pass",
     ),
@@ -215,6 +276,33 @@ def _classify(
 ) -> str:
     status = payload.get("status")
     result = payload.get("result")
+
+    # Check for task failure indicators in the result text
+    if isinstance(result, str):
+        result_lower = result.strip().lower()
+        failure_indicators = [
+            "unable to complete",
+            "cannot complete",
+            "could not complete",
+            "failed to complete",
+            "impossible to complete",
+            "task is impossible",
+            "blocked by",
+            "prevented from",
+            "cannot proceed",
+            "stopped",
+            "bot detection",
+            "bot wall",
+            "captcha",
+            "cloudflare",
+            "security challenge",
+        ]
+        if any(indicator in result_lower for indicator in failure_indicators):
+            # Agent explicitly stated it failed
+            has_artifacts = artifact_screenshots > 0 or artifact_events > 0
+            if has_artifacts and has_actionable_reason:
+                return "soft_fail"
+            return "hard_fail"
 
     if status == "success" and isinstance(result, str) and result.strip():
         return "pass"

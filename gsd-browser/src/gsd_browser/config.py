@@ -17,18 +17,25 @@ from .streaming.env import (
     normalize_streaming_mode,
     normalize_streaming_quality,
 )
+from .user_config import default_env_path
 
 
 class Settings(BaseModel):
     """User configuration driven by environment variables or .env files."""
 
     llm_provider: LLMProvider = Field("anthropic", alias="GSD_BROWSER_LLM_PROVIDER")
+
+    # Model selection
+    # DEFAULT: claude-haiku-4-5 with Sonnet fallback (cost-optimized with reliability safety net)
+    # Alternative: claude-sonnet-4-5 (100% pass rate, higher cost, no fallback needed)
+    # Override via GSD_BROWSER_MODEL environment variable or .env file
+    # See .env.example and artifacts/real_world_sanity/MODEL_COMPARISON_haiku_vs_sonnet.md
     model: str = Field("claude-haiku-4-5", alias="GSD_BROWSER_MODEL")
 
     fallback_llm_provider: LLMProvider | None = Field(
-        None, alias="GSD_BROWSER_FALLBACK_LLM_PROVIDER"
+        "anthropic", alias="GSD_BROWSER_FALLBACK_LLM_PROVIDER"
     )
-    fallback_model: str = Field("", alias="GSD_BROWSER_FALLBACK_MODEL")
+    fallback_model: str = Field("claude-sonnet-4-5", alias="GSD_BROWSER_FALLBACK_MODEL")
 
     openai_add_schema_to_system_prompt: bool = Field(
         True, alias="GSD_BROWSER_OPENAI_ADD_SCHEMA_TO_SYSTEM_PROMPT"
@@ -48,15 +55,38 @@ class Settings(BaseModel):
     streaming_mode: StreamingMode = Field("cdp", alias="STREAMING_MODE")
     streaming_quality: StreamingQuality = Field("med", alias="STREAMING_QUALITY")
 
-    web_eval_budget_s: float = Field(60.0, alias="GSD_BROWSER_WEB_EVAL_BUDGET_S")
+    # Web evaluation timeouts
+    # NOTE: Defaults optimized for claude-haiku-4-5 with Sonnet fallback
+    # Budget is set generously (240s) since max_steps (25) is the real safety limit
+    # If task completes in 30s, budget of 240s doesn't matter - set generously
+    # See .env.example and artifacts/real_world_sanity/MODEL_COMPARISON_haiku_vs_sonnet.md
+    web_eval_budget_s: float = Field(240.0, alias="GSD_BROWSER_WEB_EVAL_BUDGET_S")
     web_eval_max_steps: int = Field(25, alias="GSD_BROWSER_WEB_EVAL_MAX_STEPS")
     web_eval_step_timeout_s: float = Field(15.0, alias="GSD_BROWSER_WEB_EVAL_STEP_TIMEOUT_S")
+
+    # Vision mode configuration
+    # Controls how browser-use perceives web pages (DOM-only, vision-only, or hybrid)
+    # Options:
+    #   - "auto": Intelligent hybrid (includes screenshot tool, only uses when model requests)
+    #   - "true": Always use vision (hybrid DOM+Vision, most reliable but expensive)
+    #   - "false": DOM-only (no screenshots, fastest and cheapest)
+    # RECOMMENDED: "auto" for balanced cost and capability
+    use_vision: str = Field("auto", alias="GSD_BROWSER_USE_VISION")
 
     auto_pause_on_take_control: bool = Field(True, alias="GSD_BROWSER_AUTO_PAUSE_ON_TAKE_CONTROL")
 
     model_config = ConfigDict(populate_by_name=True)
 
-    def _mcp_env(self) -> dict[str, str]:
+    def _mcp_env(self, *, include_key_placeholders: bool = False) -> dict[str, str]:
+        """Environment variables to configure the MCP server process.
+
+        Default behavior: point at a stable per-user env file so MCP hosts don't
+        depend on cwd or `${VAR}` interpolation support.
+        """
+
+        if not include_key_placeholders:
+            return {"GSD_BROWSER_ENV_FILE": str(default_env_path())}
+
         env: dict[str, str] = {
             "GSD_BROWSER_LLM_PROVIDER": self.llm_provider,
             "GSD_BROWSER_MODEL": self.model,
@@ -71,11 +101,18 @@ class Settings(BaseModel):
             if self.browser_use_llm_url:
                 env["BROWSER_USE_LLM_URL"] = self.browser_use_llm_url
         else:
+            # Anthropic (default)
             env["ANTHROPIC_API_KEY"] = "${ANTHROPIC_API_KEY}"
+
+            # Include fallback configuration if set
+            if self.fallback_llm_provider:
+                env["GSD_BROWSER_FALLBACK_LLM_PROVIDER"] = str(self.fallback_llm_provider)
+            if self.fallback_model:
+                env["GSD_BROWSER_FALLBACK_MODEL"] = self.fallback_model
 
         return env
 
-    def to_mcp_snippet(self) -> str:
+    def to_mcp_snippet(self, *, include_key_placeholders: bool = False) -> str:
         """Return JSON snippet for MCP configuration."""
         snippet = {
             "mcpServers": {
@@ -83,22 +120,25 @@ class Settings(BaseModel):
                     "type": "stdio",
                     "command": "gsd-browser",
                     "args": ["serve"],
-                    "env": self._mcp_env(),
+                    "env": self._mcp_env(include_key_placeholders=include_key_placeholders),
                     "description": "GSD Browser MCP server",
                 }
             }
         }
         return json.dumps(snippet, indent=2)
 
-    def to_mcp_toml(self) -> str:
+    def to_mcp_toml(self, *, include_key_placeholders: bool = False) -> str:
         """Return TOML snippet for MCP configuration."""
-        env_items = ", ".join(f'{key} = "{value}"' for key, value in self._mcp_env().items())
+        env = self._mcp_env(include_key_placeholders=include_key_placeholders)
+        env_lines = "\n".join(f'{key} = "{value}"' for key, value in env.items())
         return (
             "[mcp_servers.gsd-browser]\n"
             'command = "gsd-browser"\n'
             'args = ["serve"]\n'
-            f"env = {{ {env_items} }}\n"
             'description = "GSD Browser MCP server"\n'
+            "\n"
+            "[mcp_servers.gsd-browser.env]\n"
+            f"{env_lines}\n"
         )
 
 
@@ -132,6 +172,12 @@ def load_settings(
         env_path = Path(selected_env_file).expanduser()
         if env_path.exists():
             load_dotenv(env_path, override=False)
+        elif selected_env_file == ".env" and not (env and env.get("GSD_BROWSER_ENV_FILE")):
+            # Production default: also look for a stable per-user config file so a
+            # pipx-installed CLI works from any directory without extra env vars.
+            user_env_path = default_env_path()
+            if user_env_path.exists():
+                load_dotenv(user_env_path, override=False)
 
     merged = _build_env_mapping(env)
     llm_provider = normalize_llm_provider(merged.get("GSD_BROWSER_LLM_PROVIDER"))
@@ -144,10 +190,13 @@ def load_settings(
     try:
         payload: dict[str, object] = {
             "GSD_BROWSER_LLM_PROVIDER": llm_provider,
-            "GSD_BROWSER_FALLBACK_LLM_PROVIDER": fallback_llm_provider,
             "STREAMING_MODE": streaming_mode,
             "STREAMING_QUALITY": streaming_quality,
         }
+        # Only include fallback provider if explicitly set in environment
+        # (otherwise Pydantic Field default will be used)
+        if fallback_llm_provider is not None:
+            payload["GSD_BROWSER_FALLBACK_LLM_PROVIDER"] = fallback_llm_provider
         if merged.get("ANTHROPIC_API_KEY") is not None:
             payload["ANTHROPIC_API_KEY"] = merged["ANTHROPIC_API_KEY"]
         if merged.get("OPENAI_API_KEY") is not None:
@@ -192,6 +241,8 @@ def load_settings(
             payload["GSD_BROWSER_WEB_EVAL_STEP_TIMEOUT_S"] = merged[
                 "GSD_BROWSER_WEB_EVAL_STEP_TIMEOUT_S"
             ]
+        if merged.get("GSD_BROWSER_USE_VISION") is not None:
+            payload["GSD_BROWSER_USE_VISION"] = merged["GSD_BROWSER_USE_VISION"]
         if merged.get("GSD_BROWSER_AUTO_PAUSE_ON_TAKE_CONTROL") is not None:
             payload["GSD_BROWSER_AUTO_PAUSE_ON_TAKE_CONTROL"] = merged[
                 "GSD_BROWSER_AUTO_PAUSE_ON_TAKE_CONTROL"

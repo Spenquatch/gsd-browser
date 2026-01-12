@@ -23,7 +23,13 @@ make dev        # sets up .venv (uv-backed)
 ```
 
 ## .env Loading
-`gsd-browser` loads `.env` from the current working directory (if present) and then reads shell env vars (shell wins). If your MCP host starts the server from a different directory, set `GSD_BROWSER_ENV_FILE=/absolute/path/to/.env`.
+`gsd-browser` loads `.env` from the current working directory (if present) and then reads shell env vars (shell wins).
+
+For production installs, prefer a stable user env file and point the server at it:
+- Default user config: `~/.config/gsd-browser/.env`
+- Override path: `GSD_BROWSER_ENV_FILE=/absolute/path/to/.env`
+
+Create/update the default user config with `gsd-browser configure`.
 
 ## LLM Providers (browser-use)
 `gsd-browser` can run browser-use against either a cloud LLM (default: Anthropic) or a local OSS LLM (Ollama).
@@ -73,7 +79,7 @@ or use the helper script:
 ```bash
 ./scripts/print-mcp-config.py --format json
 ```
-Paste the output into your Claude MCP settings.
+Paste the output into your MCP host settings (Codex or Claude Code).
 
 Notes:
 - The MCP server is started via `gsd-browser serve` (the generated snippet includes `args: ["serve"]`).
