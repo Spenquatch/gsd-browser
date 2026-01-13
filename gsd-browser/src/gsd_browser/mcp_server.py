@@ -20,7 +20,7 @@ from mcp.server.fastmcp import Context, FastMCP
 from mcp.types import ImageContent, TextContent
 from playwright.async_api import async_playwright
 
-from .config import load_settings
+from .config import Settings, load_settings
 from .failure_ranking import rank_failures_for_session
 from .llm.browser_use import create_browser_use_llms
 from .run_event_capture import CDPRunEventCapture
@@ -41,6 +41,28 @@ os.environ.setdefault("BROWSER_USE_SETUP_LOGGING", "false")
 
 _WEB_EVAL_AGENT_MODES = {"compact", "dev"}
 _RUN_EVENT_TYPES = {"agent", "console", "network"}
+
+
+def apply_configured_tool_policy(*, settings: Settings) -> None:
+    """Apply env/config-driven tool exposure policy before serving MCP."""
+
+    from .mcp_tool_policy import (
+        KNOWN_MCP_TOOLS,
+        apply_tool_exposure_policy,
+        compute_tool_exposure_policy,
+    )
+
+    policy = compute_tool_exposure_policy(
+        known_tools=set(KNOWN_MCP_TOOLS),
+        enabled_raw=getattr(settings, "mcp_enabled_tools", ""),
+        disabled_raw=getattr(settings, "mcp_disabled_tools", ""),
+    )
+    if policy.unknown_requested:
+        logger.warning(
+            "unknown_mcp_tools_requested",
+            extra={"unknown": sorted(policy.unknown_requested)},
+        )
+    apply_tool_exposure_policy(mcp=mcp, policy=policy)
 
 
 def _normalize_url(url: str) -> str:

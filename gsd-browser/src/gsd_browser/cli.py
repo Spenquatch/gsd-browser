@@ -20,10 +20,56 @@ from .browser_install import (
 from .config import load_settings
 from .logging_utils import setup_logging
 from .main import serve_stdio
+from .mcp_tool_policy import (
+    KNOWN_MCP_TOOLS,
+    compute_tool_exposure_policy,
+    normalize_tool_name,
+    parse_tool_selector,
+)
 from .user_config import default_env_path, ensure_env_file, update_env_file
 
 console = Console()
 app = typer.Typer(help="GSD Browser MCP server CLI", invoke_without_command=True)
+mcp_tools_app = typer.Typer(help="Manage MCP tool exposure (enable/disable tools)")
+app.add_typer(mcp_tools_app, name="mcp-tools")
+
+_MCP_TOOLS_ENABLE_ARG = typer.Argument(..., help="Tool name(s) to enable")
+_MCP_TOOLS_DISABLE_ARG = typer.Argument(..., help="Tool name(s) to disable")
+_MCP_TOOLS_SET_ENABLED_ARG = typer.Argument(None, help="Tool name(s) to allowlist")
+_MCP_TOOLS_SET_DISABLED_ARG = typer.Argument(None, help="Tool name(s) to denylist")
+
+
+def _env_path_for_user_config() -> Path:
+    override = (os.getenv("GSD_BROWSER_ENV_FILE") or "").strip()
+    return Path(override).expanduser() if override else default_env_path()
+
+
+def _read_env_file_values(path: Path) -> dict[str, str]:
+    if not path.exists():
+        return {}
+    out: dict[str, str] = {}
+    for raw in path.read_text(encoding="utf-8").splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        out[key.strip()] = value.strip()
+    return out
+
+
+def _format_tools(tools: set[str]) -> str:
+    return ",".join(sorted(tools))
+
+
+def _validate_tool_names(tools: list[str]) -> list[str]:
+    normalized = [normalize_tool_name(t) for t in tools]
+    known = set(KNOWN_MCP_TOOLS)
+    unknown = sorted({t for t in normalized if t not in known})
+    if unknown:
+        console.print(f"[red]Unknown tool(s)[/red]: {', '.join(unknown)}")
+        console.print(f"[dim]Known tools[/dim]: {', '.join(KNOWN_MCP_TOOLS)}")
+        raise typer.Exit(code=2)
+    return normalized
 
 
 @app.callback()
@@ -99,9 +145,217 @@ def serve(
         f"log_level={desired_level}, json_logs={desired_json}",
         err=True,
     )
-    from .mcp_server import run_stdio
+    from .mcp_server import apply_configured_tool_policy, run_stdio
 
+    apply_configured_tool_policy(settings=settings)
     run_stdio()
+
+
+@app.command("list-tools")
+def list_tools() -> None:
+    """Print known MCP tool names and the currently advertised set (after policy)."""
+
+    env_path = _env_path_for_user_config()
+    ensure_env_file(path=env_path, overwrite=False)
+    file_values = _read_env_file_values(env_path)
+
+    settings = load_settings(strict=False)
+    policy = compute_tool_exposure_policy(
+        known_tools=set(KNOWN_MCP_TOOLS),
+        enabled_raw=settings.mcp_enabled_tools,
+        disabled_raw=settings.mcp_disabled_tools,
+    )
+
+    console.print(f"[dim]Config[/dim]: {env_path}")
+    file_enabled = file_values.get("GSD_BROWSER_MCP_ENABLED_TOOLS", "")
+    file_disabled = file_values.get("GSD_BROWSER_MCP_DISABLED_TOOLS", "")
+    console.print(f"[dim].env enabled[/dim]: {file_enabled}")
+    console.print(f"[dim].env disabled[/dim]: {file_disabled}")
+    console.print(f"[dim]Effective enabled[/dim]: {settings.mcp_enabled_tools}")
+    console.print(f"[dim]Effective disabled[/dim]: {settings.mcp_disabled_tools}")
+
+    console.print(f"[green]Advertised tools[/green]: {_format_tools(policy.advertised_tools)}")
+    if policy.unknown_requested:
+        console.print(
+            f"[yellow]Unknown requested[/yellow]: {_format_tools(policy.unknown_requested)}"
+        )
+
+    for name in KNOWN_MCP_TOOLS:
+        status = "ENABLED" if name in policy.advertised_tools else "disabled"
+        color = "green" if status == "ENABLED" else "dim"
+        console.print(f"[{color}]{name}[/{color}] {status}")
+
+
+@mcp_tools_app.command("list")
+def mcp_tools_list() -> None:
+    """Alias for `gsd-browser list-tools`."""
+
+    list_tools()
+
+
+@mcp_tools_app.command("enable")
+def mcp_tools_enable(
+    tools: list[str] = _MCP_TOOLS_ENABLE_ARG,
+) -> None:
+    """Enable one or more MCP tools in the user config (.env)."""
+
+    normalized = _validate_tool_names(tools)
+    env_path = _env_path_for_user_config()
+    ensure_env_file(path=env_path, overwrite=False)
+    current = _read_env_file_values(env_path)
+
+    known = set(KNOWN_MCP_TOOLS)
+    enabled_raw = current.get("GSD_BROWSER_MCP_ENABLED_TOOLS", "")
+    disabled_raw = current.get("GSD_BROWSER_MCP_DISABLED_TOOLS", "")
+
+    enabled_mode, enabled_names = parse_tool_selector(enabled_raw)
+    _disabled_mode, disabled_names = parse_tool_selector(disabled_raw)
+
+    next_disabled = (disabled_names - set(normalized)) & known
+
+    if enabled_mode == "none":
+        next_enabled = set(normalized)
+        next_enabled_raw = _format_tools(next_enabled)
+    elif enabled_mode == "all":
+        next_enabled_raw = enabled_raw.strip() or "all"
+    elif enabled_raw.strip():
+        next_enabled = (enabled_names | set(normalized)) & known
+        next_enabled_raw = _format_tools(next_enabled)
+    else:
+        next_enabled_raw = ""
+
+    updates = {
+        "GSD_BROWSER_MCP_ENABLED_TOOLS": next_enabled_raw,
+        "GSD_BROWSER_MCP_DISABLED_TOOLS": _format_tools(next_disabled),
+    }
+    update_env_file(path=env_path, updates=updates)
+    console.print(f"[green]✓ Enabled[/green]: {', '.join(normalized)}")
+    console.print(f"[dim]Updated[/dim]: {env_path}")
+
+
+@mcp_tools_app.command("disable")
+def mcp_tools_disable(
+    tools: list[str] = _MCP_TOOLS_DISABLE_ARG,
+) -> None:
+    """Disable one or more MCP tools in the user config (.env)."""
+
+    normalized = _validate_tool_names(tools)
+    env_path = _env_path_for_user_config()
+    ensure_env_file(path=env_path, overwrite=False)
+    current = _read_env_file_values(env_path)
+
+    known = set(KNOWN_MCP_TOOLS)
+    enabled_raw = current.get("GSD_BROWSER_MCP_ENABLED_TOOLS", "")
+    disabled_raw = current.get("GSD_BROWSER_MCP_DISABLED_TOOLS", "")
+
+    enabled_mode, enabled_names = parse_tool_selector(enabled_raw)
+    _disabled_mode, disabled_names = parse_tool_selector(disabled_raw)
+
+    next_disabled = (disabled_names | set(normalized)) & known
+
+    updates: dict[str, str] = {"GSD_BROWSER_MCP_DISABLED_TOOLS": _format_tools(next_disabled)}
+    if enabled_mode == "all" or not enabled_raw.strip():
+        # Baseline is all tools; leave allowlist untouched.
+        pass
+    elif enabled_mode == "none":
+        updates["GSD_BROWSER_MCP_ENABLED_TOOLS"] = "none"
+    else:
+        next_enabled = (enabled_names - set(normalized)) & known
+        updates["GSD_BROWSER_MCP_ENABLED_TOOLS"] = _format_tools(next_enabled)
+
+    update_env_file(path=env_path, updates=updates)
+    console.print(f"[green]✓ Disabled[/green]: {', '.join(normalized)}")
+    console.print(f"[dim]Updated[/dim]: {env_path}")
+
+
+@mcp_tools_app.command("reset")
+def mcp_tools_reset() -> None:
+    """Clear allow/deny lists (defaults to all tools enabled)."""
+
+    env_path = _env_path_for_user_config()
+    ensure_env_file(path=env_path, overwrite=False)
+    update_env_file(
+        path=env_path,
+        updates={"GSD_BROWSER_MCP_ENABLED_TOOLS": "", "GSD_BROWSER_MCP_DISABLED_TOOLS": ""},
+    )
+    console.print("[green]✓ Reset MCP tool policy[/green]")
+    console.print(f"[dim]Updated[/dim]: {env_path}")
+
+
+@mcp_tools_app.command("set-enabled")
+def mcp_tools_set_enabled(
+    tools: list[str] | None = _MCP_TOOLS_SET_ENABLED_ARG,
+    all_tools: bool = typer.Option(False, "--all", help="Allowlist all tools (baseline=all)"),
+    none: bool = typer.Option(False, "--none", help="Allowlist no tools (baseline=none)"),
+    clear: bool = typer.Option(False, "--clear", help="Unset allowlist (defaults to all tools)"),
+) -> None:
+    """Set the MCP allowlist (GSD_BROWSER_MCP_ENABLED_TOOLS)."""
+
+    if sum([bool(all_tools), bool(none), bool(clear)]) > 1:
+        console.print("[red]Use only one of --all, --none, or --clear[/red]")
+        raise typer.Exit(code=2)
+
+    env_path = _env_path_for_user_config()
+    ensure_env_file(path=env_path, overwrite=False)
+
+    if clear:
+        update_env_file(path=env_path, updates={"GSD_BROWSER_MCP_ENABLED_TOOLS": ""})
+        console.print("[green]✓ Cleared allowlist[/green]")
+        console.print(f"[dim]Updated[/dim]: {env_path}")
+        return
+
+    if all_tools:
+        update_env_file(path=env_path, updates={"GSD_BROWSER_MCP_ENABLED_TOOLS": "all"})
+        console.print("[green]✓ Set allowlist[/green]: all")
+        console.print(f"[dim]Updated[/dim]: {env_path}")
+        return
+
+    if none:
+        update_env_file(path=env_path, updates={"GSD_BROWSER_MCP_ENABLED_TOOLS": "none"})
+        console.print("[green]✓ Set allowlist[/green]: none")
+        console.print(f"[dim]Updated[/dim]: {env_path}")
+        return
+
+    tools = tools or []
+    if not tools:
+        console.print("[red]Provide tool names or use --all/--none/--clear[/red]")
+        raise typer.Exit(code=2)
+
+    normalized = _validate_tool_names(tools)
+    update_env_file(
+        path=env_path, updates={"GSD_BROWSER_MCP_ENABLED_TOOLS": _format_tools(set(normalized))}
+    )
+    console.print(f"[green]✓ Set allowlist[/green]: {', '.join(normalized)}")
+    console.print(f"[dim]Updated[/dim]: {env_path}")
+
+
+@mcp_tools_app.command("set-disabled")
+def mcp_tools_set_disabled(
+    tools: list[str] | None = _MCP_TOOLS_SET_DISABLED_ARG,
+    clear: bool = typer.Option(False, "--clear", help="Clear denylist"),
+) -> None:
+    """Set the MCP denylist (GSD_BROWSER_MCP_DISABLED_TOOLS)."""
+
+    env_path = _env_path_for_user_config()
+    ensure_env_file(path=env_path, overwrite=False)
+
+    if clear:
+        update_env_file(path=env_path, updates={"GSD_BROWSER_MCP_DISABLED_TOOLS": ""})
+        console.print("[green]✓ Cleared denylist[/green]")
+        console.print(f"[dim]Updated[/dim]: {env_path}")
+        return
+
+    tools = tools or []
+    if not tools:
+        console.print("[red]Provide tool names or use --clear[/red]")
+        raise typer.Exit(code=2)
+
+    normalized = _validate_tool_names(tools)
+    update_env_file(
+        path=env_path, updates={"GSD_BROWSER_MCP_DISABLED_TOOLS": _format_tools(set(normalized))}
+    )
+    console.print(f"[green]✓ Set denylist[/green]: {', '.join(normalized)}")
+    console.print(f"[dim]Updated[/dim]: {env_path}")
 
 
 @app.command("serve-echo")

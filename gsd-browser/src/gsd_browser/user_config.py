@@ -37,6 +37,15 @@ OLLAMA_HOST=http://localhost:11434
 #
 # Optional: pin a specific browser binary path (otherwise browser-use auto-detects)
 GSD_BROWSER_BROWSER_EXECUTABLE_PATH=
+#
+# Optional: MCP tool exposure controls
+# - Default: all tools enabled (leave both blank)
+# - Allowlist (only advertise these tools):
+#   GSD_BROWSER_MCP_ENABLED_TOOLS=web_eval_agent,get_run_events
+# - Denylist (remove these tools from the advertised set):
+#   GSD_BROWSER_MCP_DISABLED_TOOLS=setup_browser_state
+GSD_BROWSER_MCP_ENABLED_TOOLS=
+GSD_BROWSER_MCP_DISABLED_TOOLS=
 """
 
 

@@ -51,6 +51,13 @@ class Settings(BaseModel):
     ollama_host: str = Field("http://localhost:11434", alias="OLLAMA_HOST")
     browser_executable_path: str = Field("", alias="GSD_BROWSER_BROWSER_EXECUTABLE_PATH")
 
+    # MCP tool exposure controls
+    # - If enabled_tools is set, only those tools are advertised (allowlist).
+    # - If disabled_tools is set, those tools are removed from the advertised set (denylist).
+    # - If enabled_tools is unset/empty, all tools are enabled by default.
+    mcp_enabled_tools: str = Field("", alias="GSD_BROWSER_MCP_ENABLED_TOOLS")
+    mcp_disabled_tools: str = Field("", alias="GSD_BROWSER_MCP_DISABLED_TOOLS")
+
     log_level: str = Field("INFO", alias="LOG_LEVEL")
     json_logs: bool = Field(False, alias="GSD_BROWSER_JSON_LOGS")
     streaming_mode: StreamingMode = Field("cdp", alias="STREAMING_MODE")
@@ -212,6 +219,10 @@ def load_settings(
             payload["GSD_BROWSER_BROWSER_EXECUTABLE_PATH"] = merged[
                 "GSD_BROWSER_BROWSER_EXECUTABLE_PATH"
             ]
+        if merged.get("GSD_BROWSER_MCP_ENABLED_TOOLS") is not None:
+            payload["GSD_BROWSER_MCP_ENABLED_TOOLS"] = merged["GSD_BROWSER_MCP_ENABLED_TOOLS"]
+        if merged.get("GSD_BROWSER_MCP_DISABLED_TOOLS") is not None:
+            payload["GSD_BROWSER_MCP_DISABLED_TOOLS"] = merged["GSD_BROWSER_MCP_DISABLED_TOOLS"]
 
         model_value = merged.get("GSD_BROWSER_MODEL")
         model_value = model_value.strip() if isinstance(model_value, str) else None
