@@ -87,7 +87,23 @@ Notes:
 After Claude is connected to `gsd-browser`, it can call:
 - `web_eval_agent` (runs a Playwright navigation + captures screenshots)
 - `get_screenshots` (retrieves recent screenshots; set `include_images=False` for metadata-only)
+- `get_run_events` (fetches stored console/network/agent run events for a session)
 - `setup_browser_state` (interactive login + saves browser state)
+
+### Tool exposure controls (enable/disable tools)
+You can restrict which tools are advertised to MCP clients via:
+- `GSD_BROWSER_MCP_ENABLED_TOOLS` (allowlist; supports `all`/`*` and `none`)
+- `GSD_BROWSER_MCP_DISABLED_TOOLS` (denylist)
+
+Convenience commands (edits `~/.config/gsd-browser/.env` unless `GSD_BROWSER_ENV_FILE` is set):
+```bash
+gsd-browser list-tools
+gsd-browser mcp-tools disable setup_browser_state
+gsd-browser mcp-tools set-enabled web_eval_agent,get_run_events
+gsd-browser mcp-tools reset
+```
+
+Restart your MCP host/session (Codex/Claude) after changing tool policy so it refreshes `list_tools`.
 
 ## Browser Streaming
 See `docs/STREAMING.md` for running the streaming server, the dashboard UI, and auth configuration.

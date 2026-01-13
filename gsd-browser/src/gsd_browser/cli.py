@@ -61,6 +61,13 @@ def _format_tools(tools: set[str]) -> str:
     return ",".join(sorted(tools))
 
 
+def _print_mcp_restart_notice() -> None:
+    console.print(
+        "[yellow]Note[/yellow]: Restart your MCP host/session (e.g. Codex/Claude) for tool changes "
+        "to take effect."
+    )
+
+
 def _validate_tool_names(tools: list[str]) -> list[str]:
     normalized = [normalize_tool_name(t) for t in tools]
     known = set(KNOWN_MCP_TOOLS)
@@ -231,6 +238,7 @@ def mcp_tools_enable(
     update_env_file(path=env_path, updates=updates)
     console.print(f"[green]✓ Enabled[/green]: {', '.join(normalized)}")
     console.print(f"[dim]Updated[/dim]: {env_path}")
+    _print_mcp_restart_notice()
 
 
 @mcp_tools_app.command("disable")
@@ -266,6 +274,7 @@ def mcp_tools_disable(
     update_env_file(path=env_path, updates=updates)
     console.print(f"[green]✓ Disabled[/green]: {', '.join(normalized)}")
     console.print(f"[dim]Updated[/dim]: {env_path}")
+    _print_mcp_restart_notice()
 
 
 @mcp_tools_app.command("reset")
@@ -280,6 +289,7 @@ def mcp_tools_reset() -> None:
     )
     console.print("[green]✓ Reset MCP tool policy[/green]")
     console.print(f"[dim]Updated[/dim]: {env_path}")
+    _print_mcp_restart_notice()
 
 
 @mcp_tools_app.command("set-enabled")
@@ -302,18 +312,21 @@ def mcp_tools_set_enabled(
         update_env_file(path=env_path, updates={"GSD_BROWSER_MCP_ENABLED_TOOLS": ""})
         console.print("[green]✓ Cleared allowlist[/green]")
         console.print(f"[dim]Updated[/dim]: {env_path}")
+        _print_mcp_restart_notice()
         return
 
     if all_tools:
         update_env_file(path=env_path, updates={"GSD_BROWSER_MCP_ENABLED_TOOLS": "all"})
         console.print("[green]✓ Set allowlist[/green]: all")
         console.print(f"[dim]Updated[/dim]: {env_path}")
+        _print_mcp_restart_notice()
         return
 
     if none:
         update_env_file(path=env_path, updates={"GSD_BROWSER_MCP_ENABLED_TOOLS": "none"})
         console.print("[green]✓ Set allowlist[/green]: none")
         console.print(f"[dim]Updated[/dim]: {env_path}")
+        _print_mcp_restart_notice()
         return
 
     tools = tools or []
@@ -327,6 +340,7 @@ def mcp_tools_set_enabled(
     )
     console.print(f"[green]✓ Set allowlist[/green]: {', '.join(normalized)}")
     console.print(f"[dim]Updated[/dim]: {env_path}")
+    _print_mcp_restart_notice()
 
 
 @mcp_tools_app.command("set-disabled")
@@ -343,6 +357,7 @@ def mcp_tools_set_disabled(
         update_env_file(path=env_path, updates={"GSD_BROWSER_MCP_DISABLED_TOOLS": ""})
         console.print("[green]✓ Cleared denylist[/green]")
         console.print(f"[dim]Updated[/dim]: {env_path}")
+        _print_mcp_restart_notice()
         return
 
     tools = tools or []
@@ -356,6 +371,7 @@ def mcp_tools_set_disabled(
     )
     console.print(f"[green]✓ Set denylist[/green]: {', '.join(normalized)}")
     console.print(f"[dim]Updated[/dim]: {env_path}")
+    _print_mcp_restart_notice()
 
 
 @app.command("serve-echo")
