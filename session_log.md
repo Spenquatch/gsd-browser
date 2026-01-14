@@ -165,3 +165,29 @@ This file is append-only. Add entries at the bottom.
 
 **Commits:**
 - `086d439` `feat: implement gsd mcp tools contract (CLI-004)`
+
+---
+
+### 2026-01-14 — Config group migration
+
+**Task:** `CLI-005` — Implement `gsd config` group: init/set/path
+
+**Start:** 2026-01-14T20:07:45+00:00
+
+**Plan:**
+- Implement `gsd config path/init/set` with path selection rules
+- Ensure write commands print `Updated: <path>` and `config path` prints only the path
+- Run lint/tests and commit
+
+**Finish:** 2026-01-14T20:08:55+00:00
+
+**Changes:**
+- Added `gsd config path`, `gsd config init`, and `gsd config set` with deterministic path selection
+- Ensured `gsd config path` prints only the resolved path and write commands emit `Updated: <path>`
+
+**Validation:**
+- `cd gsd-browser && make lint` → pass
+- `cd gsd-browser && make test` → pass
+
+**Commits:**
+- <pending> `feat: implement gsd config group (CLI-005)`

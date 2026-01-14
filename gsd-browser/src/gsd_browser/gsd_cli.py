@@ -445,6 +445,116 @@ def _config_callback() -> None:
     """
 
 
+def _select_env_path(*, explicit: Path | None) -> Path:
+    if explicit is not None:
+        return explicit.expanduser()
+    override = (os.getenv("GSD_BROWSER_ENV_FILE") or "").strip()
+    if override:
+        return Path(os.path.expanduser(override))
+    return default_env_path()
+
+
+@config_app.command("path")
+def config_path() -> None:
+    """Print the effective config path.
+
+    Examples:
+      gsd config path
+    """
+    typer.echo(str(_select_env_path(explicit=None)))
+
+
+@config_app.command("init")
+def config_init(
+    path: Path | None = typer.Option(  # noqa: B008
+        None,
+        "--path",
+        help="Optional destination path for the user .env file",
+    ),
+    overwrite: bool = typer.Option(
+        False, "--overwrite", is_flag=True, help="Overwrite the env file if it already exists"
+    ),
+) -> None:
+    """Create the stable per-user `.env` file if missing.
+
+    Examples:
+      gsd config init
+      gsd config init --overwrite
+    """
+    env_path = _select_env_path(explicit=path)
+    wrote = overwrite or not env_path.exists()
+    ensure_env_file(path=env_path, overwrite=overwrite)
+    if wrote:
+        typer.echo(f"Updated: {env_path}")
+
+
+@config_app.command("set")
+def config_set(
+    env_path: Path | None = typer.Option(  # noqa: B008
+        None,
+        "--env-path",
+        help="Path to the user env file",
+    ),
+    anthropic_api_key: str | None = typer.Option(
+        None,
+        "--anthropic-api-key",
+        help="Write ANTHROPIC_API_KEY to the env file (stored on disk).",
+    ),
+    openai_api_key: str | None = typer.Option(
+        None,
+        "--openai-api-key",
+        help="Write OPENAI_API_KEY to the env file (stored on disk).",
+    ),
+    browser_use_api_key: str | None = typer.Option(
+        None,
+        "--browser-use-api-key",
+        help="Write BROWSER_USE_API_KEY to the env file (stored on disk).",
+    ),
+    non_interactive: bool = typer.Option(
+        False,
+        "--non-interactive",
+        is_flag=True,
+        help="Do not prompt; only apply provided flags",
+    ),
+) -> None:
+    """Update API keys in the stable `.env` file.
+
+    Examples:
+      gsd config set --anthropic-api-key sk-ant-...
+      gsd config set --non-interactive --openai-api-key sk-...
+    """
+    target = _select_env_path(explicit=env_path)
+    ensure_env_file(path=target, overwrite=False)
+
+    updates: dict[str, str] = {}
+    if anthropic_api_key is not None:
+        updates["ANTHROPIC_API_KEY"] = anthropic_api_key
+    if openai_api_key is not None:
+        updates["OPENAI_API_KEY"] = openai_api_key
+    if browser_use_api_key is not None:
+        updates["BROWSER_USE_API_KEY"] = browser_use_api_key
+
+    if not updates and not non_interactive and sys.stdin.isatty():
+        if typer.confirm("Set ANTHROPIC_API_KEY now?", default=False):
+            updates["ANTHROPIC_API_KEY"] = typer.prompt(
+                "ANTHROPIC_API_KEY", hide_input=True, confirmation_prompt=True
+            )
+        if typer.confirm("Set OPENAI_API_KEY now?", default=False):
+            updates["OPENAI_API_KEY"] = typer.prompt(
+                "OPENAI_API_KEY", hide_input=True, confirmation_prompt=True
+            )
+        if typer.confirm("Set BROWSER_USE_API_KEY now?", default=False):
+            updates["BROWSER_USE_API_KEY"] = typer.prompt(
+                "BROWSER_USE_API_KEY", hide_input=True, confirmation_prompt=True
+            )
+
+    if not updates:
+        return
+
+    update_env_file(path=target, updates=updates)
+    typer.echo(f"Updated: {target}")
+
+
 @browser_app.callback()
 def _browser_callback() -> None:
     """Browser install/state utilities.
@@ -483,8 +593,6 @@ def _dev_callback() -> None:
       gsd dev --help
       gsd dev diagnose
     """
-
-
 @mcp_app.command("serve")
 def mcp_serve(
     _unused_disable_echo: bool = typer.Option(
