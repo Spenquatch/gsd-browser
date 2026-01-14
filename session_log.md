@@ -241,4 +241,4 @@ This file is append-only. Add entries at the bottom.
 - `cd gsd-browser && make test` → pass
 
 **Commits:**
-- <pending> `feat: implement gsd dev group (CLI-007)`
+- `77f70eb` `feat: implement gsd dev group (CLI-007)`
