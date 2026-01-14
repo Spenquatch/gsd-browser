@@ -52,7 +52,7 @@
       "id": "CLI-009",
       "title": "Update docs + installer scripts to use `gsd`",
       "description": "Goal: make `gsd` the canonical command in docs and install tooling while keeping `gsd-browser` as a documented legacy alias.\n\nDocs to update (minimum):\n- `gsd-browser/docs/SETUP.md`\n- `gsd-browser/docs/TROUBLESHOOTING.md`\n- `gsd-browser/docs/UPDATING.md`\n\nScripts to update (minimum):\n- `gsd-browser/tools/install.sh`\n- `gsd-browser/tools/upgrade.sh`\n- `gsd-browser/tools/uninstall.sh`\n- `gsd-browser/scripts/print-mcp-config.py` (and any other MCP config printers)\n\nInstaller/script contract (zero ambiguity):\n- After installation, scripts must prefer running `gsd` when present; if `gsd` is not found, they must fall back to `gsd-browser`.\n- Any MCP config snippet produced by scripts must use `command=\"gsd\"` and `args=[\"mcp\",\"serve\"]`.\n- Installer output must:\n  - reference `gsd` as canonical\n  - mention `gsd-browser` as legacy alias\n\nAcceptance criteria:\n- All updated docs show `gsd ...` in examples.\n- MCP config examples use `command=\"gsd\"` + `args=[\"mcp\",\"serve\"]`.\n- `tools/install.sh` and `tools/upgrade.sh` work when:\n  - only `gsd` is on PATH\n  - only `gsd-browser` is on PATH",
-      "status": "todo"
+      "status": "done"
     },
     {
       "id": "CLI-010",

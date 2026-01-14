@@ -268,3 +268,31 @@ This file is append-only. Add entries at the bottom.
 
 **Commits:**
 - `df33e8b` `fix: forward gsd-browser shims to gsd (CLI-008)`
+
+---
+
+### 2026-01-14 — Docs + install scripts use `gsd`
+
+**Task:** `CLI-009` — Update docs + installer scripts to use `gsd`
+
+**Start:** 2026-01-14T20:36:34+00:00
+
+**Plan:**
+- Update docs to present `gsd` as canonical (keep `gsd-browser` as legacy alias)
+- Update installer/upgrade/uninstall scripts to prefer `gsd` and fall back to `gsd-browser`
+- Ensure any generated MCP config uses `command="gsd"` and `args=["mcp","serve"]`
+
+**Finish:** 2026-01-14T20:42:11+00:00
+
+**Changes:**
+- Updated setup/troubleshooting/updating docs to use canonical `gsd ...` commands (keeping `gsd-browser` as a legacy alias)
+- Updated install/upgrade scripts to run `gsd` when available and fall back to `gsd-browser`
+- Updated the MCP config printer helper script to describe the new canonical command
+
+**Validation:**
+- `bash -n gsd-browser/tools/install.sh gsd-browser/tools/upgrade.sh gsd-browser/tools/uninstall.sh` → pass
+- `cd gsd-browser && make lint` → pass
+- `cd gsd-browser && make test` → pass
+
+**Commits:**
+- `2898947` `docs: update docs and scripts to gsd (CLI-009)`
