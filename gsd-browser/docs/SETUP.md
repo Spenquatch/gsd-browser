@@ -6,6 +6,19 @@
 - pipx (installer script will install if missing)
 - Docker (optional)
 
+## Quickstart (pipx)
+If you just want the CLI (recommended for non-dev usage):
+```bash
+pipx install gsd-browser
+gsd --version
+
+gsd config init
+gsd config set --anthropic-api-key sk-ant-...
+
+gsd browser ensure --write-config
+gsd mcp config --format json
+```
+
 ## Local Development
 ```bash
 git clone ~/gsd/gsd-browser

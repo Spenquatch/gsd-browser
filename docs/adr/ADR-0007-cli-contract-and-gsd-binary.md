@@ -1,7 +1,7 @@
 # ADR-0007: CLI contract cleanup + rename `gsd-browser` to `gsd`
 
 ## Status
-Proposed
+Accepted
 
 ## Context
 The current CLI surface of `gsd-browser` has grown organically. It mixes:
@@ -145,4 +145,3 @@ Minimum required help entry points:
 - Current CLI: `gsd-browser/src/gsd_browser/cli.py`
 - ADR format: `docs/adr/README.md`
 - Tool exposure ADR: `docs/adr/ADR-0006-mcp-tool-exposure-controls.md`
-
