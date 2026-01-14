@@ -111,4 +111,4 @@ This file is append-only. Add entries at the bottom.
 - `cd gsd-browser && make test` → pass
 
 **Commits:**
-- <pending> `feat: add gsd command tree skeleton (CLI-002)`
+- `0f2da0b` `feat: add gsd command tree skeleton (CLI-002)`
