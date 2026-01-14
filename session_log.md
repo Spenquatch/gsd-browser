@@ -242,3 +242,29 @@ This file is append-only. Add entries at the bottom.
 
 **Commits:**
 - `77f70eb` `feat: implement gsd dev group (CLI-007)`
+
+---
+
+### 2026-01-14 — Legacy CLI shims mapping
+
+**Task:** `CLI-008` — Backwards compatibility + deprecation mapping (old -> new)
+
+**Start:** 2026-01-14T20:32:33+00:00
+
+**Plan:**
+- Ensure `gsd-browser` forwards all mapped legacy commands into the canonical `gsd` code path
+- Preserve exit codes and stdout/stderr behavior (warning only on stderr)
+- Run lint/tests and commit
+
+**Finish:** 2026-01-14T20:34:23+00:00
+
+**Changes:**
+- Updated the legacy shim to forward all mapped legacy subcommands into the canonical `gsd` CLI
+- Kept the single mapping dict as the source of truth and preserved stderr-only deprecation warnings
+
+**Validation:**
+- `cd gsd-browser && make lint` → pass
+- `cd gsd-browser && make test` → pass
+
+**Commits:**
+- `df33e8b` `fix: forward gsd-browser shims to gsd (CLI-008)`
