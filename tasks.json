@@ -58,7 +58,7 @@
       "id": "CLI-010",
       "title": "Help pages: ensure complete coverage and examples",
       "description": "Goal: enforce a consistent help UX across the new canonical CLI.\n\nAcceptance criteria:\n- The following must succeed and include `Examples:`:\n  - `gsd --help`\n  - `gsd mcp --help`\n  - `gsd mcp tools --help`\n  - `gsd config --help`\n  - `gsd browser --help`\n  - `gsd stream --help`\n  - `gsd llm --help`\n  - `gsd dev --help`\n- Each leaf command under those groups must have a 1-line help summary visible in its parent `--help`.\n- Help text for MCP tool exposure must explicitly state that changes require restarting the MCP host/session.",
-      "status": "todo"
+      "status": "done"
     },
     {
       "id": "CLI-011",

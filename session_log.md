@@ -296,3 +296,30 @@ This file is append-only. Add entries at the bottom.
 
 **Commits:**
 - `2898947` `docs: update docs and scripts to gsd (CLI-009)`
+
+---
+
+### 2026-01-14 — Help pages coverage
+
+**Task:** `CLI-010` — Help pages: ensure complete coverage and examples
+
+**Start:** 2026-01-14T20:43:52+00:00
+
+**Plan:**
+- Ensure `gsd --help` includes `Examples:`
+- Ensure `gsd mcp tools --help` explicitly mentions restarting the MCP host/session after changes
+- Run lint/tests and commit
+
+**Finish:** 2026-01-14T20:44:51+00:00
+
+**Changes:**
+- Added an `Examples:` epilog to `gsd --help`
+- Added an explicit restart note to `gsd mcp tools --help` (tool exposure changes require restarting the MCP host/session)
+
+**Validation:**
+- `cd gsd-browser && for cmd in "" "mcp" "mcp tools" "config" "browser" "stream" "llm" "dev"; do .venv/bin/gsd $cmd --help | rg -q "Examples:"; done` → pass
+- `cd gsd-browser && make lint` → pass
+- `cd gsd-browser && make test` → pass
+
+**Commits:**
+- `9f025d1` `docs: improve gsd help pages (CLI-010)`
