@@ -18,10 +18,13 @@ from .browser_install import (
     install_playwright_chromium,
     should_use_with_deps,
 )
+from .cli import diagnose as legacy_diagnose
 from .cli import mcp_config_add as legacy_mcp_config_add
 from .cli import mcp_tool_smoke as legacy_mcp_tool_smoke
 from .cli import serve as legacy_serve
 from .cli import serve_browser as legacy_serve_browser
+from .cli import serve_echo as legacy_serve_echo
+from .cli import smoke as legacy_smoke
 from .cli import validate_llm as legacy_validate_llm
 from .config import load_settings
 from .mcp_tool_policy import (
@@ -713,6 +716,43 @@ def _dev_callback() -> None:
       gsd dev --help
       gsd dev diagnose
     """
+
+
+@dev_app.command("diagnose")
+def dev_diagnose() -> None:
+    """Run lightweight environment diagnostics.
+
+    Examples:
+      gsd dev diagnose
+    """
+    legacy_diagnose()
+
+
+@dev_app.command("echo")
+def dev_echo(
+    disable_echo: bool = typer.Option(
+        False, "--no-echo", is_flag=True, help="Disable echoing stdin back to stdout"
+    ),
+    once: bool = typer.Option(
+        False, "--once", is_flag=True, help="Process a single message then exit"
+    ),
+) -> None:
+    """Start a tiny echo loop (debugging only).
+
+    Examples:
+      gsd dev echo --once
+    """
+    legacy_serve_echo(disable_echo=disable_echo, once=once)
+
+
+@dev_app.command("smoke")
+def dev_smoke() -> None:
+    """Run a minimal runtime smoke (dashboard + screenshot storage).
+
+    Examples:
+      gsd dev smoke
+    """
+    legacy_smoke()
 @mcp_app.command("serve")
 def mcp_serve(
     _unused_disable_echo: bool = typer.Option(

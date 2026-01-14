@@ -217,3 +217,28 @@ This file is append-only. Add entries at the bottom.
 
 **Commits:**
 - `dda5837` `feat: implement browser/stream/llm groups (CLI-006)`
+
+---
+
+### 2026-01-14 — Dev group migration
+
+**Task:** `CLI-007` — Implement `gsd dev` group: diagnose/echo/smoke
+
+**Start:** 2026-01-14T20:12:20+00:00
+
+**Plan:**
+- Add `gsd dev diagnose`, `gsd dev echo`, `gsd dev smoke` with option parity
+- Ensure `gsd dev echo --help` exposes `--no-echo` and `--once`
+- Run lint/tests and commit
+
+**Finish:** 2026-01-14T20:14:00+00:00
+
+**Changes:**
+- Added `gsd dev diagnose`, `gsd dev echo`, and `gsd dev smoke` (wrapping the existing implementations)
+
+**Validation:**
+- `cd gsd-browser && make lint` → pass
+- `cd gsd-browser && make test` → pass
+
+**Commits:**
+- <pending> `feat: implement gsd dev group (CLI-007)`
