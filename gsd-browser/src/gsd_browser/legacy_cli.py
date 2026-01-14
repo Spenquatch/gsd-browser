@@ -47,20 +47,18 @@ _LEGACY_ARGV_PREFIX_MAP: Final[dict[tuple[str, ...], tuple[str, ...]]] = {
     ("smoke",): ("dev", "smoke"),
 }
 
-_CANONICAL_EXEC_PREFIXES: Final[set[tuple[str, ...]]] = {
-    ("serve",),
-    ("mcp-config",),
-    ("mcp-config-add",),
-    ("mcp-tool-smoke",),
-    ("list-tools",),
-    ("mcp-tools",),
-    ("mcp-tools", "list"),
-    ("mcp-tools", "enable"),
-    ("mcp-tools", "disable"),
-    ("mcp-tools", "set-enabled"),
-    ("mcp-tools", "set-disabled"),
-    ("mcp-tools", "reset"),
-}
+def _find_mapped_prefix(argv: list[str]) -> tuple[tuple[str, ...], tuple[str, ...]] | None:
+    if not argv:
+        return None
+
+    max_prefix_len = max(len(k) for k in _LEGACY_ARGV_PREFIX_MAP)
+    for length in range(max_prefix_len, 0, -1):
+        key = tuple(argv[:length])
+        canonical_prefix = _LEGACY_ARGV_PREFIX_MAP.get(key)
+        if canonical_prefix is not None:
+            return key, canonical_prefix
+
+    return None
 
 
 def _replacement_for_argv(argv: list[str]) -> str:
@@ -120,7 +118,7 @@ app = typer.Typer(
 
 @app.callback()
 def _callback(
-    ctx: typer.Context,
+    _ctx: typer.Context,
     _passthrough: list[str] = _PASSTHROUGH_ARG,
 ) -> None:
     argv = list(sys.argv[1:])
@@ -128,14 +126,11 @@ def _callback(
     typer.echo(f"Deprecated: use '{replacement}'", err=True)
 
     # Prefer canonical implementations when a mapping exists; otherwise fall back to the legacy CLI.
-    if argv:
-        max_prefix_len = max(len(k) for k in _LEGACY_ARGV_PREFIX_MAP)
-        for length in range(max_prefix_len, 0, -1):
-            key = tuple(argv[:length])
-            if key in _LEGACY_ARGV_PREFIX_MAP and key in _CANONICAL_EXEC_PREFIXES:
-                canonical_prefix = _LEGACY_ARGV_PREFIX_MAP[key]
-                remainder = argv[length:]
-                _run_canonical([*canonical_prefix, *remainder])
-                return
+    mapped = _find_mapped_prefix(argv)
+    if mapped is not None:
+        legacy_prefix, canonical_prefix = mapped
+        remainder = argv[len(legacy_prefix) :]
+        _run_canonical([*canonical_prefix, *remainder])
+        return
 
     _run_legacy(argv)
