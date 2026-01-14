@@ -216,4 +216,4 @@ This file is append-only. Add entries at the bottom.
 - `cd gsd-browser && make test` → pass
 
 **Commits:**
-- <pending> `feat: implement browser/stream/llm groups (CLI-006)`
+- `dda5837` `feat: implement browser/stream/llm groups (CLI-006)`
