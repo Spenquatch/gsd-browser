@@ -138,4 +138,4 @@ This file is append-only. Add entries at the bottom.
 - `cd gsd-browser && make test` → pass
 
 **Commits:**
-- <pending> `feat: implement gsd mcp group (CLI-003)`
+- `538cd0f` `feat: implement gsd mcp group (CLI-003)`
