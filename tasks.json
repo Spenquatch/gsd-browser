@@ -1,134 +1,76 @@
 {
   "tasks": [
     {
-      "id": "T1",
-      "title": "Create repository skeleton",
-      "description": "Initialize gsd-browser directory tree (src/, scripts/, tools/, docker/, docs/, tests/, config/) plus placeholder README and TEMPLATE_GUIDE referencing GSD_BROWSER_BLUEPRINT.md.",
-      "status": "done",
-      "sessions": [
-        {
-          "start": "2025-12-31T20:40:41+00:00",
-          "end": "2025-12-31T20:40:41+00:00",
-          "notes": "Created directory tree and placeholder README/TEMPLATE_GUIDE."
-        }
-      ]
+      "id": "CLI-001",
+      "title": "Add new `gsd` console script (keep `gsd-browser` as legacy alias)",
+      "description": "Goal: ship a new primary executable `gsd` while keeping `gsd-browser` working as a deprecated alias.\n\nImplementation requirements:\n- Create canonical CLI module at `gsd-browser/src/gsd_browser/gsd_cli.py` exporting `app: typer.Typer`.\n- Create legacy CLI module at `gsd-browser/src/gsd_browser/legacy_cli.py` exporting `app: typer.Typer`.\n- Update `gsd-browser/pyproject.toml` `[project.scripts]` to include BOTH:\n  - `gsd = \"gsd_browser.gsd_cli:app\"`\n  - `gsd-browser = \"gsd_browser.legacy_cli:app\"`\n\nLegacy behavior requirements:\n- `gsd-browser` must accept all previously public commands and options.\n- `gsd-browser` invocations must print a deprecation warning to stderr with EXACT format:\n  - Starts with `Deprecated:`\n  - Includes exact replacement command in single quotes\n  - Example: `Deprecated: use 'gsd mcp serve'`\n- Legacy shim must preserve exit codes.\n- Legacy shim must preserve stdout/stderr behavior beyond printing the deprecation warning (i.e., do not redirect outputs).\n- For stdio MCP (`gsd mcp serve` and the legacy `gsd-browser serve` shim), NO non-JSON-RPC content may be written to stdout.\n\nAcceptance criteria:\n- Fresh install (pip/pipx) exposes both executables on PATH: `gsd` and `gsd-browser`.\n- `gsd --version` equals `gsd-browser --version`.\n- `gsd-browser --help` works and prints the deprecation warning to stderr.\n- `gsd mcp serve` and `gsd-browser serve` do not print to stdout (other than JSON-RPC).",
+      "status": "todo"
     },
     {
-      "id": "T2",
-      "title": "Add boilerplate metadata files",
-      "description": "Create .gitignore, .env.example, config/mcp-config-example.json, and docs placeholders (SETUP.md, TROUBLESHOOTING.md, UPDATING.md).",
-      "status": "done",
-      "sessions": [
-        {
-          "start": "2025-12-31T20:44:31+00:00",
-          "end": "2025-12-31T20:44:52+00:00",
-          "notes": "Added .gitignore, .env.example, config template, and docs placeholders."
-        }
-      ]
+      "id": "CLI-002",
+      "title": "Create canonical `gsd` command tree skeleton (groups + help)",
+      "description": "Goal: implement the canonical `gsd` command tree structure (grouping + help), without moving business logic yet.\n\nImplementation requirements:\n- Implement `gsd_browser.gsd_cli:app` with ONLY these top-level groups:\n  - `mcp`, `config`, `browser`, `stream`, `llm`, `dev`\n- Each group must be a Typer sub-app with:\n  - `help=` summary (1 line)\n  - a docstring that includes an `Examples:` section\n- `gsd --help` must list ONLY these groups (plus global options).\n- This task must not add legacy shims or move existing command implementations; it only provides the canonical tree wiring and help scaffolding.\n\nAcceptance criteria:\n- `gsd --help` lists only `mcp`, `config`, `browser`, `stream`, `llm`, `dev`.\n- `gsd mcp --help`, `gsd config --help`, `gsd browser --help`, `gsd stream --help`, `gsd llm --help`, `gsd dev --help` all exit code 0.\n- Each of those help pages includes the literal substring `Examples:`.",
+      "status": "todo"
     },
     {
-      "id": "T3",
-      "title": "Configure Python project",
-      "description": "Author pyproject.toml for src/ layout, include dependencies, formatting/lint tools, and define console script entry point `gsd-browser`.",
-      "status": "done",
-      "sessions": [
-        {
-          "start": "2025-12-31T20:45:06+00:00",
-          "end": "2025-12-31T20:45:18+00:00",
-          "notes": "Created pyproject.toml with build metadata, deps, entry point, and tooling config."
-        }
-      ]
+      "id": "CLI-003",
+      "title": "Implement `gsd mcp` group: serve/config/add/smoke/tools",
+      "description": "Goal: move MCP-related commands under `gsd mcp` and update MCP config output to use `gsd`.\n\nCanonical commands:\n- `gsd mcp serve`\n- `gsd mcp config`\n- `gsd mcp add <codex|claude>`\n- `gsd mcp smoke`\n- `gsd mcp tools ...` (implemented in CLI-004)\n\nOption parity requirements:\n- `gsd mcp serve` MUST support the same options as the current `gsd-browser serve`:\n  - `--log-level`, `--json-logs`, `--text-logs`, `--llm-provider`, `--llm-model`, `--ollama-host`\n- `gsd mcp config` MUST support the same options as current `gsd-browser mcp-config`:\n  - `--format` (values: `json` or `toml`; default `json`)\n  - `--include-key-placeholders`\n- `gsd mcp smoke` MUST support the same options as current `gsd-browser mcp-tool-smoke`:\n  - `--url`, `--task`, `--host`, `--port`, `--timeout`, `--headless`, `--no-headless`, `--skip-browser-task`,\n    `--expect-streaming-mode`, `--output`, `--verbose`\n\nBehavior requirements:\n- `gsd mcp serve` must never write non-JSON-RPC content to stdout.\n- `gsd mcp config` output MUST use:\n  - `command=\"gsd\"` (JSON and TOML)\n  - `args=[\"mcp\",\"serve\"]`\n- `gsd mcp add` must install config that launches `gsd mcp serve`.\n\nAcceptance criteria:\n- `gsd mcp --help` lists `serve`, `config`, `add`, `smoke`, and `tools`.\n- `gsd mcp serve --help` documents the stdout JSON-RPC constraint and includes `Examples:`.\n- `gsd mcp config --help` lists `--format` and `--include-key-placeholders` and includes `Examples:`.\n- `gsd mcp smoke --help` lists the options above.\n- `gsd mcp config` output includes `command` set to `gsd` and args `mcp serve` as specified.\n- `gsd mcp add codex` and `gsd mcp add claude` do not write to stdout.",
+      "status": "todo"
     },
     {
-      "id": "T4",
-      "title": "Implement stub MCP server",
-      "description": "Create src/gsd_browser package with __init__.py, cli.py exposing serve/diagnose/smoke commands, and main.py with placeholder stdio loop.",
-      "status": "done",
-      "sessions": [
-        {
-          "start": "2025-12-31T20:45:32+00:00",
-          "end": "2025-12-31T20:45:50+00:00",
-          "notes": "Added __init__.py, Typer CLI with serve/diagnose/smoke, and placeholder stdio main loop."
-        }
-      ]
+      "id": "CLI-004",
+      "title": "Implement `gsd mcp tools` group: list/enable/disable/allow/deny/reset",
+      "description": "Goal: consolidate MCP tool exposure controls under `gsd mcp tools` with deterministic parsing and output.\n\nCanonical commands:\n- `gsd mcp tools list`\n- `gsd mcp tools enable <tool...>`\n- `gsd mcp tools disable <tool...>`\n- `gsd mcp tools allow <tool...>`\n- `gsd mcp tools allow --all|--none|--clear`\n- `gsd mcp tools deny <tool...>`\n- `gsd mcp tools deny --clear`\n- `gsd mcp tools reset`\n\nTool name parsing rules (zero ambiguity):\n- Commands taking `<tool...>` MUST accept both space-separated and comma-separated input.\n- Examples that MUST be equivalent:\n  - `gsd mcp tools disable setup_browser_state get_screenshots`\n  - `gsd mcp tools disable setup_browser_state,get_screenshots`\n  - `gsd mcp tools disable setup_browser_state get_screenshots,web_eval_agent`\n- Parsing algorithm:\n  1) For each arg string, split by `,`.\n  2) Trim whitespace.\n  3) Discard empty tokens.\n  4) Normalize: lower-case and replace `-` with `_`.\n  5) Validate: each normalized name must be in the known tool list; otherwise exit 2 and print known tool names.\n  6) Stored values must be written as a comma-separated list sorted lexicographically.\n\nConfig contract:\n- Persist to the stable env file:\n  - if `GSD_BROWSER_ENV_FILE` is set, use that path\n  - else use `~/.config/gsd-browser/.env`\n- The underlying env vars remain:\n  - `GSD_BROWSER_MCP_ENABLED_TOOLS`\n  - `GSD_BROWSER_MCP_DISABLED_TOOLS`\n\nOutput contract for ALL mutation commands in this group:\n- Must print these lines to stdout with exact prefixes:\n  1) `Updated: <path>`\n  2) `GSD_BROWSER_MCP_ENABLED_TOOLS=<value>`\n  3) `GSD_BROWSER_MCP_DISABLED_TOOLS=<value>`\n  4) A line that contains EXACTLY the text: `Restart your MCP host/session`\n\nHelp contract:\n- `gsd mcp tools --help` and each subcommand help must include an `Examples:` section.\n\nAcceptance criteria:\n- `gsd mcp tools list` prints known tools and the effective advertised set.\n- All mutations update the correct file and print the required lines.\n- Unknown tool names exit code 2 and print the known list.",
+      "status": "todo"
     },
     {
-      "id": "T5",
-      "title": "Configuration system",
-      "description": "Add config.py (dataclass/pydantic), implement env/CLI loading precedence, schema validation, and script to print MCP config snippet.",
-      "status": "done",
-      "sessions": [
-        {
-          "start": "2025-12-31T20:50:52+00:00",
-          "end": "2025-12-31T20:51:26+00:00",
-          "notes": "Added pydantic Settings loader, wired CLI to load config, and created print-mcp-config script."
-        }
-      ]
+      "id": "CLI-005",
+      "title": "Implement `gsd config` group: init/set/path",
+      "description": "Goal: move user config lifecycle under `gsd config` with deterministic behavior.\n\nCanonical commands:\n- `gsd config init` (create user `.env` file)\n- `gsd config set` (interactive/non-interactive API key updates)\n- `gsd config path` (print effective config path)\n\nRequired option parity:\n- `gsd config init` must support:\n  - `--path`, `--overwrite`\n- `gsd config set` must support:\n  - `--env-path`, `--anthropic-api-key`, `--openai-api-key`, `--browser-use-api-key`, `--non-interactive`\n\nPath selection rules (zero ambiguity):\n- If a command accepts an explicit path option (`--path` or `--env-path`) and it is provided, use it.\n- Else if `GSD_BROWSER_ENV_FILE` is set, use that.\n- Else use `~/.config/gsd-browser/.env`.\n\nOutput contract:\n- Any command that writes changes must print `Updated: <path>` to stdout.\n- `gsd config path` must print ONLY the path on a single stdout line and exit 0.\n\nHelp contract:\n- `gsd config --help` and each subcommand help must include `Examples:`.\n\nAcceptance criteria:\n- `gsd config path` always prints the correct effective path.\n- `gsd config init` and `gsd config set` use the path selection rules above and print `Updated:` on writes.",
+      "status": "todo"
     },
     {
-      "id": "T6",
-      "title": "Local developer tooling scripts",
-      "description": "Write scripts/run-local.sh, scripts/diagnose.sh, scripts/smoke-test.sh, and scripts/check-mcp-config.sh with portability improvements.",
-      "status": "done",
-      "sessions": [
-        {
-          "start": "2025-12-31T20:51:26+00:00",
-          "end": "2025-12-31T20:52:07+00:00",
-          "notes": "Added run-local, diagnose, smoke-test, and check-mcp-config scripts with portability improvements."
-        }
-      ]
+      "id": "CLI-006",
+      "title": "Implement `gsd browser`, `gsd stream`, and `gsd llm` groups",
+      "description": "Goal: move remaining non-dev commands into their canonical groups with option parity and help.\n\nCanonical commands:\n- `gsd browser ensure` (same behavior as current `ensure-browser`)\n  - Required options: `--install/--no-install`, `--write-config/--no-write-config`, `--with-deps/--no-with-deps`\n- `gsd stream serve` (same behavior as current `serve-browser`)\n  - Required options: `--host`, `--port`, `--log-level`, `--json-logs`, `--text-logs`, `--llm-provider`, `--llm-model`, `--ollama-host`\n- `gsd llm validate` (same behavior as current `validate-llm`)\n  - Required options: `--llm-provider`, `--llm-model`, `--ollama-host`\n\nOutput contract:\n- `gsd browser ensure --write-config` must print `Updated: <path>` to stdout when it writes `GSD_BROWSER_BROWSER_EXECUTABLE_PATH`.\n\nHelp contract:\n- Each group and command help must include `Examples:`.\n\nAcceptance criteria:\n- Each canonical command exists and `--help` shows the required options.\n- `gsd browser ensure --write-config` emits `Updated:` on writes.",
+      "status": "todo"
     },
     {
-      "id": "T7",
-      "title": "pipx-focused installer suite",
-      "description": "Implement tools/install.sh/upgrade.sh/uninstall.sh using pipx, manifest tracking, dependency checks, and cleanup routines.",
-      "status": "done",
-      "sessions": [
-        {
-          "start": "2025-12-31T20:52:07+00:00",
-          "end": "2025-12-31T20:52:44+00:00",
-          "notes": "Created pipx install/upgrade/uninstall scripts with manifest tracking."
-        }
-      ]
+      "id": "CLI-007",
+      "title": "Implement `gsd dev` group: diagnose/echo/smoke",
+      "description": "Goal: group developer/debug utilities under `gsd dev` while keeping behavior stable.\n\nCanonical commands:\n- `gsd dev diagnose` (same behavior as current `diagnose`)\n- `gsd dev echo` (same behavior as current `serve-echo`)\n  - Required options: `--no-echo`, `--once`\n- `gsd dev smoke` (same behavior as current `smoke`)\n\nHelp contract:\n- `gsd dev --help` and each subcommand help must include `Examples:`.\n\nAcceptance criteria:\n- `gsd dev echo --help` lists `--no-echo` and `--once`.\n- All commands run without requiring network/credentials by default.",
+      "status": "todo"
     },
     {
-      "id": "T8",
-      "title": "Docker packaging",
-      "description": "Author docker/Dockerfile, docker/entrypoint.sh, and optional compose file mirroring claude-quickstarts pattern.",
-      "status": "done",
-      "sessions": [
-        {
-          "start": "2025-12-31T20:54:40+00:00",
-          "end": "2025-12-31T20:54:58+00:00",
-          "notes": "Added Dockerfile, entrypoint, and compose configuration."
-        }
-      ]
+      "id": "CLI-008",
+      "title": "Backwards compatibility + deprecation mapping (old -> new)",
+      "description": "Goal: preserve existing `gsd-browser` command surface while steering users to canonical `gsd` commands.\n\nRequired mapping (minimum):\n- `gsd-browser serve` -> `gsd mcp serve`\n- `gsd-browser mcp-config` -> `gsd mcp config`\n- `gsd-browser mcp-config-add` -> `gsd mcp add`\n- `gsd-browser mcp-tool-smoke` -> `gsd mcp smoke`\n- `gsd-browser list-tools` -> `gsd mcp tools list`\n- `gsd-browser init-env` -> `gsd config init`\n- `gsd-browser configure` -> `gsd config set`\n- `gsd-browser ensure-browser` -> `gsd browser ensure`\n- `gsd-browser serve-browser` -> `gsd stream serve`\n- `gsd-browser validate-llm` -> `gsd llm validate`\n- `gsd-browser diagnose` -> `gsd dev diagnose`\n- `gsd-browser serve-echo` -> `gsd dev echo`\n- `gsd-browser smoke` -> `gsd dev smoke`\n\nLegacy `mcp-tools` subcommand mapping (explicit; required for zero ambiguity):\n- `gsd-browser mcp-tools list` -> `gsd mcp tools list`\n- `gsd-browser mcp-tools enable <tools...>` -> `gsd mcp tools enable <tools...>`\n- `gsd-browser mcp-tools disable <tools...>` -> `gsd mcp tools disable <tools...>`\n- `gsd-browser mcp-tools reset` -> `gsd mcp tools reset`\n- `gsd-browser mcp-tools set-enabled <tools...>` -> `gsd mcp tools allow <tools...>`\n- `gsd-browser mcp-tools set-enabled --all` -> `gsd mcp tools allow --all`\n- `gsd-browser mcp-tools set-enabled --none` -> `gsd mcp tools allow --none`\n- `gsd-browser mcp-tools set-enabled --clear` -> `gsd mcp tools allow --clear`\n- `gsd-browser mcp-tools set-disabled <tools...>` -> `gsd mcp tools deny <tools...>`\n- `gsd-browser mcp-tools set-disabled --clear` -> `gsd mcp tools deny --clear`\n\nShim requirements (zero ambiguity):\n- Implement shims in `gsd-browser/src/gsd_browser/legacy_cli.py`.\n- Use a single source-of-truth mapping (one dict) of legacy argv-prefix -> canonical argv-prefix.\n  - Example key/value: `(\"mcp-tools\",\"set-enabled\") -> (\"mcp\",\"tools\",\"allow\")`.\n- Before executing the canonical command, print one deprecation warning to stderr with EXACT format:\n  - `Deprecated: use '<replacement>'`\n- Preserve exit codes.\n- Preserve stdout/stderr semantics beyond the warning.\n- For the MCP stdio legacy shim (`gsd-browser serve`), ensure the warning does not go to stdout.\n\nAcceptance criteria:\n- Each listed legacy command works and prints the deprecation warning to stderr.\n- Each legacy command executes the canonical code path (no duplicated implementation).",
+      "status": "todo"
     },
     {
-      "id": "T9",
-      "title": "Diagnostics and automated tests",
-      "description": "Create tests/smoke suite validating stdio handshake, CLI commands, and include Makefile/Taskfile targets to run lint/test/smoke.",
-      "status": "done",
-      "sessions": [
-        {
-          "start": "2025-12-31T20:54:58+00:00",
-          "end": "2025-12-31T20:55:17+00:00",
-          "notes": "Added smoke pytest, CLI round-trip script integration, and Makefile targets for dev/lint/test/smoke/docker."
-        }
-      ]
+      "id": "CLI-009",
+      "title": "Update docs + installer scripts to use `gsd`",
+      "description": "Goal: make `gsd` the canonical command in docs and install tooling while keeping `gsd-browser` as a documented legacy alias.\n\nDocs to update (minimum):\n- `gsd-browser/docs/SETUP.md`\n- `gsd-browser/docs/TROUBLESHOOTING.md`\n- `gsd-browser/docs/UPDATING.md`\n\nScripts to update (minimum):\n- `gsd-browser/tools/install.sh`\n- `gsd-browser/tools/upgrade.sh`\n- `gsd-browser/tools/uninstall.sh`\n- `gsd-browser/scripts/print-mcp-config.py` (and any other MCP config printers)\n\nInstaller/script contract (zero ambiguity):\n- After installation, scripts must prefer running `gsd` when present; if `gsd` is not found, they must fall back to `gsd-browser`.\n- Any MCP config snippet produced by scripts must use `command=\"gsd\"` and `args=[\"mcp\",\"serve\"]`.\n- Installer output must:\n  - reference `gsd` as canonical\n  - mention `gsd-browser` as legacy alias\n\nAcceptance criteria:\n- All updated docs show `gsd ...` in examples.\n- MCP config examples use `command=\"gsd\"` + `args=[\"mcp\",\"serve\"]`.\n- `tools/install.sh` and `tools/upgrade.sh` work when:\n  - only `gsd` is on PATH\n  - only `gsd-browser` is on PATH",
+      "status": "todo"
     },
     {
-      "id": "T10",
-      "title": "Documentation pass",
-      "description": "Fill README, TEMPLATE_GUIDE, SETUP, TROUBLESHOOTING, and UPDATING docs with clear install/upgrade/uninstall/docker guidance.",
-      "status": "done",
-      "sessions": [
-        {
-          "start": "2025-12-31T20:55:25+00:00",
-          "end": "2025-12-31T20:55:53+00:00",
-          "notes": "Expanded README, Template Guide, and docs (SETUP/TROUBLESHOOTING/UPDATING) with actionable instructions."
-        }
-      ]
+      "id": "CLI-010",
+      "title": "Help pages: ensure complete coverage and examples",
+      "description": "Goal: enforce a consistent help UX across the new canonical CLI.\n\nAcceptance criteria:\n- The following must succeed and include `Examples:`:\n  - `gsd --help`\n  - `gsd mcp --help`\n  - `gsd mcp tools --help`\n  - `gsd config --help`\n  - `gsd browser --help`\n  - `gsd stream --help`\n  - `gsd llm --help`\n  - `gsd dev --help`\n- Each leaf command under those groups must have a 1-line help summary visible in its parent `--help`.\n- Help text for MCP tool exposure must explicitly state that changes require restarting the MCP host/session.",
+      "status": "todo"
+    },
+    {
+      "id": "CLI-011",
+      "title": "Automated tests for CLI contract + compatibility",
+      "description": "Goal: add deterministic tests that enforce the new CLI contract and legacy shims.\n\nTest harness requirements:\n- Use `typer.testing.CliRunner` against the canonical Typer app `gsd_browser.gsd_cli.app`.\n- Use `typer.testing.CliRunner` against the legacy Typer app `gsd_browser.legacy_cli.app`.\n- Any test that mutates config MUST set `GSD_BROWSER_ENV_FILE` to a temp file under `tmp_path`.\n- Tests MUST NOT read or write `~/.config/gsd-browser/.env`.\n\nAssertions to include:\n- `gsd --help` output includes the group names `mcp`, `config`, `browser`, `stream`, `llm`, `dev`.\n- `gsd mcp/config/browser/stream/llm/dev --help` succeed and include `Examples:`.\n- `gsd mcp config` output contains `command=\"gsd\"` and args `mcp serve`.\n- Tool policy mutation output matches CLI-004 output contract exactly (including the exact restart line).\n- Legacy shim:\n  - invoking a legacy command prints the deprecation warning to stderr with exact format.\n  - legacy command exit code matches the canonical equivalent.\n\nAcceptance criteria:\n- Tests pass with `make test` (or `pytest`) in a clean environment.",
+      "status": "todo"
+    },
+    {
+      "id": "CLI-012",
+      "title": "Finalize ADR-0007 and migration notes",
+      "description": "Goal: after implementation, finalize the ADR and document the migration path.\n\nAcceptance criteria:\n- Update `docs/adr/ADR-0007-cli-contract-and-gsd-binary.md` Status from `Proposed` to `Accepted`.\n- Add a migration section to `gsd-browser/docs/UPDATING.md` that includes:\n  - old command -> new command mapping for the most common cases\n  - how to update MCP host configs to `command=gsd` + `args=[\"mcp\",\"serve\"]`\n  - deprecation warning behavior and timeframe\n- Ensure `gsd-browser/docs/SETUP.md` includes a copy/paste snippet for new users using `gsd`.",
+      "status": "todo"
     }
   ]
 }
