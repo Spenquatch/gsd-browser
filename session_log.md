@@ -139,3 +139,29 @@ This file is append-only. Add entries at the bottom.
 
 **Commits:**
 - `538cd0f` `feat: implement gsd mcp group (CLI-003)`
+
+---
+
+### 2026-01-14 — MCP tools contract + legacy shims
+
+**Task:** `CLI-004` — Implement `gsd mcp tools` group: list/enable/disable/allow/deny/reset
+
+**Start:** 2026-01-14T19:55:55+00:00
+
+**Plan:**
+- Implement tool parsing + mutation output contract for `gsd mcp tools`
+- Route legacy `list-tools` / `mcp-tools ...` commands through canonical code path
+- Run lint/tests and commit
+
+**Finish:** 2026-01-14T20:01:03+00:00
+
+**Changes:**
+- Implemented `gsd mcp tools` with deterministic parsing and mutation output contract
+- Added legacy shims so `gsd-browser list-tools` / `gsd-browser mcp-tools ...` execute the canonical code path
+
+**Validation:**
+- `cd gsd-browser && make lint` → pass
+- `cd gsd-browser && make test` → pass
+
+**Commits:**
+- <pending> `feat: implement gsd mcp tools contract (CLI-004)`

@@ -13,8 +13,10 @@ import typer
 from typer.main import get_command
 
 from . import cli as legacy_cli_mod
+from . import gsd_cli as canonical_cli_mod
 
 _LEGACY_COMMAND: Final[click.Command] = get_command(legacy_cli_mod.app)
+_CANONICAL_COMMAND: Final[click.Command] = get_command(canonical_cli_mod.app)
 
 _PASSTHROUGH_ARG = typer.Argument(
     None,
@@ -22,21 +24,42 @@ _PASSTHROUGH_ARG = typer.Argument(
     help="(internal) Forwarded to the legacy CLI unchanged.",
 )
 
-_LEGACY_TO_CANONICAL: Final[dict[str, list[str]]] = {
-    "serve": ["gsd", "mcp", "serve"],
-    "mcp-config": ["gsd", "mcp", "config"],
-    "mcp-config-add": ["gsd", "mcp", "add"],
-    "mcp-tool-smoke": ["gsd", "mcp", "smoke"],
-    "list-tools": ["gsd", "mcp", "tools", "list"],
-    "mcp-tools": ["gsd", "mcp", "tools"],
-    "init-env": ["gsd", "config", "init"],
-    "configure": ["gsd", "config", "set"],
-    "ensure-browser": ["gsd", "browser", "ensure"],
-    "serve-browser": ["gsd", "stream", "serve"],
-    "validate-llm": ["gsd", "llm", "validate"],
-    "diagnose": ["gsd", "dev", "diagnose"],
-    "serve-echo": ["gsd", "dev", "echo"],
-    "smoke": ["gsd", "dev", "smoke"],
+_LEGACY_ARGV_PREFIX_MAP: Final[dict[tuple[str, ...], tuple[str, ...]]] = {
+    ("serve",): ("mcp", "serve"),
+    ("mcp-config",): ("mcp", "config"),
+    ("mcp-config-add",): ("mcp", "add"),
+    ("mcp-tool-smoke",): ("mcp", "smoke"),
+    ("list-tools",): ("mcp", "tools", "list"),
+    ("mcp-tools",): ("mcp", "tools"),
+    ("mcp-tools", "list"): ("mcp", "tools", "list"),
+    ("mcp-tools", "enable"): ("mcp", "tools", "enable"),
+    ("mcp-tools", "disable"): ("mcp", "tools", "disable"),
+    ("mcp-tools", "set-enabled"): ("mcp", "tools", "allow"),
+    ("mcp-tools", "set-disabled"): ("mcp", "tools", "deny"),
+    ("mcp-tools", "reset"): ("mcp", "tools", "reset"),
+    ("init-env",): ("config", "init"),
+    ("configure",): ("config", "set"),
+    ("ensure-browser",): ("browser", "ensure"),
+    ("serve-browser",): ("stream", "serve"),
+    ("validate-llm",): ("llm", "validate"),
+    ("diagnose",): ("dev", "diagnose"),
+    ("serve-echo",): ("dev", "echo"),
+    ("smoke",): ("dev", "smoke"),
+}
+
+_CANONICAL_EXEC_PREFIXES: Final[set[tuple[str, ...]]] = {
+    ("serve",),
+    ("mcp-config",),
+    ("mcp-config-add",),
+    ("mcp-tool-smoke",),
+    ("list-tools",),
+    ("mcp-tools",),
+    ("mcp-tools", "list"),
+    ("mcp-tools", "enable"),
+    ("mcp-tools", "disable"),
+    ("mcp-tools", "set-enabled"),
+    ("mcp-tools", "set-disabled"),
+    ("mcp-tools", "reset"),
 }
 
 
@@ -49,18 +72,37 @@ def _replacement_for_argv(argv: list[str]) -> str:
             return "gsd --help"
         return "gsd --help"
 
-    command = argv[cmd_index]
-    canonical_prefix = _LEGACY_TO_CANONICAL.get(command)
-    if canonical_prefix is None:
+    if cmd_index != 0:
         return "gsd --help"
 
-    remainder = argv[cmd_index + 1 :]
-    return " ".join([*canonical_prefix, *remainder])
+    max_prefix_len = max(len(k) for k in _LEGACY_ARGV_PREFIX_MAP)
+    mapped_key: tuple[str, ...] | None = None
+    for length in range(max_prefix_len, 0, -1):
+        key = tuple(argv[:length])
+        if key in _LEGACY_ARGV_PREFIX_MAP:
+            mapped_key = key
+            break
+
+    if mapped_key is None:
+        return "gsd --help"
+
+    canonical_prefix = _LEGACY_ARGV_PREFIX_MAP[mapped_key]
+    remainder = argv[len(mapped_key) :]
+    return " ".join(["gsd", *canonical_prefix, *remainder])
 
 
 def _run_legacy(argv: list[str]) -> None:
     try:
         _LEGACY_COMMAND.main(args=argv, prog_name="gsd-browser", standalone_mode=False)
+    except click.exceptions.Exit as exc:
+        raise typer.Exit(code=exc.exit_code) from None
+    except click.exceptions.Abort:
+        raise typer.Exit(code=1) from None
+
+
+def _run_canonical(argv: list[str]) -> None:
+    try:
+        _CANONICAL_COMMAND.main(args=argv, prog_name="gsd", standalone_mode=False)
     except click.exceptions.Exit as exc:
         raise typer.Exit(code=exc.exit_code) from None
     except click.exceptions.Abort:
@@ -85,5 +127,15 @@ def _callback(
     replacement = _replacement_for_argv(argv)
     typer.echo(f"Deprecated: use '{replacement}'", err=True)
 
-    # Delegate to the original CLI to preserve behavior and exit codes.
+    # Prefer canonical implementations when a mapping exists; otherwise fall back to the legacy CLI.
+    if argv:
+        max_prefix_len = max(len(k) for k in _LEGACY_ARGV_PREFIX_MAP)
+        for length in range(max_prefix_len, 0, -1):
+            key = tuple(argv[:length])
+            if key in _LEGACY_ARGV_PREFIX_MAP and key in _CANONICAL_EXEC_PREFIXES:
+                canonical_prefix = _LEGACY_ARGV_PREFIX_MAP[key]
+                remainder = argv[length:]
+                _run_canonical([*canonical_prefix, *remainder])
+                return
+
     _run_legacy(argv)

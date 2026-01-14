@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import os
 import sys
+from pathlib import Path
 
 import typer
 from rich.console import Console
@@ -16,6 +17,13 @@ from .cli import mcp_config_add as legacy_mcp_config_add
 from .cli import mcp_tool_smoke as legacy_mcp_tool_smoke
 from .cli import serve as legacy_serve
 from .config import load_settings
+from .mcp_tool_policy import (
+    KNOWN_MCP_TOOLS,
+    compute_tool_exposure_policy,
+    normalize_tool_name,
+    parse_tool_selector,
+)
+from .user_config import default_env_path, ensure_env_file, update_env_file
 
 console = Console()
 
@@ -175,8 +183,256 @@ def mcp_smoke(
     )
 
 
-tools_app = typer.Typer(help="MCP tool exposure controls", add_completion=False)
+tools_app = typer.Typer(
+    help="MCP tool exposure controls",
+    add_completion=False,
+    epilog="Examples:\n  gsd mcp tools list\n  gsd mcp tools disable setup_browser_state\n",
+)
 mcp_app.add_typer(tools_app, name="tools")
+
+_TOOLS_ENABLE_ARG = typer.Argument(..., help="Tool name(s) to enable")
+_TOOLS_DISABLE_ARG = typer.Argument(..., help="Tool name(s) to disable")
+_TOOLS_ALLOW_ARG = typer.Argument(None, help="Tool name(s) to allowlist")
+_TOOLS_DENY_ARG = typer.Argument(None, help="Tool name(s) to denylist")
+
+
+def _tools_env_path() -> Path:
+    override = (os.getenv("GSD_BROWSER_ENV_FILE") or "").strip()
+    return default_env_path() if not override else Path(os.path.expanduser(override))
+
+
+def _read_env_file_values(path: Path) -> dict[str, str]:
+    try:
+        raw = path.read_text(encoding="utf-8").splitlines()
+    except FileNotFoundError:
+        return {}
+    out: dict[str, str] = {}
+    for line in raw:
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#") or "=" not in stripped:
+            continue
+        key, value = stripped.split("=", 1)
+        out[key.strip()] = value.strip()
+    return out
+
+
+def _parse_tool_args(args: list[str]) -> list[str]:
+    tokens: list[str] = []
+    for raw in args:
+        for piece in raw.split(","):
+            name = piece.strip()
+            if not name:
+                continue
+            tokens.append(name)
+
+    normalized = [normalize_tool_name(name) for name in tokens]
+    known = set(KNOWN_MCP_TOOLS)
+    unknown = sorted({name for name in normalized if name not in known})
+    if unknown:
+        typer.echo(f"Unknown tool(s): {', '.join(unknown)}", err=True)
+        typer.echo(f"Known tools: {', '.join(KNOWN_MCP_TOOLS)}", err=True)
+        raise typer.Exit(code=2)
+
+    # Dedupe while preserving deterministic order in storage (sorted later).
+    return sorted(set(normalized))
+
+
+def _format_tools_csv(tools: set[str]) -> str:
+    return ",".join(sorted(tools))
+
+
+def _emit_mutation_summary(env_path: Path) -> None:
+    values = _read_env_file_values(env_path)
+    enabled = values.get("GSD_BROWSER_MCP_ENABLED_TOOLS", "")
+    disabled = values.get("GSD_BROWSER_MCP_DISABLED_TOOLS", "")
+
+    typer.echo(f"Updated: {env_path}")
+    typer.echo(f"GSD_BROWSER_MCP_ENABLED_TOOLS={enabled}")
+    typer.echo(f"GSD_BROWSER_MCP_DISABLED_TOOLS={disabled}")
+    typer.echo("Restart your MCP host/session")
+
+
+@tools_app.command("list")
+def tools_list() -> None:
+    """List known tools and the effective advertised set.
+
+    Examples:
+      gsd mcp tools list
+    """
+    env_path = _tools_env_path()
+    ensure_env_file(path=env_path, overwrite=False)
+
+    settings = load_settings(strict=False)
+    policy = compute_tool_exposure_policy(
+        known_tools=set(KNOWN_MCP_TOOLS),
+        enabled_raw=settings.mcp_enabled_tools,
+        disabled_raw=settings.mcp_disabled_tools,
+    )
+
+    typer.echo(f"Config: {env_path}")
+    typer.echo(f"Known tools: {_format_tools_csv(set(KNOWN_MCP_TOOLS))}")
+    typer.echo(f"Advertised tools: {_format_tools_csv(policy.advertised_tools)}")
+
+
+@tools_app.command("enable")
+def tools_enable(tools: list[str] = _TOOLS_ENABLE_ARG) -> None:
+    """Enable one or more MCP tools (removes from denylist; may set allowlist from none).
+
+    Examples:
+      gsd mcp tools enable setup_browser_state,get_screenshots
+      gsd mcp tools enable setup_browser_state get_screenshots
+    """
+    env_path = _tools_env_path()
+    ensure_env_file(path=env_path, overwrite=False)
+    current = _read_env_file_values(env_path)
+
+    requested = set(_parse_tool_args(tools))
+    known = set(KNOWN_MCP_TOOLS)
+
+    enabled_raw = current.get("GSD_BROWSER_MCP_ENABLED_TOOLS", "")
+    disabled_raw = current.get("GSD_BROWSER_MCP_DISABLED_TOOLS", "")
+    enabled_mode, enabled_names = parse_tool_selector(enabled_raw)
+    _disabled_mode, disabled_names = parse_tool_selector(disabled_raw)
+
+    next_disabled = (disabled_names - requested) & known
+
+    updates: dict[str, str] = {"GSD_BROWSER_MCP_DISABLED_TOOLS": _format_tools_csv(next_disabled)}
+    if enabled_mode == "none":
+        updates["GSD_BROWSER_MCP_ENABLED_TOOLS"] = _format_tools_csv(requested)
+    elif enabled_mode == "all" or not enabled_raw.strip():
+        # Baseline is all tools; leave allowlist untouched.
+        pass
+    else:
+        updates["GSD_BROWSER_MCP_ENABLED_TOOLS"] = _format_tools_csv(
+            (enabled_names | requested) & known
+        )
+
+    update_env_file(path=env_path, updates=updates)
+    _emit_mutation_summary(env_path)
+
+
+@tools_app.command("disable")
+def tools_disable(tools: list[str] = _TOOLS_DISABLE_ARG) -> None:
+    """Disable one or more MCP tools (adds to denylist; removes from allowlist if present).
+
+    Examples:
+      gsd mcp tools disable setup_browser_state,get_screenshots
+    """
+    env_path = _tools_env_path()
+    ensure_env_file(path=env_path, overwrite=False)
+    current = _read_env_file_values(env_path)
+
+    requested = set(_parse_tool_args(tools))
+    known = set(KNOWN_MCP_TOOLS)
+
+    enabled_raw = current.get("GSD_BROWSER_MCP_ENABLED_TOOLS", "")
+    disabled_raw = current.get("GSD_BROWSER_MCP_DISABLED_TOOLS", "")
+    enabled_mode, enabled_names = parse_tool_selector(enabled_raw)
+    _disabled_mode, disabled_names = parse_tool_selector(disabled_raw)
+
+    next_disabled = (disabled_names | requested) & known
+    updates: dict[str, str] = {"GSD_BROWSER_MCP_DISABLED_TOOLS": _format_tools_csv(next_disabled)}
+
+    if enabled_mode == "none":
+        updates["GSD_BROWSER_MCP_ENABLED_TOOLS"] = "none"
+    elif enabled_mode == "all" or not enabled_raw.strip():
+        pass
+    else:
+        updates["GSD_BROWSER_MCP_ENABLED_TOOLS"] = _format_tools_csv(
+            (enabled_names - requested) & known
+        )
+
+    update_env_file(path=env_path, updates=updates)
+    _emit_mutation_summary(env_path)
+
+
+@tools_app.command("allow")
+def tools_allow(
+    tools: list[str] = _TOOLS_ALLOW_ARG,
+    all_tools: bool = typer.Option(False, "--all", help="Allowlist all tools (baseline=all)"),
+    none: bool = typer.Option(False, "--none", help="Allowlist no tools (baseline=none)"),
+    clear: bool = typer.Option(False, "--clear", help="Unset allowlist (defaults to all tools)"),
+) -> None:
+    """Set the allowlist (enabled tools selector).
+
+    Examples:
+      gsd mcp tools allow web_eval_agent,get_run_events
+      gsd mcp tools allow --all
+    """
+    if sum([bool(all_tools), bool(none), bool(clear)]) > 1:
+        raise typer.Exit(code=2)
+
+    env_path = _tools_env_path()
+    ensure_env_file(path=env_path, overwrite=False)
+
+    if clear:
+        update_env_file(path=env_path, updates={"GSD_BROWSER_MCP_ENABLED_TOOLS": ""})
+        _emit_mutation_summary(env_path)
+        return
+    if all_tools:
+        update_env_file(path=env_path, updates={"GSD_BROWSER_MCP_ENABLED_TOOLS": "all"})
+        _emit_mutation_summary(env_path)
+        return
+    if none:
+        update_env_file(path=env_path, updates={"GSD_BROWSER_MCP_ENABLED_TOOLS": "none"})
+        _emit_mutation_summary(env_path)
+        return
+
+    tools = tools or []
+    if not tools:
+        raise typer.Exit(code=2)
+
+    requested = set(_parse_tool_args(tools))
+    update_env_file(
+        path=env_path, updates={"GSD_BROWSER_MCP_ENABLED_TOOLS": _format_tools_csv(requested)}
+    )
+    _emit_mutation_summary(env_path)
+
+
+@tools_app.command("deny")
+def tools_deny(
+    tools: list[str] = _TOOLS_DENY_ARG,
+    clear: bool = typer.Option(False, "--clear", help="Clear denylist"),
+) -> None:
+    """Set the denylist (disabled tools selector).
+
+    Examples:
+      gsd mcp tools deny setup_browser_state,get_screenshots
+      gsd mcp tools deny --clear
+    """
+    env_path = _tools_env_path()
+    ensure_env_file(path=env_path, overwrite=False)
+
+    if clear:
+        update_env_file(path=env_path, updates={"GSD_BROWSER_MCP_DISABLED_TOOLS": ""})
+        _emit_mutation_summary(env_path)
+        return
+
+    tools = tools or []
+    if not tools:
+        raise typer.Exit(code=2)
+
+    requested = set(_parse_tool_args(tools))
+    update_env_file(
+        path=env_path, updates={"GSD_BROWSER_MCP_DISABLED_TOOLS": _format_tools_csv(requested)}
+    )
+    _emit_mutation_summary(env_path)
+
+
+@tools_app.command("reset")
+def tools_reset() -> None:
+    """Reset allowlist and denylist (defaults to all tools enabled).
+
+    Examples:
+      gsd mcp tools reset
+    """
+    env_path = _tools_env_path()
+    ensure_env_file(path=env_path, overwrite=False)
+    update_env_file(
+        path=env_path,
+        updates={"GSD_BROWSER_MCP_ENABLED_TOOLS": "", "GSD_BROWSER_MCP_DISABLED_TOOLS": ""},
+    )
+    _emit_mutation_summary(env_path)
 
 
 @config_app.callback()
