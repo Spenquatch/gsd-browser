@@ -156,6 +156,20 @@ def mcp_add(
             pass
         sys.stdout = stdout
 
+    target_norm = target.lower()
+    if target_norm == "codex":
+        typer.echo(
+            "Updated Codex MCP config (no stdout output by design). "
+            "Verify in ~/.codex/config.toml under [mcp_servers.gsd-browser].",
+            err=True,
+        )
+    elif target_norm == "claude":
+        typer.echo(
+            "Updated Claude MCP config (no stdout output by design). "
+            "Verify your Claude config under the gsd-browser MCP server entry.",
+            err=True,
+        )
+
 
 @mcp_app.command("smoke")
 def mcp_smoke(

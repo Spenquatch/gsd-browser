@@ -879,6 +879,9 @@ def _add_to_codex_via_cli(settings) -> bool:
 
         if result.returncode == 0:
             console.print("[green]✓ Successfully added gsd-browser to Codex config![/green]")
+            # Codex may treat duplicate server names as a no-op; ensure the on-disk config uses
+            # the canonical `gsd mcp serve` command/args even if the CLI returned success.
+            _add_to_codex_direct(settings)
             return True
         else:
             console.print(f"[yellow]Codex command failed: {result.stderr}[/yellow]")
