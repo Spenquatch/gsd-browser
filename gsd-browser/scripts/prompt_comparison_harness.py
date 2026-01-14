@@ -31,7 +31,6 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from gsd_browser.config import load_settings
 from gsd_browser.mcp_server import web_eval_agent
-from gsd_browser.runtime import get_runtime
 
 
 @dataclass(frozen=True)
@@ -69,9 +68,10 @@ COMPARISON_SCENARIOS: tuple[Scenario, ...] = (
         url="https://www.npmjs.com/package/playwright",
         task=(
             "From the playwright package page: (1) Note the weekly download count. "
-            "(2) Find and click the 'Repository' link to go to GitHub. (3) On GitHub, find the number "
-            "of stars. (4) Click on the 'Issues' tab. (5) Count the number of open issues (look for the "
-            "count in the UI). (6) Return: package name, weekly downloads, GitHub stars, and open issues count."
+            "(2) Find and click the 'Repository' link to go to GitHub. (3) On GitHub, find the "
+            "number of stars. (4) Click on the 'Issues' tab. (5) Count the number of open issues "
+            "(look for the count in the UI). (6) Return: package name, weekly downloads, GitHub "
+            "stars, and open issues count."
         ),
         complexity="high",
     ),
@@ -215,7 +215,9 @@ async def run_scenario_with_prompt_mode(
         error_summary = None
         if status != "pass":
             # Try to get error from summary or result
-            error_summary = session_payload.get("summary", session_payload.get("result", "Unknown error"))
+            error_summary = session_payload.get(
+                "summary", session_payload.get("result", "Unknown error")
+            )
             if not error_summary or error_summary == "null":
                 error_summary = "Task failed"
 
@@ -395,8 +397,16 @@ def generate_comparison_report(runs: list[TestRun], args: argparse.Namespace) ->
     lines.extend([
         "| Metric | Extended Prompt | Override-Enhanced Prompt |",
         "|--------|-----------------|--------------------------|",
-        f"| Pass Rate | {extend_stats['pass_rate']} ({extend_stats['pass_count']}/{len(extend_runs)}) | {override_stats['pass_rate']} ({override_stats['pass_count']}/{len(override_runs)}) |",
-        f"| Validation Errors | {extend_stats['validation_errors']} | {override_stats['validation_errors']} |",
+        (
+            f"| Pass Rate | {extend_stats['pass_rate']} "
+            f"({extend_stats['pass_count']}/{len(extend_runs)}) | "
+            f"{override_stats['pass_rate']} "
+            f"({override_stats['pass_count']}/{len(override_runs)}) |"
+        ),
+        (
+            f"| Validation Errors | {extend_stats['validation_errors']} | "
+            f"{override_stats['validation_errors']} |"
+        ),
         f"| Avg Execution Time | {extend_stats['avg_time_s']}s | {override_stats['avg_time_s']}s |",
         f"| Avg Steps | {extend_stats['avg_steps']} | {override_stats['avg_steps']} |",
         "",
@@ -410,23 +420,34 @@ def generate_comparison_report(runs: list[TestRun], args: argparse.Namespace) ->
         "## Interpretation",
         "",
         f"**Pass Rate Change:** {'+' if improvement > 0 else ''}{improvement} scenarios",
-        f"**Validation Error Change:** {'-' if error_reduction > 0 else '+'}{abs(error_reduction)} errors",
+        (
+            f"**Validation Error Change:** "
+            f"{'-' if error_reduction > 0 else '+'}{abs(error_reduction)} errors"
+        ),
         "",
     ])
 
     if improvement > 0:
-        lines.append(f"✅ **Override-enhanced prompt improved pass rate by {improvement} scenarios**")
+        lines.append(
+            f"✅ **Override-enhanced prompt improved pass rate by {improvement} scenarios**"
+        )
     elif improvement < 0:
-        lines.append(f"❌ **Override-enhanced prompt reduced pass rate by {abs(improvement)} scenarios**")
+        lines.append(
+            f"❌ **Override-enhanced prompt reduced pass rate by {abs(improvement)} scenarios**"
+        )
     else:
         lines.append("➖ **No change in pass rate between prompt modes**")
 
     lines.append("")
 
     if error_reduction > 0:
-        lines.append(f"✅ **Override-enhanced prompt reduced validation errors by {error_reduction}**")
+        lines.append(
+            f"✅ **Override-enhanced prompt reduced validation errors by {error_reduction}**"
+        )
     elif error_reduction < 0:
-        lines.append(f"❌ **Override-enhanced prompt increased validation errors by {abs(error_reduction)}**")
+        lines.append(
+            f"❌ **Override-enhanced prompt increased validation errors by {abs(error_reduction)}**"
+        )
     else:
         lines.append("➖ **No change in validation errors between prompt modes**")
 
@@ -460,8 +481,14 @@ def generate_comparison_report(runs: list[TestRun], args: argparse.Namespace) ->
             "| Metric | Extended | Override-Enhanced |",
             "|--------|----------|-------------------|",
             f"| Status | {extend_run.status} | {override_run.status} |",
-            f"| Validation Errors | {extend_run.validation_errors} | {override_run.validation_errors} |",
-            f"| Execution Time | {extend_run.execution_time_s}s | {override_run.execution_time_s}s |",
+            (
+                f"| Validation Errors | {extend_run.validation_errors} | "
+                f"{override_run.validation_errors} |"
+            ),
+            (
+                f"| Execution Time | {extend_run.execution_time_s}s | "
+                f"{override_run.execution_time_s}s |"
+            ),
             f"| Steps | {extend_run.step_count} | {override_run.step_count} |",
             "",
         ])
@@ -487,23 +514,38 @@ def generate_comparison_report(runs: list[TestRun], args: argparse.Namespace) ->
     if override_stats['pass_count'] > extend_stats['pass_count']:
         lines.extend([
             f"The override-enhanced prompt **improved reliability** for {args.model}:",
-            f"- Pass rate increased from {extend_stats['pass_rate']} to {override_stats['pass_rate']}",
-            f"- Validation errors reduced from {extend_stats['validation_errors']} to {override_stats['validation_errors']}",
+            (
+                f"- Pass rate increased from {extend_stats['pass_rate']} to "
+                f"{override_stats['pass_rate']}"
+            ),
+            (
+                f"- Validation errors reduced from {extend_stats['validation_errors']} to "
+                f"{override_stats['validation_errors']}"
+            ),
             "",
-            "**Hypothesis validated:** Triple reinforcement + early placement improves schema compliance.",
+            (
+                "**Hypothesis validated:** Triple reinforcement + early placement improves schema "
+                "compliance."
+            ),
         ])
     elif override_stats['pass_count'] == extend_stats['pass_count']:
         lines.extend([
             f"The override-enhanced prompt showed **no improvement** for {args.model}:",
             f"- Pass rate unchanged at {extend_stats['pass_rate']}",
-            f"- Validation errors: {extend_stats['validation_errors']} vs {override_stats['validation_errors']}",
+            (
+                f"- Validation errors: {extend_stats['validation_errors']} vs "
+                f"{override_stats['validation_errors']}"
+            ),
             "",
             "**Hypothesis not validated:** Enhanced prompt did not improve schema compliance.",
         ])
     else:
         lines.extend([
             f"The override-enhanced prompt **reduced reliability** for {args.model}:",
-            f"- Pass rate decreased from {extend_stats['pass_rate']} to {override_stats['pass_rate']}",
+            (
+                f"- Pass rate decreased from {extend_stats['pass_rate']} to "
+                f"{override_stats['pass_rate']}"
+            ),
             "",
             "**Unexpected result:** Enhanced prompt may have introduced confusion or overhead.",
         ])

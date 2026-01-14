@@ -58,3 +58,29 @@ This file is append-only. Add entries at the bottom.
 
 **Commits:**
 - `f2bfadd` `feat: add gsd entrypoint (CLI-001)`
+
+---
+
+### 2026-01-14 — Repo hygiene: restore green lint/test
+
+**Task:** `MAINT-001` — Fix pre-existing lint/test failures
+
+**Start:** 2026-01-14T19:23:00+00:00
+
+**Plan:**
+- Fix Ruff failures in scripts and sanity harness
+- Align `DEFAULT_SCENARIOS` with the test contract
+- Re-run `make lint` and `make test`
+
+**Finish:** 2026-01-14T19:40:48+00:00
+
+**Changes:**
+- Reflowed long lines and removed an unused import in `gsd-browser/scripts/prompt_comparison_harness.py`
+- Updated `DEFAULT_SCENARIOS` in `gsd-browser/src/gsd_browser/real_world_sanity.py` to match the test contract
+
+**Validation:**
+- `cd gsd-browser && make lint` → pass
+- `cd gsd-browser && make test` → pass
+
+**Commits:**
+- <pending> `fix: restore green lint/test (MAINT-001)`
