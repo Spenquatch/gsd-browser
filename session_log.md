@@ -57,4 +57,4 @@ This file is append-only. Add entries at the bottom.
 - `cd gsd-browser && make test` → fail (pre-existing `tests/test_real_world_sanity_r4.py::test_r4_default_scenarios_match_plan_ids`)
 
 **Commits:**
-- `7102b3d` `feat: add gsd entrypoint (CLI-001)`
+- `f2bfadd` `feat: add gsd entrypoint (CLI-001)`
