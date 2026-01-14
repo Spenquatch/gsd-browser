@@ -323,3 +323,30 @@ This file is append-only. Add entries at the bottom.
 
 **Commits:**
 - `9f025d1` `docs: improve gsd help pages (CLI-010)`
+
+---
+
+### 2026-01-14 — CLI contract tests
+
+**Task:** `CLI-011` — Automated tests for CLI contract + compatibility
+
+**Start:** 2026-01-14T20:48:31+00:00
+
+**Plan:**
+- Add `typer.testing.CliRunner` tests for canonical `gsd` help and MCP config output
+- Add tests for MCP tool policy mutation output contract (and unknown tool exit code)
+- Add legacy shim tests for deprecation warning + exit code parity
+
+**Finish:** 2026-01-14T20:49:44+00:00
+
+**Changes:**
+- Added `tests/test_cli_contract.py` to enforce canonical `gsd` help/config/tool-policy contract
+- Added compatibility coverage for legacy `gsd-browser` shims (stderr deprecation warning + exit code parity)
+- Updated legacy CLI shim to rely on forwarded args (works under `CliRunner` and real CLI)
+
+**Validation:**
+- `cd gsd-browser && make lint` → pass
+- `cd gsd-browser && make test` → pass
+
+**Commits:**
+- `b605a5b` `test: enforce CLI contract (CLI-011)`

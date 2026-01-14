@@ -64,7 +64,7 @@
       "id": "CLI-011",
       "title": "Automated tests for CLI contract + compatibility",
       "description": "Goal: add deterministic tests that enforce the new CLI contract and legacy shims.\n\nTest harness requirements:\n- Use `typer.testing.CliRunner` against the canonical Typer app `gsd_browser.gsd_cli.app`.\n- Use `typer.testing.CliRunner` against the legacy Typer app `gsd_browser.legacy_cli.app`.\n- Any test that mutates config MUST set `GSD_BROWSER_ENV_FILE` to a temp file under `tmp_path`.\n- Tests MUST NOT read or write `~/.config/gsd-browser/.env`.\n\nAssertions to include:\n- `gsd --help` output includes the group names `mcp`, `config`, `browser`, `stream`, `llm`, `dev`.\n- `gsd mcp/config/browser/stream/llm/dev --help` succeed and include `Examples:`.\n- `gsd mcp config` output contains `command=\"gsd\"` and args `mcp serve`.\n- Tool policy mutation output matches CLI-004 output contract exactly (including the exact restart line).\n- Legacy shim:\n  - invoking a legacy command prints the deprecation warning to stderr with exact format.\n  - legacy command exit code matches the canonical equivalent.\n\nAcceptance criteria:\n- Tests pass with `make test` (or `pytest`) in a clean environment.",
-      "status": "todo"
+      "status": "done"
     },
     {
       "id": "CLI-012",
