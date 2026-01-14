@@ -112,3 +112,30 @@ This file is append-only. Add entries at the bottom.
 
 **Commits:**
 - `0f2da0b` `feat: add gsd command tree skeleton (CLI-002)`
+
+---
+
+### 2026-01-14 — MCP group migration
+
+**Task:** `CLI-003` — Implement `gsd mcp` group: serve/config/add/smoke/tools
+
+**Start:** 2026-01-14T19:52:44+00:00
+
+**Plan:**
+- Move MCP config printing to `gsd mcp config` (command=`gsd`, args=`mcp serve`)
+- Implement `gsd mcp add` and `gsd mcp smoke` option parity
+- Ensure `gsd mcp --help` lists `serve`, `config`, `add`, `smoke`, `tools`
+
+**Finish:** 2026-01-14T19:55:15+00:00
+
+**Changes:**
+- Updated MCP config snippet generation to use `command="gsd"` and `args=["mcp","serve"]`
+- Added `gsd mcp config`, `gsd mcp add`, and `gsd mcp smoke` (with option parity)
+- Ensured `gsd mcp add` writes nothing to stdout
+
+**Validation:**
+- `cd gsd-browser && make lint` → pass
+- `cd gsd-browser && make test` → pass
+
+**Commits:**
+- <pending> `feat: implement gsd mcp group (CLI-003)`

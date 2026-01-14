@@ -5,11 +5,17 @@ This file intentionally starts small and grows as tasks in `tasks.json` are comp
 
 from __future__ import annotations
 
+import os
+import sys
+
 import typer
 from rich.console import Console
 
 from . import __version__
+from .cli import mcp_config_add as legacy_mcp_config_add
+from .cli import mcp_tool_smoke as legacy_mcp_tool_smoke
 from .cli import serve as legacy_serve
+from .config import load_settings
 
 console = Console()
 
@@ -78,6 +84,99 @@ def _mcp_callback() -> None:
       gsd mcp serve
       gsd mcp --help
     """
+
+
+@mcp_app.command("config")
+def mcp_config(
+    format: str = typer.Option("json", "--format", help="Output format", case_sensitive=False),
+    include_key_placeholders: bool = typer.Option(
+        False,
+        "--include-key-placeholders",
+        help="Emit ${VAR} placeholders for API keys (some MCP hosts expand these; Codex does not).",
+    ),
+) -> None:
+    """Print MCP configuration snippet for an MCP host.
+
+    Examples:
+      gsd mcp config
+      gsd mcp config --format toml
+    """
+    settings = load_settings(strict=False)
+    fmt_normalized = format.lower()
+    if fmt_normalized == "toml":
+        typer.echo(settings.to_mcp_toml(include_key_placeholders=include_key_placeholders))
+        return
+    typer.echo(settings.to_mcp_snippet(include_key_placeholders=include_key_placeholders))
+
+
+@mcp_app.command("add")
+def mcp_add(
+    target: str = typer.Argument(..., help="Target CLI to add config to: 'claude' or 'codex'"),
+) -> None:
+    """Add MCP host configuration (Codex or Claude Code).
+
+    Notes:
+      This command writes no output to stdout.
+
+    Examples:
+      gsd mcp add codex
+      gsd mcp add claude
+    """
+    stdout = sys.stdout
+    try:
+        sys.stdout = open(os.devnull, "w", encoding="utf-8")  # noqa: SIM115
+        legacy_mcp_config_add(target=target)
+    finally:
+        try:
+            sys.stdout.close()
+        except Exception:  # noqa: BLE001
+            pass
+        sys.stdout = stdout
+
+
+@mcp_app.command("smoke")
+def mcp_smoke(
+    url: str | None = typer.Option(None, "--url", help="Target URL for the web_eval_agent tool"),
+    task: str | None = typer.Option(None, "--task", help="Task description for the evaluation"),
+    host: str = typer.Option("127.0.0.1", "--host", help="Dashboard host (default 127.0.0.1)"),
+    port: int = typer.Option(5009, "--port", help="Dashboard port (default 5009)"),
+    timeout: float = typer.Option(20.0, "--timeout", help="Seconds to wait for dashboard startup"),
+    headless: bool = typer.Option(True, "--headless", is_flag=True, help="Run Playwright headless"),
+    no_headless: bool = typer.Option(
+        False, "--no-headless", is_flag=True, help="Run Playwright with a visible browser"
+    ),
+    skip_browser_task: bool = typer.Option(
+        False, "--skip-browser-task", help="Skip Playwright navigation (infra-only checks)"
+    ),
+    expect_streaming_mode: str = typer.Option(
+        "cdp", "--expect-streaming-mode", help="Assert /healthz reports this mode"
+    ),
+    output: str | None = typer.Option(None, "--output", help="Optional path to write JSON report"),
+    verbose: bool = typer.Option(False, "--verbose", help="Print verbose JSON report"),
+) -> None:
+    """Run MCP smoke checks (dashboard + tool contract).
+
+    Examples:
+      gsd mcp smoke
+      gsd mcp smoke --no-headless --verbose
+    """
+    legacy_mcp_tool_smoke(
+        url=url,
+        task=task,
+        host=host,
+        port=port,
+        timeout=timeout,
+        headless=headless,
+        no_headless=no_headless,
+        skip_browser_task=skip_browser_task,
+        expect_streaming_mode=expect_streaming_mode,
+        output=output,
+        verbose=verbose,
+    )
+
+
+tools_app = typer.Typer(help="MCP tool exposure controls", add_completion=False)
+mcp_app.add_typer(tools_app, name="tools")
 
 
 @config_app.callback()
@@ -163,7 +262,12 @@ def mcp_serve(
     llm_model: str | None = typer.Option(None, "--llm-model", help="Override LLM model name"),
     ollama_host: str | None = typer.Option(None, "--ollama-host", help="Override OLLAMA_HOST"),
 ) -> None:
-    """Start the FastMCP stdio server (stdout is reserved for JSON-RPC)."""
+    """Start the FastMCP stdio server (stdout is reserved for JSON-RPC).
+
+    Examples:
+      gsd mcp serve
+      gsd mcp serve --log-level DEBUG
+    """
 
     legacy_serve(
         _unused_disable_echo=_unused_disable_echo,

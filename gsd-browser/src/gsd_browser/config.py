@@ -126,8 +126,8 @@ class Settings(BaseModel):
             "mcpServers": {
                 "gsd-browser": {
                     "type": "stdio",
-                    "command": "gsd-browser",
-                    "args": ["serve"],
+                    "command": "gsd",
+                    "args": ["mcp", "serve"],
                     "env": self._mcp_env(include_key_placeholders=include_key_placeholders),
                     "description": "GSD Browser MCP server",
                 }
@@ -141,8 +141,8 @@ class Settings(BaseModel):
         env_lines = "\n".join(f'{key} = "{value}"' for key, value in env.items())
         return (
             "[mcp_servers.gsd-browser]\n"
-            'command = "gsd-browser"\n'
-            'args = ["serve"]\n'
+            'command = "gsd"\n'
+            'args = ["mcp", "serve"]\n'
             'description = "GSD Browser MCP server"\n'
             "\n"
             "[mcp_servers.gsd-browser.env]\n"
