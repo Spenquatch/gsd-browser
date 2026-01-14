@@ -864,13 +864,16 @@ def _add_to_codex_via_cli(settings) -> bool:
         # Ensure the user env file exists so the server can boot even if the shell env is empty.
         ensure_env_file(overwrite=False)
 
-        # Build command: codex mcp add gsd-browser --env KEY=VALUE -- gsd-browser serve
-        env = settings._mcp_env()
+        config_data = json.loads(settings.to_mcp_snippet())
+        server_config = config_data["mcpServers"]["gsd-browser"]
+
+        # Build command: codex mcp add gsd-browser --env KEY=VALUE -- gsd mcp serve
         cmd = ["codex", "mcp", "add", "gsd-browser"]
-        for key, value in env.items():
+        for key, value in server_config["env"].items():
             cmd.extend(["--env", f"{key}={value}"])
         cmd.append("--")
-        cmd.extend(["gsd-browser", "serve"])
+        cmd.append(server_config["command"])
+        cmd.extend(server_config["args"])
 
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=15)
 
@@ -941,10 +944,18 @@ def _add_to_codex_direct(settings) -> None:
     if config_path.exists():
         content = config_path.read_text()
         if "[mcp_servers.gsd-browser]" in content:
-            console.print(
-                "[yellow]! gsd-browser already exists in Codex config, skipping.[/yellow]"
-            )
-            console.print(f"[yellow]  Edit manually at: {config_path}[/yellow]")
+            updated = content
+            # Update the server command/args in-place (preserve the rest of the config file).
+            updated = updated.replace('command = "gsd-browser"\n', 'command = "gsd"\n')
+            updated = updated.replace('args = ["serve"]\n', 'args = ["mcp", "serve"]\n')
+            if updated != content:
+                config_path.write_text(updated, encoding="utf-8")
+                console.print(f"[green]✓ Updated gsd-browser entry in {config_path}![/green]")
+            else:
+                console.print(
+                    "[yellow]! gsd-browser already exists in Codex config "
+                    "(no changes needed).[/yellow]"
+                )
             return
 
         # Append to existing file
