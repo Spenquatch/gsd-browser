@@ -5,7 +5,6 @@ This module keeps the historical command surface stable while nudging users towa
 
 from __future__ import annotations
 
-import sys
 from typing import Final
 
 import click
@@ -121,7 +120,7 @@ def _callback(
     _ctx: typer.Context,
     _passthrough: list[str] = _PASSTHROUGH_ARG,
 ) -> None:
-    argv = list(sys.argv[1:])
+    argv = list(_passthrough or [])
     replacement = _replacement_for_argv(argv)
     typer.echo(f"Deprecated: use '{replacement}'", err=True)
 
