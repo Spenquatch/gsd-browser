@@ -164,4 +164,4 @@ This file is append-only. Add entries at the bottom.
 - `cd gsd-browser && make test` → pass
 
 **Commits:**
-- <pending> `feat: implement gsd mcp tools contract (CLI-004)`
+- `086d439` `feat: implement gsd mcp tools contract (CLI-004)`
