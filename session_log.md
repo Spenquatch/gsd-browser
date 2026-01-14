@@ -84,3 +84,31 @@ This file is append-only. Add entries at the bottom.
 
 **Commits:**
 - `0d20c7d` `fix: restore green lint/test (MAINT-001)`
+
+---
+
+### 2026-01-14 — Canonical CLI skeleton
+
+**Task:** `CLI-002` — Create canonical `gsd` command tree skeleton (groups + help)
+
+**Start:** 2026-01-14T19:47:46+00:00
+
+**Plan:**
+- Add missing top-level groups to `gsd` (`config`, `browser`, `stream`, `llm`, `dev`)
+- Ensure each group help includes `Examples:`
+- Validate `--help` entry points + run lint/tests
+
+**Finish:** 2026-01-14T19:49:45+00:00
+
+**Changes:**
+- Added canonical `gsd` top-level groups: `mcp`, `config`, `browser`, `stream`, `llm`, `dev`
+- Ensured each group help page contains `Examples:`
+
+**Validation:**
+- `gsd --help` → pass (lists only the six groups)
+- `gsd mcp/config/browser/stream/llm/dev --help` → pass (each contains `Examples:`)
+- `cd gsd-browser && make lint` → pass
+- `cd gsd-browser && make test` → pass
+
+**Commits:**
+- <pending> `feat: add gsd command tree skeleton (CLI-002)`
