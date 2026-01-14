@@ -37,7 +37,12 @@ from .user_config import default_env_path, ensure_env_file, update_env_file
 
 console = Console()
 
-app = typer.Typer(help="GSD CLI", add_completion=False, invoke_without_command=True)
+app = typer.Typer(
+    help="GSD CLI",
+    add_completion=False,
+    invoke_without_command=True,
+    epilog="Examples:\n  gsd mcp serve\n  gsd mcp config --format toml\n",
+)
 
 mcp_app = typer.Typer(
     help="MCP server and integration",
@@ -196,7 +201,10 @@ def mcp_smoke(
 tools_app = typer.Typer(
     help="MCP tool exposure controls",
     add_completion=False,
-    epilog="Examples:\n  gsd mcp tools list\n  gsd mcp tools disable setup_browser_state\n",
+    epilog=(
+        "Changes take effect only after restarting your MCP host/session.\n\n"
+        "Examples:\n  gsd mcp tools list\n  gsd mcp tools disable setup_browser_state\n"
+    ),
 )
 mcp_app.add_typer(tools_app, name="tools")
 
