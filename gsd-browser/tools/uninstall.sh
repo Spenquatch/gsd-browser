@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Remove pipx-installed gsd-browser and cleanup manifest.
+# Remove pipx-installed gsd-browser package (CLI: gsd) and cleanup manifest.
 set -euo pipefail
 
 PACKAGE="gsd-browser"

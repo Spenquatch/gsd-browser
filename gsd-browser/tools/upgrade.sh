@@ -3,8 +3,22 @@
 set -euo pipefail
 
 PACKAGE="gsd-browser"
+CANONICAL_CLI="gsd"
+LEGACY_CLI="gsd-browser"
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 MANIFEST_FILE="$HOME/.config/$PACKAGE/install.json"
+
+resolve_bin() {
+  local name="$1"
+  local bin
+
+  bin="$(command -v "$name" 2>/dev/null || true)"
+  if [ -z "$bin" ] && [ -x "$HOME/.local/bin/$name" ]; then
+    bin="$HOME/.local/bin/$name"
+  fi
+
+  echo "$bin"
+}
 
 if ! command -v pipx >/dev/null 2>&1; then
   echo "pipx is required for upgrades" >&2
@@ -18,6 +32,14 @@ fi
 
 echo "Upgrading $PACKAGE from $ROOT_DIR"
 pipx install --force "$ROOT_DIR"
+
+BIN="$(resolve_bin "$CANONICAL_CLI")"
+if [ -z "$BIN" ]; then
+  BIN="$(resolve_bin "$LEGACY_CLI")"
+fi
+if [ -n "$BIN" ] && [ -x "$BIN" ]; then
+  "$BIN" --version || true
+fi
 
 ROOT_DIR="$ROOT_DIR" MANIFEST_FILE="$MANIFEST_FILE" python3 - <<'PY'
 from pathlib import Path

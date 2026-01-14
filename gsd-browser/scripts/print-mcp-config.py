@@ -4,12 +4,20 @@
 from __future__ import annotations
 
 import argparse
+import sys
+from pathlib import Path
 
-from gsd_browser.config import load_settings
+_repo_src = Path(__file__).resolve().parents[1] / "src"
+if _repo_src.exists():
+    sys.path.insert(0, str(_repo_src))
+
+from gsd_browser.config import load_settings  # noqa: E402
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Print MCP config snippet for gsd-browser.")
+    parser = argparse.ArgumentParser(
+        description='Print MCP config snippet for gsd (legacy alias: "gsd-browser").'
+    )
     parser.add_argument(
         "--format",
         choices=("json", "toml"),

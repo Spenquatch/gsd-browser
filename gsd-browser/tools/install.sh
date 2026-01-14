@@ -1,13 +1,27 @@
 #!/usr/bin/env bash
-# Install gsd-browser globally via pipx
+# Install gsd (package name: gsd-browser) globally via pipx
 set -euo pipefail
 
 PACKAGE="gsd-browser"
+CANONICAL_CLI="gsd"
+LEGACY_CLI="gsd-browser"
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 MANIFEST_DIR="$HOME/.config/$PACKAGE"
 MANIFEST_FILE="$MANIFEST_DIR/install.json"
 
 mkdir -p "$MANIFEST_DIR"
+
+resolve_bin() {
+  local name="$1"
+  local bin
+
+  bin="$(command -v "$name" 2>/dev/null || true)"
+  if [ -z "$bin" ] && [ -x "$HOME/.local/bin/$name" ]; then
+    bin="$HOME/.local/bin/$name"
+  fi
+
+  echo "$bin"
+}
 
 if ! command -v python3 >/dev/null 2>&1; then
   echo "python3 is required" >&2
@@ -58,58 +72,96 @@ PY
 echo "Installing $PACKAGE v$VERSION via pipx..."
 pipx install --force "$ROOT_DIR"
 
-if command -v "$PACKAGE" >/dev/null 2>&1; then
-  "$PACKAGE" --version || true
+BIN="$(resolve_bin "$CANONICAL_CLI")"
+CLI_STYLE="canonical"
+if [ -z "$BIN" ]; then
+  BIN="$(resolve_bin "$LEGACY_CLI")"
+  CLI_STYLE="legacy"
 fi
 
-BIN="$(command -v "$PACKAGE" || true)"
-if [ -z "$BIN" ] && [ -x "$HOME/.local/bin/$PACKAGE" ]; then
-  BIN="$HOME/.local/bin/$PACKAGE"
+if [ -n "$BIN" ] && [ -x "$BIN" ]; then
+  "$BIN" --version || true
 fi
 
 if [ -n "$BIN" ] && [ -x "$BIN" ]; then
   echo "Ensuring user config exists at ~/.config/$PACKAGE/.env ..."
-  "$BIN" init-env >/dev/null || true
+  if [ "$CLI_STYLE" = "canonical" ]; then
+    "$BIN" config init >/dev/null || true
+  else
+    "$BIN" init-env >/dev/null || true
+  fi
   echo "Config path: $HOME/.config/$PACKAGE/.env"
-  echo "Tip: run '$PACKAGE configure' to add API keys."
+  if [ "$CLI_STYLE" = "canonical" ]; then
+    echo "Tip: run '$CANONICAL_CLI config set' to add API keys."
+  else
+    echo "Tip: run '$LEGACY_CLI configure' to add API keys (legacy alias; prefer '$CANONICAL_CLI config set')."
+  fi
 
   echo "Ensuring a local browser is available (Chromium/Chrome)..."
   if [ -t 0 ] && [ -t 1 ]; then
     if read -r -p "Install Playwright Chromium if missing? [Y/n] " ans; then
       ans="${ans:-Y}"
       if [[ "$ans" =~ ^[Yy]$ ]]; then
-        "$BIN" ensure-browser --write-config
+        if [ "$CLI_STYLE" = "canonical" ]; then
+          "$BIN" browser ensure --write-config
+        else
+          "$BIN" ensure-browser --write-config
+        fi
       else
-        "$BIN" ensure-browser --no-install --write-config || true
+        if [ "$CLI_STYLE" = "canonical" ]; then
+          "$BIN" browser ensure --no-install --write-config || true
+        else
+          "$BIN" ensure-browser --no-install --write-config || true
+        fi
       fi
     fi
   else
-    "$BIN" ensure-browser --write-config
+    if [ "$CLI_STYLE" = "canonical" ]; then
+      "$BIN" browser ensure --write-config
+    else
+      "$BIN" ensure-browser --write-config
+    fi
   fi
 
   if command -v codex >/dev/null 2>&1; then
     if [ -t 0 ] && [ -t 1 ]; then
-      if read -r -p "Add gsd-browser MCP server to Codex config? [Y/n] " ans; then
+      if read -r -p "Add gsd MCP server to Codex config? [Y/n] " ans; then
         ans="${ans:-Y}"
         if [[ "$ans" =~ ^[Yy]$ ]]; then
-          "$BIN" mcp-config-add codex || true
+          if [ "$CLI_STYLE" = "canonical" ]; then
+            "$BIN" mcp add codex || true
+          else
+            "$BIN" mcp-config-add codex || true
+          fi
         fi
       fi
     else
-      echo "Tip: run '$PACKAGE mcp-config-add codex' to add the MCP server to Codex."
+      if [ "$CLI_STYLE" = "canonical" ]; then
+        echo "Tip: run '$CANONICAL_CLI mcp add codex' to add the MCP server to Codex."
+      else
+        echo "Tip: run '$LEGACY_CLI mcp-config-add codex' to add the MCP server to Codex."
+      fi
     fi
   fi
 
   if command -v claude >/dev/null 2>&1; then
     if [ -t 0 ] && [ -t 1 ]; then
-      if read -r -p "Add gsd-browser MCP server to Claude Code config? [Y/n] " ans; then
+      if read -r -p "Add gsd MCP server to Claude Code config? [Y/n] " ans; then
         ans="${ans:-Y}"
         if [[ "$ans" =~ ^[Yy]$ ]]; then
-          "$BIN" mcp-config-add claude || true
+          if [ "$CLI_STYLE" = "canonical" ]; then
+            "$BIN" mcp add claude || true
+          else
+            "$BIN" mcp-config-add claude || true
+          fi
         fi
       fi
     else
-      echo "Tip: run '$PACKAGE mcp-config-add claude' to add the MCP server to Claude Code."
+      if [ "$CLI_STYLE" = "canonical" ]; then
+        echo "Tip: run '$CANONICAL_CLI mcp add claude' to add the MCP server to Claude Code."
+      else
+        echo "Tip: run '$LEGACY_CLI mcp-config-add claude' to add the MCP server to Claude Code."
+      fi
     fi
   fi
 fi
@@ -148,4 +200,4 @@ Path("$MANIFEST_FILE").write_text(json.dumps(manifest, indent=2))
 print(f"Manifest written to $MANIFEST_FILE")
 PY
 
-echo "Installation complete. Run 'gsd-browser serve' or 'gsd-browser diagnose'."
+echo "Installation complete. Run 'gsd mcp serve' (legacy alias: 'gsd-browser serve') or 'gsd dev diagnose'."

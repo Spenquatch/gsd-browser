@@ -19,13 +19,13 @@ vim .env          # set LLM provider + API keys, LOG_LEVEL, GSD_BROWSER_JSON_LOG
 `./scripts/run-local.sh` runs the MCP stdio server (`serve`) from a checkout without a global install.
 
 ## .env Loading
-By default, `gsd-browser` loads a `.env` file from the current working directory (if present), and then reads the process environment (shell env vars take precedence).
+By default, `gsd` loads a `.env` file from the current working directory (if present), and then reads the process environment (shell env vars take precedence).
 
 If your MCP host starts the server from a different working directory (common), set:
 - `GSD_BROWSER_ENV_FILE=/absolute/path/to/your/.env`
 
 ## LLM Provider Configuration
-`gsd-browser` supports both cloud providers and a local OSS path via Ollama.
+`gsd` supports both cloud providers and a local OSS path via Ollama.
 
 Core variables:
 - `GSD_BROWSER_LLM_PROVIDER`: `anthropic` (default), `openai`, `chatbrowseruse`, `ollama`
@@ -39,15 +39,15 @@ Required variables by provider:
 
 Quick validation:
 ```bash
-gsd-browser validate-llm
-gsd-browser validate-llm --llm-provider ollama --llm-model llama3.2
+gsd llm validate
+gsd llm validate --llm-provider ollama --llm-model llama3.2
 ```
 
 ## pipx Installation
 ```bash
 cd gsd-browser/gsd-browser
 ./tools/install.sh        # installs CLI globally
-gsd-browser serve        # runs stdio server
+gsd mcp serve            # runs stdio server (legacy alias: `gsd-browser serve`)
 ```
 
 Upgrade/reinstall as needed:
@@ -66,21 +66,21 @@ docker run --rm -e ANTHROPIC_API_KEY=$ANTHROPIC_API_KEY gsd-browser:dev
 
 ## MCP Configuration
 ```bash
-gsd-browser mcp-config --format json   # or toml
+gsd mcp config --format json   # or toml
 # or use the helper script
-./scripts/print-mcp-config.py --format toml
+uv run ./scripts/print-mcp-config.py --format toml
 ```
 Copy the output into your MCP host config (Codex or Claude Code).
 
 By default, the snippet points at `~/.config/gsd-browser/.env` via `GSD_BROWSER_ENV_FILE` so it works regardless of working directory.
 Initialize/update that file with:
 ```bash
-gsd-browser configure
+gsd config set
 ```
 
 Notes:
-- The MCP server command is `gsd-browser serve` (the snippet includes `args: ["serve"]`).
-- If `gsd-browser` isn’t on your PATH yet, run `source .venv/bin/activate` or use `uv run gsd-browser mcp-config --format json`.
+- The MCP server command is `gsd mcp serve` (the snippet includes `args: ["mcp", "serve"]`).
+- If `gsd` isn’t on your PATH yet, run `source .venv/bin/activate` or use `uv run gsd mcp config --format json`.
 - Restart Claude after editing `~/.claude.json` (or a project `.claude.json`).
 
 ## MCP Tools
@@ -97,10 +97,10 @@ You can restrict which tools are advertised to MCP clients via:
 
 Convenience commands (edits `~/.config/gsd-browser/.env` unless `GSD_BROWSER_ENV_FILE` is set):
 ```bash
-gsd-browser list-tools
-gsd-browser mcp-tools disable setup_browser_state
-gsd-browser mcp-tools set-enabled web_eval_agent,get_run_events
-gsd-browser mcp-tools reset
+gsd mcp tools list
+gsd mcp tools disable setup_browser_state
+gsd mcp tools allow web_eval_agent,get_run_events
+gsd mcp tools reset
 ```
 
 Restart your MCP host/session (Codex/Claude) after changing tool policy so it refreshes `list_tools`.

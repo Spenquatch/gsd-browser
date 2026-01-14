@@ -3,7 +3,7 @@
 ## Model Changes
 1. Edit `.env` or export a new `GSD_BROWSER_MODEL`.
 2. Optionally update default in `src/gsd_browser/config.py`.
-3. Restart the server (`gsd-browser serve`).
+3. Restart the server (`gsd mcp serve`, legacy alias: `gsd-browser serve`).
 
 ## API Key Rotation
 ```bash
@@ -24,7 +24,7 @@ This reinstalls via pipx and refreshes `~/.config/gsd-browser/install.json`.
 ```bash
 export LOG_LEVEL=DEBUG
 export GSD_BROWSER_JSON_LOGS=true
-gsd-browser serve --json-logs
+gsd mcp serve --json-logs
 ```
 Use CLI flags (`--log-level`, `--json-logs`, `--text-logs`) or env vars to tweak logging without editing code.
 
