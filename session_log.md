@@ -83,4 +83,4 @@ This file is append-only. Add entries at the bottom.
 - `cd gsd-browser && make test` → pass
 
 **Commits:**
-- <pending> `fix: restore green lint/test (MAINT-001)`
+- `0d20c7d` `fix: restore green lint/test (MAINT-001)`
