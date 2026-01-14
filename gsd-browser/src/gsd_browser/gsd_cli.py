@@ -13,9 +13,16 @@ import typer
 from rich.console import Console
 
 from . import __version__
+from .browser_install import (
+    detect_local_browser_executable,
+    install_playwright_chromium,
+    should_use_with_deps,
+)
 from .cli import mcp_config_add as legacy_mcp_config_add
 from .cli import mcp_tool_smoke as legacy_mcp_tool_smoke
 from .cli import serve as legacy_serve
+from .cli import serve_browser as legacy_serve_browser
+from .cli import validate_llm as legacy_validate_llm
 from .config import load_settings
 from .mcp_tool_policy import (
     KNOWN_MCP_TOOLS,
@@ -565,6 +572,63 @@ def _browser_callback() -> None:
     """
 
 
+@browser_app.command("ensure")
+def browser_ensure(
+    install: bool = typer.Option(
+        True,
+        "--install/--no-install",
+        help="Install Playwright Chromium if no local browser is detected",
+    ),
+    write_config: bool = typer.Option(
+        False,
+        "--write-config/--no-write-config",
+        help="Persist detected browser path to the user .env file.",
+    ),
+    with_deps: bool | None = typer.Option(
+        None,
+        "--with-deps/--no-with-deps",
+        help="Use `playwright install --with-deps` on Linux (root-only).",
+    ),
+) -> None:
+    """Ensure a local Chromium/Chrome executable exists for browser-use.
+
+    Examples:
+      gsd browser ensure
+      gsd browser ensure --write-config
+    """
+    found = detect_local_browser_executable()
+    if found:
+        if write_config:
+            env_path = _select_env_path(explicit=None)
+            ensure_env_file(path=env_path, overwrite=False)
+            update_env_file(
+                path=env_path, updates={"GSD_BROWSER_BROWSER_EXECUTABLE_PATH": str(found)}
+            )
+            typer.echo(f"Updated: {env_path}")
+        return
+
+    if not install:
+        raise typer.Exit(code=1)
+
+    deps = should_use_with_deps() if with_deps is None else bool(with_deps)
+    if deps and should_use_with_deps() is False and with_deps is True:
+        deps = False
+
+    result = install_playwright_chromium(with_deps=deps)
+    if result.returncode != 0:
+        raise typer.Exit(code=result.returncode)
+
+    found_after = detect_local_browser_executable()
+    if not found_after:
+        raise typer.Exit(code=2)
+
+    if write_config:
+        env_path = _select_env_path(explicit=None)
+        ensure_env_file(path=env_path, overwrite=False)
+        update_env_file(path=env_path, updates={"GSD_BROWSER_BROWSER_EXECUTABLE_PATH": found_after})
+        typer.echo(f"Updated: {env_path}")
+
+
 @stream_app.callback()
 def _stream_callback() -> None:
     """Streaming server + dashboard commands.
@@ -575,6 +639,43 @@ def _stream_callback() -> None:
     """
 
 
+@stream_app.command("serve")
+def stream_serve(
+    host: str = typer.Option("127.0.0.1", "--host", help="Bind host for the streaming server"),
+    port: int = typer.Option(5009, "--port", help="Bind port for the streaming server"),
+    log_level: str | None = typer.Option(
+        None, "--log-level", help="Override log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)"
+    ),
+    json_logs: bool = typer.Option(
+        False, "--json-logs", is_flag=True, help="Emit structured JSON logs"
+    ),
+    text_logs: bool = typer.Option(
+        False, "--text-logs", is_flag=True, help="Force human-friendly logs"
+    ),
+    llm_provider: str | None = typer.Option(
+        None, "--llm-provider", help="LLM provider (anthropic, chatbrowseruse, openai, ollama)"
+    ),
+    llm_model: str | None = typer.Option(None, "--llm-model", help="Override LLM model name"),
+    ollama_host: str | None = typer.Option(None, "--ollama-host", help="Override OLLAMA_HOST"),
+) -> None:
+    """Start the streaming server + dashboard.
+
+    Examples:
+      gsd stream serve
+      gsd stream serve --port 5009
+    """
+    legacy_serve_browser(
+        host=host,
+        port=port,
+        log_level=log_level,
+        json_logs=json_logs,
+        text_logs=text_logs,
+        llm_provider=llm_provider,
+        llm_model=llm_model,
+        ollama_host=ollama_host,
+    )
+
+
 @llm_app.callback()
 def _llm_callback() -> None:
     """LLM/provider validation helpers.
@@ -583,6 +684,25 @@ def _llm_callback() -> None:
       gsd llm --help
       gsd llm validate
     """
+
+
+@llm_app.command("validate")
+def llm_validate(
+    llm_provider: str | None = typer.Option(
+        None,
+        "--llm-provider",
+        help="LLM provider (anthropic, chatbrowseruse, openai, ollama)",
+    ),
+    llm_model: str | None = typer.Option(None, "--llm-model", help="Override LLM model name"),
+    ollama_host: str | None = typer.Option(None, "--ollama-host", help="Override OLLAMA_HOST"),
+) -> None:
+    """Validate LLM provider configuration for browser-use.
+
+    Examples:
+      gsd llm validate
+      gsd llm validate --llm-provider ollama --llm-model llama3.2
+    """
+    legacy_validate_llm(llm_provider=llm_provider, llm_model=llm_model, ollama_host=ollama_host)
 
 
 @dev_app.callback()

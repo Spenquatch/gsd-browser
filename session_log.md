@@ -191,3 +191,29 @@ This file is append-only. Add entries at the bottom.
 
 **Commits:**
 - `ce0d0cd` `feat: implement gsd config group (CLI-005)`
+
+---
+
+### 2026-01-14 — Browser/stream/LLM group migration
+
+**Task:** `CLI-006` — Implement `gsd browser`, `gsd stream`, and `gsd llm` groups
+
+**Start:** 2026-01-14T20:09:32+00:00
+
+**Plan:**
+- Implement `gsd browser ensure`, `gsd stream serve`, `gsd llm validate` with option parity
+- Ensure `gsd browser ensure --write-config` emits `Updated: <path>`
+- Run lint/tests and commit
+
+**Finish:** 2026-01-14T20:11:37+00:00
+
+**Changes:**
+- Added `gsd browser ensure`, `gsd stream serve`, and `gsd llm validate` with option parity
+- Ensured `gsd browser ensure --write-config` prints `Updated: <path>` on writes
+
+**Validation:**
+- `cd gsd-browser && make lint` → pass
+- `cd gsd-browser && make test` → pass
+
+**Commits:**
+- <pending> `feat: implement browser/stream/llm groups (CLI-006)`
