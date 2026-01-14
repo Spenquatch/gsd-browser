@@ -70,7 +70,7 @@
       "id": "CLI-012",
       "title": "Finalize ADR-0007 and migration notes",
       "description": "Goal: after implementation, finalize the ADR and document the migration path.\n\nAcceptance criteria:\n- Update `docs/adr/ADR-0007-cli-contract-and-gsd-binary.md` Status from `Proposed` to `Accepted`.\n- Add a migration section to `gsd-browser/docs/UPDATING.md` that includes:\n  - old command -> new command mapping for the most common cases\n  - how to update MCP host configs to `command=gsd` + `args=[\"mcp\",\"serve\"]`\n  - deprecation warning behavior and timeframe\n- Ensure `gsd-browser/docs/SETUP.md` includes a copy/paste snippet for new users using `gsd`.",
-      "status": "todo"
+      "status": "done"
     }
   ]
 }

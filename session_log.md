@@ -350,3 +350,30 @@ This file is append-only. Add entries at the bottom.
 
 **Commits:**
 - `b605a5b` `test: enforce CLI contract (CLI-011)`
+
+---
+
+### 2026-01-14 — ADR finalization + migration notes
+
+**Task:** `CLI-012` — Finalize ADR-0007 and migration notes
+
+**Start:** 2026-01-14T20:50:18+00:00
+
+**Plan:**
+- Mark ADR-0007 status as `Accepted`
+- Add a migration section to `gsd-browser/docs/UPDATING.md` (command mapping + MCP host config update + deprecation behavior)
+- Add a copy/paste `gsd` snippet to `gsd-browser/docs/SETUP.md`
+
+**Finish:** 2026-01-14T20:51:41+00:00
+
+**Changes:**
+- Marked ADR-0007 as `Accepted`
+- Added CLI migration notes + command mapping and MCP host config update guidance
+- Added a pipx quickstart snippet for new users using `gsd`
+
+**Validation:**
+- `cd gsd-browser && make lint` → pass
+- `cd gsd-browser && make test` → pass
+
+**Commits:**
+- `6dc2ee3` `docs: finalize ADR and migration notes (CLI-012)`
