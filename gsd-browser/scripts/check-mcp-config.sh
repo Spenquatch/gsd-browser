@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# Inspect Claude MCP configuration files for gsd-browser entries.
+# Inspect Claude MCP configuration files for gsd entries.
 set -euo pipefail
 
-TARGET_NAME="gsd-browser"
+TARGET_NAME="gsd"
 
 show_section() {
   local file=$1

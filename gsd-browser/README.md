@@ -1,13 +1,13 @@
-# gsd-browser (Python)
+# gsd (Python)
 
-GSD Browser MCP server (Python). The broader project docs live in `../GSD_BROWSER_BLUEPRINT.md` and task tracking lives in `../tasks.json`.
+GSD MCP server (Python). The broader project docs live in `../GSD_BROWSER_BLUEPRINT.md` and task tracking lives in `../tasks.json`.
 
 ## Features
 - **UV-first dev workflow** (Makefile uses `uv` for venv + installs, with venv fallback)
-- **Python package + CLI** (`gsd-browser`) powered by Typer
+- **Python package + CLI** (`gsd`) powered by Typer
 - **Config loader** with `.env` + env var precedence and MCP snippet helper
 - **browser-use LLM provider selection** (Anthropic, OpenAI, ChatBrowserUse, Ollama)
-- **Structured logging** with `--log-level`, `--json-logs/--text-logs`, and `LOG_LEVEL` / `GSD_BROWSER_JSON_LOGS`
+- **Structured logging** with `--log-level`, `--json-logs/--text-logs`, and `LOG_LEVEL` / `GSD_JSON_LOGS`
 - **Developer scripts** (`run-local`, `diagnose`, `smoke-test`, `check-mcp-config`, `print-mcp-config`)
 - **pipx installers** for system-wide installation (`tools/install.sh`, `upgrade.sh`, `uninstall.sh`)
 - **Docker image** with entrypoint + compose example
@@ -23,20 +23,20 @@ make dev        # sets up .venv (uv-backed)
 ```
 
 ## .env Loading
-`gsd-browser` loads `.env` from the current working directory (if present) and then reads shell env vars (shell wins).
+`gsd` loads `.env` from the current working directory (if present) and then reads shell env vars (shell wins).
 
 For production installs, prefer a stable user env file and point the server at it:
-- Default user config: `~/.config/gsd-browser/.env`
-- Override path: `GSD_BROWSER_ENV_FILE=/absolute/path/to/.env`
+- Default user config: `~/.config/gsd/.env`
+- Override path: `GSD_ENV_FILE=/absolute/path/to/.env`
 
-Create/update the default user config with `gsd-browser configure`.
+Create/update the default user config with `gsd config init` and `gsd config set`.
 
 ## LLM Providers (browser-use)
-`gsd-browser` can run browser-use against either a cloud LLM (default: Anthropic) or a local OSS LLM (Ollama).
+`gsd` can run browser-use against either a cloud LLM (default: Anthropic) or a local OSS LLM (Ollama).
 
 Provider selection:
-- `GSD_BROWSER_LLM_PROVIDER`: `anthropic` (default), `openai`, `chatbrowseruse`, `ollama`
-- `GSD_BROWSER_MODEL`: provider-specific model name (defaults to `claude-haiku-4-5`, or `bu-latest` for `chatbrowseruse`)
+- `GSD_LLM_PROVIDER`: `anthropic` (default), `openai`, `chatbrowseruse`, `ollama`
+- `GSD_MODEL`: provider-specific model name (defaults to `claude-haiku-4-5`, or `bu-latest` for `chatbrowseruse`)
 
 Required env vars:
 - `anthropic`: `ANTHROPIC_API_KEY`
@@ -46,8 +46,8 @@ Required env vars:
 
 CLI overrides (useful for quick testing):
 ```bash
-gsd-browser validate-llm --llm-provider ollama --llm-model llama3.2
-gsd-browser serve --llm-provider ollama --llm-model llama3.2
+gsd llm validate --llm-provider ollama --llm-model llama3.2
+gsd mcp serve --llm-provider ollama --llm-model llama3.2
 ```
 
 ## Browser Streaming
@@ -55,7 +55,7 @@ The template includes a Socket.IO + FastAPI streaming server for browser frames 
 
 ```bash
 # Serve Socket.IO at /stream and /healthz on the same port
-STREAMING_MODE=cdp STREAMING_QUALITY=med gsd-browser serve-browser --host 127.0.0.1 --port 5009
+STREAMING_MODE=cdp STREAMING_QUALITY=med gsd stream serve --host 127.0.0.1 --port 5009
 curl -sS http://127.0.0.1:5009/healthz
 ```
 
@@ -73,7 +73,7 @@ Environment toggles:
 
 ## MCP Config Snippet
 ```bash
-gsd-browser mcp-config --format toml   # or json
+gsd mcp config --format toml   # or json
 ```
 or use the helper script:
 ```bash
@@ -82,8 +82,8 @@ or use the helper script:
 Paste the output into your MCP host settings (Codex or Claude Code).
 
 Notes:
-- The MCP server is started via `gsd-browser serve` (the generated snippet includes `args: ["serve"]`).
-- If you’re running from a checkout and `gsd-browser` isn’t on your PATH, run `source .venv/bin/activate` or use `uv run gsd-browser mcp-config --format json`.
+- The MCP server is started via `gsd mcp serve` (the generated snippet includes `args: ["mcp", "serve"]`).
+- If you're running from a checkout and `gsd` isn't on your PATH, run `source .venv/bin/activate` or use `uv run gsd mcp config --format json`.
 - After updating `~/.claude.json` (or a project `.claude.json`), restart Claude so it picks up the new MCP server entry.
 - To sanity-check your config file, run `./scripts/check-mcp-config.sh`.
 
@@ -95,13 +95,13 @@ Once configured as an MCP server, Claude can call:
 
 For a quick end-to-end check:
 ```bash
-gsd-browser mcp-tool-smoke --skip-browser-task
+gsd mcp smoke --skip-browser-task
 ```
 
 ## Docker
 ```bash
-docker build -t gsd-browser:dev -f docker/Dockerfile .
-docker run --rm -e ANTHROPIC_API_KEY=$ANTHROPIC_API_KEY gsd-browser:dev
+docker build -t gsd:dev -f docker/Dockerfile .
+docker run --rm -e ANTHROPIC_API_KEY=$ANTHROPIC_API_KEY gsd:dev
 ```
 
 ## Docs

@@ -35,7 +35,7 @@ from .streaming.security import get_security_logger
 
 logger = logging.getLogger("gsd_browser.mcp")
 
-mcp = FastMCP("gsd-browser")
+mcp = FastMCP("gsd")
 
 os.environ.setdefault("BROWSER_USE_SETUP_LOGGING", "false")
 
@@ -416,7 +416,7 @@ def _browser_use_prompt_wrapper(*, base_url: str) -> str:
 def _get_enhanced_system_prompt(*, base_url: str) -> str | None:
     """Load enhanced system prompt from file if override mode is enabled.
 
-    Returns enhanced prompt string if GSD_BROWSER_OVERRIDE_SYSTEM_PROMPT=1,
+    Returns enhanced prompt string if GSD_OVERRIDE_SYSTEM_PROMPT=1,
     otherwise returns None.
 
     Modes:
@@ -429,12 +429,12 @@ def _get_enhanced_system_prompt(*, base_url: str) -> str | None:
 
     See: artifacts/real_world_sanity/SYSTEM_PROMPT_OVERRIDE_PROPOSAL.md
     """
-    if os.getenv("GSD_BROWSER_OVERRIDE_SYSTEM_PROMPT") != "1":
+    if os.getenv("GSD_OVERRIDE_SYSTEM_PROMPT") != "1":
         return None
 
     try:
         # Check if FULL mode is requested, otherwise use LITE
-        use_full = os.getenv("GSD_BROWSER_OVERRIDE_FULL") == "1"
+        use_full = os.getenv("GSD_OVERRIDE_FULL") == "1"
         filename = "system_prompt_enhanced.md" if use_full else "system_prompt_enhanced_lite.md"
         prompt_path = Path(__file__).parent / "custom_prompts" / filename
 
@@ -548,13 +548,13 @@ async def web_eval_agent(
           - "dev": includes bounded console/network excerpts (default for localhost/127.0.0.1)
         budget_s: Optional. Tool-level budget in seconds (overall wall-clock).
             IMPORTANT: Do not set this unless the user explicitly asks to override timeouts.
-            Leave it unset to use the server defaults (`GSD_BROWSER_WEB_EVAL_BUDGET_S`).
+            Leave it unset to use the server defaults (`GSD_WEB_EVAL_BUDGET_S`).
         max_steps: Optional. Maximum number of browser-use steps.
             IMPORTANT: Do not set this unless the user explicitly asks to override limits.
-            Leave it unset to use the server defaults (`GSD_BROWSER_WEB_EVAL_MAX_STEPS`).
+            Leave it unset to use the server defaults (`GSD_WEB_EVAL_MAX_STEPS`).
         step_timeout_s: Optional. Per-step timeout in seconds.
             IMPORTANT: Do not set this unless the user explicitly asks to override timeouts.
-            Leave it unset to use the server defaults (`GSD_BROWSER_WEB_EVAL_STEP_TIMEOUT_S`).
+            Leave it unset to use the server defaults (`GSD_WEB_EVAL_STEP_TIMEOUT_S`).
 
     Returns:
         list[TextContent]: A single JSON payload encoded as text (no inline images).
@@ -611,7 +611,7 @@ async def web_eval_agent(
             raise ValueError("step_timeout_s must be > 0")
     except (TypeError, ValueError) as exc:
         payload = {
-            "version": "gsd-browser.web_eval_agent.v1",
+            "version": "gsd.web_eval_agent.v1",
             "session_id": session_id,
             "tool_call_id": tool_call_id,
             "url": normalized_url,
@@ -640,7 +640,7 @@ async def web_eval_agent(
         selected_mode = _select_web_eval_agent_mode(normalized_url=normalized_url, explicit=mode)
     except ValueError as exc:
         payload = {
-            "version": "gsd-browser.web_eval_agent.v1",
+            "version": "gsd.web_eval_agent.v1",
             "session_id": session_id,
             "tool_call_id": tool_call_id,
             "url": normalized_url,
@@ -1498,7 +1498,7 @@ async def web_eval_agent(
             max_items=8,
         )
         payload = {
-            "version": "gsd-browser.web_eval_agent.v1",
+            "version": "gsd.web_eval_agent.v1",
             "session_id": session_id,
             "tool_call_id": tool_call_id,
             "url": normalized_url,
@@ -1580,7 +1580,7 @@ async def web_eval_agent(
         )
 
         payload = {
-            "version": "gsd-browser.web_eval_agent.v1",
+            "version": "gsd.web_eval_agent.v1",
             "session_id": session_id,
             "tool_call_id": tool_call_id,
             "url": normalized_url,
@@ -1647,7 +1647,7 @@ async def web_eval_agent(
         )
 
         payload = {
-            "version": "gsd-browser.web_eval_agent.v1",
+            "version": "gsd.web_eval_agent.v1",
             "session_id": session_id,
             "tool_call_id": tool_call_id,
             "url": normalized_url,
@@ -1749,7 +1749,7 @@ async def web_eval_agent(
             },
         )
         payload = {
-            "version": "gsd-browser.web_eval_agent.v1",
+            "version": "gsd.web_eval_agent.v1",
             "session_id": session_id,
             "tool_call_id": tool_call_id,
             "url": normalized_url,
@@ -1884,7 +1884,7 @@ async def get_run_events(
             timestamps.append(float(timestamp_value))
 
     payload = {
-        "version": "gsd-browser.get_run_events.v1",
+        "version": "gsd.get_run_events.v1",
         "session_id": session_id,
         "events": events,
         "stats": {

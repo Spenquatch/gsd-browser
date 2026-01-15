@@ -55,9 +55,9 @@ def _reset_screenshot_manager(manager: Any) -> None:
 def test_streaming_env_defaults_and_invalid_input_fallback() -> None:
     base_env = {
         "ANTHROPIC_API_KEY": "test",
-        "GSD_BROWSER_MODEL": "claude-haiku-4-5",
+        "GSD_MODEL": "claude-haiku-4-5",
         "LOG_LEVEL": "INFO",
-        "GSD_BROWSER_JSON_LOGS": False,
+        "GSD_JSON_LOGS": False,
     }
     settings = load_settings(env=base_env, env_file=None)
 
@@ -151,9 +151,9 @@ def _healthz_payload() -> Mapping[str, Any]:
 
             base_env = {
                 "ANTHROPIC_API_KEY": "test",
-                "GSD_BROWSER_MODEL": "claude-haiku-4-5",
+                "GSD_MODEL": "claude-haiku-4-5",
                 "LOG_LEVEL": "INFO",
-                "GSD_BROWSER_JSON_LOGS": False,
+                "GSD_JSON_LOGS": False,
             }
             runtime = create_streaming_app(settings=load_settings(env=base_env, env_file=None))
             client = TestClient(runtime.api_app)

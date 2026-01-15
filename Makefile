@@ -32,5 +32,3 @@ help:
 py-%:
 	@$(MAKE) -C gsd-browser $*
 
-ts-%:
-	@$(MAKE) -C gsd-browser-ts $*

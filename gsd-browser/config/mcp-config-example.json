@@ -1,15 +1,15 @@
 {
   "mcpServers": {
-    "gsd-browser": {
+    "gsd": {
       "type": "stdio",
-      "command": "gsd-browser",
-      "args": ["serve"],
+      "command": "gsd",
+      "args": ["mcp", "serve"],
       "env": {
-        "GSD_BROWSER_LLM_PROVIDER": "anthropic",
-        "GSD_BROWSER_MODEL": "claude-haiku-4-5",
+        "GSD_LLM_PROVIDER": "anthropic",
+        "GSD_MODEL": "claude-haiku-4-5",
         "ANTHROPIC_API_KEY": "${ANTHROPIC_API_KEY}"
       },
-      "description": "GSD Browser MCP server"
+      "description": "GSD MCP server"
     }
   }
 }

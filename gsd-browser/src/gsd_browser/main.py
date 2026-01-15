@@ -28,7 +28,7 @@ def serve_stdio(
     reader = input_stream or sys.stdin
     writer = output_stream or sys.stdout
 
-    logger.info("Starting gsd-browser placeholder server", extra={"echo": echo, "once": once})
+    logger.info("Starting gsd placeholder server", extra={"echo": echo, "once": once})
 
     processed = 0
     try:

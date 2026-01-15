@@ -1,4 +1,4 @@
-"""Smoke-test helper for gsd-browser MCP tools and dashboard server."""
+"""Smoke-test helper for gsd MCP tools and dashboard server."""
 
 from __future__ import annotations
 

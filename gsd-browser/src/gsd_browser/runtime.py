@@ -73,7 +73,7 @@ class AppRuntime:
                     "loop_ready": loop_ready,
                     "loop_holder": loop_holder,
                 },
-                name="gsd-browser-dashboard",
+                name="gsd-dashboard",
                 daemon=True,
             )
             thread.start()

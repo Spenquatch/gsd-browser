@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
-# Remove pipx-installed gsd-browser package (CLI: gsd) and cleanup manifest.
+# Remove pipx-installed gsd package and cleanup manifest.
 set -euo pipefail
 
-PACKAGE="gsd-browser"
-MANIFEST_FILE="$HOME/.config/$PACKAGE/install.json"
-CONFIG_DIR="$HOME/.config/$PACKAGE"
+PACKAGE="gsd"           # PyPI package name (for pipx)
+CONFIG_NAME="gsd"       # Config directory name
+MANIFEST_FILE="$HOME/.config/$CONFIG_NAME/install.json"
+CONFIG_DIR="$HOME/.config/$CONFIG_NAME"
 
 PURGE_CONFIG=0
 if [ "${1:-}" = "--purge-config" ]; then

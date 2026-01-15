@@ -1,19 +1,19 @@
 #!/usr/bin/env bash
 # Full install smoke test:
 # - installs via ./tools/install.sh (pipx)
-# - launches dashboard + runs a Playwright task via `gsd-browser mcp-tool-smoke`
+# - launches dashboard + runs a Playwright task via `gsd mcp smoke`
 # - validates /healthz, dashboard HTML, and screenshot capture
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
-BIN="${GSD_BROWSER_BIN:-$HOME/.local/bin/gsd-browser}"
+BIN="${GSD_BIN:-$HOME/.local/bin/gsd}"
 ENV_FILE_DEFAULT="$ROOT_DIR/.env"
 
-HOST="${GSD_BROWSER_SMOKE_HOST:-127.0.0.1}"
-PORT="${GSD_BROWSER_SMOKE_PORT:-5009}"
-URL="${GSD_BROWSER_SMOKE_URL:-https://example.com}"
+HOST="${GSD_SMOKE_HOST:-127.0.0.1}"
+PORT="${GSD_SMOKE_PORT:-5009}"
+URL="${GSD_SMOKE_URL:-https://example.com}"
 
 if [ ! -f "$ENV_FILE_DEFAULT" ]; then
   echo "Missing $ENV_FILE_DEFAULT. Create it from .env.example first." >&2
@@ -25,7 +25,7 @@ echo "[install-smoke] Installing via pipx..."
 
 if [ ! -x "$BIN" ]; then
   echo "[install-smoke] Expected installed binary at $BIN but it was not found." >&2
-  echo "[install-smoke] Check your PATH or set GSD_BROWSER_BIN explicitly." >&2
+  echo "[install-smoke] Check your PATH or set GSD_BIN explicitly." >&2
   exit 1
 fi
 
@@ -36,7 +36,7 @@ fi
 
 TMP_DIR="$(mktemp -d)"
 STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
-REPORT_PATH="${GSD_BROWSER_INSTALL_SMOKE_REPORT:-/tmp/gsd-browser-install-smoke-report.${STAMP}.json}"
+REPORT_PATH="${GSD_INSTALL_SMOKE_REPORT:-/tmp/gsd-install-smoke-report.${STAMP}.json}"
 
 cleanup() {
   rm -rf "$TMP_DIR"
@@ -46,7 +46,7 @@ trap cleanup EXIT
 echo "[install-smoke] Running end-to-end smoke (dashboard + Playwright + screenshots)..."
 (
   cd "$TMP_DIR"
-  export GSD_BROWSER_ENV_FILE="$ENV_FILE_DEFAULT"
+  export GSD_ENV_FILE="$ENV_FILE_DEFAULT"
   export STREAMING_MODE="cdp"
   export STREAMING_QUALITY="med"
   "$BIN" validate-llm >/dev/null

@@ -1,11 +1,11 @@
 """User-level configuration file helpers.
 
-GSD Browser supports configuration via shell environment variables and/or a .env file.
+GSD supports configuration via shell environment variables and/or a .env file.
 For production installs (pipx), we standardize on a stable per-user env file location:
 
-  ~/.config/gsd-browser/.env
+  ~/.config/gsd/.env
 
-MCP host configs can then set GSD_BROWSER_ENV_FILE to that path so the server loads the
+MCP host configs can then set GSD_ENV_FILE to that path so the server loads the
 same credentials regardless of working directory. Shell env vars still take precedence.
 """
 
@@ -13,16 +13,16 @@ from __future__ import annotations
 
 from pathlib import Path
 
-DEFAULT_ENV_TEMPLATE = """# gsd-browser user config
+DEFAULT_ENV_TEMPLATE = """# gsd user config
 #
-# This file is loaded when GSD_BROWSER_ENV_FILE points here.
+# This file is loaded when GSD_ENV_FILE points here.
 # Shell environment variables win over values in this file.
 #
 # Provider + model defaults (cost-optimized with fallback):
-GSD_BROWSER_LLM_PROVIDER=anthropic
-GSD_BROWSER_MODEL=claude-haiku-4-5
-GSD_BROWSER_FALLBACK_LLM_PROVIDER=anthropic
-GSD_BROWSER_FALLBACK_MODEL=claude-sonnet-4-5
+GSD_LLM_PROVIDER=anthropic
+GSD_MODEL=claude-haiku-4-5
+GSD_FALLBACK_LLM_PROVIDER=anthropic
+GSD_FALLBACK_MODEL=claude-sonnet-4-5
 #
 # API keys (required for Anthropic/OpenAI; leave blank if you only use shell env vars):
 ANTHROPIC_API_KEY=
@@ -36,21 +36,21 @@ BROWSER_USE_LLM_URL=
 OLLAMA_HOST=http://localhost:11434
 #
 # Optional: pin a specific browser binary path (otherwise browser-use auto-detects)
-GSD_BROWSER_BROWSER_EXECUTABLE_PATH=
+GSD_BROWSER_EXECUTABLE_PATH=
 #
 # Optional: MCP tool exposure controls
 # - Default: all tools enabled (leave both blank)
 # - Allowlist (only advertise these tools):
-#   GSD_BROWSER_MCP_ENABLED_TOOLS=web_eval_agent,get_run_events
+#   GSD_MCP_ENABLED_TOOLS=web_eval_agent,get_run_events
 # - Denylist (remove these tools from the advertised set):
-#   GSD_BROWSER_MCP_DISABLED_TOOLS=setup_browser_state
-GSD_BROWSER_MCP_ENABLED_TOOLS=
-GSD_BROWSER_MCP_DISABLED_TOOLS=
+#   GSD_MCP_DISABLED_TOOLS=setup_browser_state
+GSD_MCP_ENABLED_TOOLS=
+GSD_MCP_DISABLED_TOOLS=
 """
 
 
 def default_config_dir() -> Path:
-    return Path.home() / ".config" / "gsd-browser"
+    return Path.home() / ".config" / "gsd"
 
 
 def default_env_path() -> Path:
@@ -98,7 +98,7 @@ def update_env_file(*, path: Path, updates: dict[str, str]) -> None:
     if remaining:
         if out and not out[-1].endswith("\n"):
             out[-1] = f"{out[-1]}\n"
-        out.append("\n# Added by gsd-browser\n")
+        out.append("\n# Added by gsd\n")
         for key, value in sorted(remaining.items()):
             out.append(f"{key}={value}\n")
 

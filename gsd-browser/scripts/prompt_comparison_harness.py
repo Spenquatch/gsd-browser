@@ -137,9 +137,9 @@ async def run_scenario_with_prompt_mode(
     """
     # Set environment variable for prompt mode
     if prompt_mode == "override":
-        os.environ["GSD_BROWSER_OVERRIDE_SYSTEM_PROMPT"] = "1"
+        os.environ["GSD_OVERRIDE_SYSTEM_PROMPT"] = "1"
     else:
-        os.environ["GSD_BROWSER_OVERRIDE_SYSTEM_PROMPT"] = "0"
+        os.environ["GSD_OVERRIDE_SYSTEM_PROMPT"] = "0"
 
     print(f"\n{'='*80}")
     print(f"Running: {scenario.id} (complexity: {scenario.complexity})")
@@ -279,7 +279,7 @@ async def main() -> int:
     args = parser.parse_args()
 
     # Override model setting
-    os.environ["GSD_BROWSER_MODEL"] = args.model
+    os.environ["GSD_MODEL"] = args.model
 
     # Load settings
     settings = load_settings()

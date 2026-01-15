@@ -2,7 +2,7 @@
 
 ## Run the streaming server
 ```bash
-STREAMING_MODE=cdp STREAMING_QUALITY=med gsd-browser serve-browser --host 127.0.0.1 --port 5009
+STREAMING_MODE=cdp STREAMING_QUALITY=med gsd stream serve --host 127.0.0.1 --port 5009
 ```
 
 - Health check: `curl -sS http://127.0.0.1:5009/healthz`
@@ -13,12 +13,12 @@ STREAMING_MODE=cdp STREAMING_QUALITY=med gsd-browser serve-browser --host 127.0.
 
 1. Start the dashboard server:
    ```bash
-   STREAMING_MODE=cdp STREAMING_QUALITY=med gsd-browser serve-browser --host 127.0.0.1 --port 5009
+   STREAMING_MODE=cdp STREAMING_QUALITY=med gsd stream serve --host 127.0.0.1 --port 5009
    ```
 2. Open `http://127.0.0.1:5009/`, click **Take Control**, then **Pause Agent**.
 3. In another terminal, run:
    ```bash
-   gsd-browser mcp-tool-smoke --url https://example.com --expect-streaming-mode cdp
+   gsd mcp smoke --url https://example.com --expect-streaming-mode cdp
    ```
 4. Confirm the command blocks while paused, then click **Resume Agent** to let it continue.
 5. Optional: while paused, click **Release** — releasing control clears the pause and allows the tool to continue.

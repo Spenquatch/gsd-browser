@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
-# Install gsd (package name: gsd-browser) globally via pipx
+# Install gsd globally via pipx
 set -euo pipefail
 
-PACKAGE="gsd-browser"
+PACKAGE="gsd"           # PyPI package name (for pipx)
+CONFIG_NAME="gsd"       # Config directory name
 CANONICAL_CLI="gsd"
 LEGACY_CLI="gsd-browser"
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-MANIFEST_DIR="$HOME/.config/$PACKAGE"
+MANIFEST_DIR="$HOME/.config/$CONFIG_NAME"
 MANIFEST_FILE="$MANIFEST_DIR/install.json"
 
 mkdir -p "$MANIFEST_DIR"
@@ -84,7 +85,7 @@ if [ -n "$BIN" ] && [ -x "$BIN" ]; then
 fi
 
 if [ -n "$BIN" ] && [ -x "$BIN" ]; then
-  echo "Ensuring user config exists at ~/.config/$PACKAGE/.env ..."
+  echo "Ensuring user config exists at ~/.config/$CONFIG_NAME/.env ..."
   if [ "$CLI_STYLE" = "canonical" ]; then
     "$BIN" config init >/dev/null || true
   else
@@ -170,7 +171,7 @@ PIPX_ENV=$(python3 - <<'PY'
 import json
 import subprocess
 
-PACKAGE = "gsd-browser"
+PACKAGE = "gsd"
 raw = subprocess.check_output(["pipx", "list", "--json"], text=True)
 data = json.loads(raw)
 venvs = data.get("venvs", {})
@@ -200,4 +201,4 @@ Path("$MANIFEST_FILE").write_text(json.dumps(manifest, indent=2))
 print(f"Manifest written to $MANIFEST_FILE")
 PY
 
-echo "Installation complete. Run 'gsd mcp serve' (legacy alias: 'gsd-browser serve') or 'gsd dev diagnose'."
+echo "Installation complete. Run 'gsd mcp serve' or 'gsd dev diagnose'."

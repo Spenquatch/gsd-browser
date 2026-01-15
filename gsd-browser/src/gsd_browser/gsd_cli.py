@@ -94,8 +94,7 @@ def _root(
       gsd mcp --help
     """
     if version:
-        # Keep output identical to the legacy `gsd-browser --version` for now.
-        console.print(f"gsd-browser v{__version__}")
+        console.print(f"gsd v{__version__}")
         raise typer.Exit()
 
 
@@ -160,13 +159,13 @@ def mcp_add(
     if target_norm == "codex":
         typer.echo(
             "Updated Codex MCP config (no stdout output by design). "
-            "Verify in ~/.codex/config.toml under [mcp_servers.gsd-browser].",
+            "Verify in ~/.codex/config.toml under [mcp_servers.gsd].",
             err=True,
         )
     elif target_norm == "claude":
         typer.echo(
             "Updated Claude MCP config (no stdout output by design). "
-            "Verify your Claude config under the gsd-browser MCP server entry.",
+            "Verify your Claude config under the gsd MCP server entry.",
             err=True,
         )
 
@@ -229,7 +228,7 @@ _TOOLS_DENY_ARG = typer.Argument(None, help="Tool name(s) to denylist")
 
 
 def _tools_env_path() -> Path:
-    override = (os.getenv("GSD_BROWSER_ENV_FILE") or "").strip()
+    override = (os.getenv("GSD_ENV_FILE") or "").strip()
     return default_env_path() if not override else Path(os.path.expanduser(override))
 
 
@@ -275,12 +274,12 @@ def _format_tools_csv(tools: set[str]) -> str:
 
 def _emit_mutation_summary(env_path: Path) -> None:
     values = _read_env_file_values(env_path)
-    enabled = values.get("GSD_BROWSER_MCP_ENABLED_TOOLS", "")
-    disabled = values.get("GSD_BROWSER_MCP_DISABLED_TOOLS", "")
+    enabled = values.get("GSD_MCP_ENABLED_TOOLS", "")
+    disabled = values.get("GSD_MCP_DISABLED_TOOLS", "")
 
     typer.echo(f"Updated: {env_path}")
-    typer.echo(f"GSD_BROWSER_MCP_ENABLED_TOOLS={enabled}")
-    typer.echo(f"GSD_BROWSER_MCP_DISABLED_TOOLS={disabled}")
+    typer.echo(f"GSD_MCP_ENABLED_TOOLS={enabled}")
+    typer.echo(f"GSD_MCP_DISABLED_TOOLS={disabled}")
     typer.echo("Restart your MCP host/session")
 
 
@@ -321,21 +320,21 @@ def tools_enable(tools: list[str] = _TOOLS_ENABLE_ARG) -> None:
     requested = set(_parse_tool_args(tools))
     known = set(KNOWN_MCP_TOOLS)
 
-    enabled_raw = current.get("GSD_BROWSER_MCP_ENABLED_TOOLS", "")
-    disabled_raw = current.get("GSD_BROWSER_MCP_DISABLED_TOOLS", "")
+    enabled_raw = current.get("GSD_MCP_ENABLED_TOOLS", "")
+    disabled_raw = current.get("GSD_MCP_DISABLED_TOOLS", "")
     enabled_mode, enabled_names = parse_tool_selector(enabled_raw)
     _disabled_mode, disabled_names = parse_tool_selector(disabled_raw)
 
     next_disabled = (disabled_names - requested) & known
 
-    updates: dict[str, str] = {"GSD_BROWSER_MCP_DISABLED_TOOLS": _format_tools_csv(next_disabled)}
+    updates: dict[str, str] = {"GSD_MCP_DISABLED_TOOLS": _format_tools_csv(next_disabled)}
     if enabled_mode == "none":
-        updates["GSD_BROWSER_MCP_ENABLED_TOOLS"] = _format_tools_csv(requested)
+        updates["GSD_MCP_ENABLED_TOOLS"] = _format_tools_csv(requested)
     elif enabled_mode == "all" or not enabled_raw.strip():
         # Baseline is all tools; leave allowlist untouched.
         pass
     else:
-        updates["GSD_BROWSER_MCP_ENABLED_TOOLS"] = _format_tools_csv(
+        updates["GSD_MCP_ENABLED_TOOLS"] = _format_tools_csv(
             (enabled_names | requested) & known
         )
 
@@ -357,20 +356,20 @@ def tools_disable(tools: list[str] = _TOOLS_DISABLE_ARG) -> None:
     requested = set(_parse_tool_args(tools))
     known = set(KNOWN_MCP_TOOLS)
 
-    enabled_raw = current.get("GSD_BROWSER_MCP_ENABLED_TOOLS", "")
-    disabled_raw = current.get("GSD_BROWSER_MCP_DISABLED_TOOLS", "")
+    enabled_raw = current.get("GSD_MCP_ENABLED_TOOLS", "")
+    disabled_raw = current.get("GSD_MCP_DISABLED_TOOLS", "")
     enabled_mode, enabled_names = parse_tool_selector(enabled_raw)
     _disabled_mode, disabled_names = parse_tool_selector(disabled_raw)
 
     next_disabled = (disabled_names | requested) & known
-    updates: dict[str, str] = {"GSD_BROWSER_MCP_DISABLED_TOOLS": _format_tools_csv(next_disabled)}
+    updates: dict[str, str] = {"GSD_MCP_DISABLED_TOOLS": _format_tools_csv(next_disabled)}
 
     if enabled_mode == "none":
-        updates["GSD_BROWSER_MCP_ENABLED_TOOLS"] = "none"
+        updates["GSD_MCP_ENABLED_TOOLS"] = "none"
     elif enabled_mode == "all" or not enabled_raw.strip():
         pass
     else:
-        updates["GSD_BROWSER_MCP_ENABLED_TOOLS"] = _format_tools_csv(
+        updates["GSD_MCP_ENABLED_TOOLS"] = _format_tools_csv(
             (enabled_names - requested) & known
         )
 
@@ -398,15 +397,15 @@ def tools_allow(
     ensure_env_file(path=env_path, overwrite=False)
 
     if clear:
-        update_env_file(path=env_path, updates={"GSD_BROWSER_MCP_ENABLED_TOOLS": ""})
+        update_env_file(path=env_path, updates={"GSD_MCP_ENABLED_TOOLS": ""})
         _emit_mutation_summary(env_path)
         return
     if all_tools:
-        update_env_file(path=env_path, updates={"GSD_BROWSER_MCP_ENABLED_TOOLS": "all"})
+        update_env_file(path=env_path, updates={"GSD_MCP_ENABLED_TOOLS": "all"})
         _emit_mutation_summary(env_path)
         return
     if none:
-        update_env_file(path=env_path, updates={"GSD_BROWSER_MCP_ENABLED_TOOLS": "none"})
+        update_env_file(path=env_path, updates={"GSD_MCP_ENABLED_TOOLS": "none"})
         _emit_mutation_summary(env_path)
         return
 
@@ -416,7 +415,7 @@ def tools_allow(
 
     requested = set(_parse_tool_args(tools))
     update_env_file(
-        path=env_path, updates={"GSD_BROWSER_MCP_ENABLED_TOOLS": _format_tools_csv(requested)}
+        path=env_path, updates={"GSD_MCP_ENABLED_TOOLS": _format_tools_csv(requested)}
     )
     _emit_mutation_summary(env_path)
 
@@ -436,7 +435,7 @@ def tools_deny(
     ensure_env_file(path=env_path, overwrite=False)
 
     if clear:
-        update_env_file(path=env_path, updates={"GSD_BROWSER_MCP_DISABLED_TOOLS": ""})
+        update_env_file(path=env_path, updates={"GSD_MCP_DISABLED_TOOLS": ""})
         _emit_mutation_summary(env_path)
         return
 
@@ -446,7 +445,7 @@ def tools_deny(
 
     requested = set(_parse_tool_args(tools))
     update_env_file(
-        path=env_path, updates={"GSD_BROWSER_MCP_DISABLED_TOOLS": _format_tools_csv(requested)}
+        path=env_path, updates={"GSD_MCP_DISABLED_TOOLS": _format_tools_csv(requested)}
     )
     _emit_mutation_summary(env_path)
 
@@ -462,7 +461,7 @@ def tools_reset() -> None:
     ensure_env_file(path=env_path, overwrite=False)
     update_env_file(
         path=env_path,
-        updates={"GSD_BROWSER_MCP_ENABLED_TOOLS": "", "GSD_BROWSER_MCP_DISABLED_TOOLS": ""},
+        updates={"GSD_MCP_ENABLED_TOOLS": "", "GSD_MCP_DISABLED_TOOLS": ""},
     )
     _emit_mutation_summary(env_path)
 
@@ -480,7 +479,7 @@ def _config_callback() -> None:
 def _select_env_path(*, explicit: Path | None) -> Path:
     if explicit is not None:
         return explicit.expanduser()
-    override = (os.getenv("GSD_BROWSER_ENV_FILE") or "").strip()
+    override = (os.getenv("GSD_ENV_FILE") or "").strip()
     if override:
         return Path(os.path.expanduser(override))
     return default_env_path()
@@ -627,7 +626,7 @@ def browser_ensure(
             env_path = _select_env_path(explicit=None)
             ensure_env_file(path=env_path, overwrite=False)
             update_env_file(
-                path=env_path, updates={"GSD_BROWSER_BROWSER_EXECUTABLE_PATH": str(found)}
+                path=env_path, updates={"GSD_BROWSER_EXECUTABLE_PATH": str(found)}
             )
             typer.echo(f"Updated: {env_path}")
         return
@@ -650,7 +649,7 @@ def browser_ensure(
     if write_config:
         env_path = _select_env_path(explicit=None)
         ensure_env_file(path=env_path, overwrite=False)
-        update_env_file(path=env_path, updates={"GSD_BROWSER_BROWSER_EXECUTABLE_PATH": found_after})
+        update_env_file(path=env_path, updates={"GSD_BROWSER_EXECUTABLE_PATH": found_after})
         typer.echo(f"Updated: {env_path}")
 
 

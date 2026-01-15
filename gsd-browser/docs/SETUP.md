@@ -9,7 +9,7 @@
 ## Quickstart (pipx)
 If you just want the CLI (recommended for non-dev usage):
 ```bash
-pipx install gsd-browser
+pipx install gsd
 gsd --version
 
 gsd config init
@@ -26,7 +26,7 @@ cd gsd-browser/gsd-browser
 curl -LsSf https://astral.sh/uv/install.sh | sh   # install uv if needed
 make dev          # creates .venv via uv (or stdlib fallback)
 cp .env.example .env
-vim .env          # set LLM provider + API keys, LOG_LEVEL, GSD_BROWSER_JSON_LOGS, etc.
+vim .env          # set LLM provider + API keys, LOG_LEVEL, GSD_JSON_LOGS, etc.
 ./scripts/run-local.sh
 ```
 `./scripts/run-local.sh` runs the MCP stdio server (`serve`) from a checkout without a global install.
@@ -35,14 +35,14 @@ vim .env          # set LLM provider + API keys, LOG_LEVEL, GSD_BROWSER_JSON_LOG
 By default, `gsd` loads a `.env` file from the current working directory (if present), and then reads the process environment (shell env vars take precedence).
 
 If your MCP host starts the server from a different working directory (common), set:
-- `GSD_BROWSER_ENV_FILE=/absolute/path/to/your/.env`
+- `GSD_ENV_FILE=/absolute/path/to/your/.env`
 
 ## LLM Provider Configuration
 `gsd` supports both cloud providers and a local OSS path via Ollama.
 
 Core variables:
-- `GSD_BROWSER_LLM_PROVIDER`: `anthropic` (default), `openai`, `chatbrowseruse`, `ollama`
-- `GSD_BROWSER_MODEL`: provider-specific model name (defaults to `claude-haiku-4-5`, or `bu-latest` for `chatbrowseruse`)
+- `GSD_LLM_PROVIDER`: `anthropic` (default), `openai`, `chatbrowseruse`, `ollama`
+- `GSD_MODEL`: provider-specific model name (defaults to `claude-haiku-4-5`, or `bu-latest` for `chatbrowseruse`)
 
 Required variables by provider:
 - `anthropic`: `ANTHROPIC_API_KEY`
@@ -73,8 +73,8 @@ Upgrade/reinstall as needed:
 
 ## Docker
 ```bash
-docker build -t gsd-browser:dev -f docker/Dockerfile .
-docker run --rm -e ANTHROPIC_API_KEY=$ANTHROPIC_API_KEY gsd-browser:dev
+docker build -t gsd:dev -f docker/Dockerfile .
+docker run --rm -e ANTHROPIC_API_KEY=$ANTHROPIC_API_KEY gsd:dev
 ```
 
 ## MCP Configuration
@@ -85,7 +85,7 @@ uv run ./scripts/print-mcp-config.py --format toml
 ```
 Copy the output into your MCP host config (Codex or Claude Code).
 
-By default, the snippet points at `~/.config/gsd-browser/.env` via `GSD_BROWSER_ENV_FILE` so it works regardless of working directory.
+By default, the snippet points at `~/.config/gsd/.env` via `GSD_ENV_FILE` so it works regardless of working directory.
 Initialize/update that file with:
 ```bash
 gsd config set
@@ -93,11 +93,11 @@ gsd config set
 
 Notes:
 - The MCP server command is `gsd mcp serve` (the snippet includes `args: ["mcp", "serve"]`).
-- If `gsd` isn’t on your PATH yet, run `source .venv/bin/activate` or use `uv run gsd mcp config --format json`.
+- If `gsd` isn't on your PATH yet, run `source .venv/bin/activate` or use `uv run gsd mcp config --format json`.
 - Restart Claude after editing `~/.claude.json` (or a project `.claude.json`).
 
 ## MCP Tools
-After Claude is connected to `gsd-browser`, it can call:
+After Claude is connected to `gsd`, it can call:
 - `web_eval_agent` (runs a Playwright navigation + captures screenshots)
 - `get_screenshots` (retrieves recent screenshots; set `include_images=False` for metadata-only)
 - `get_run_events` (fetches stored console/network/agent run events for a session)
@@ -105,10 +105,10 @@ After Claude is connected to `gsd-browser`, it can call:
 
 ### Tool exposure controls (enable/disable tools)
 You can restrict which tools are advertised to MCP clients via:
-- `GSD_BROWSER_MCP_ENABLED_TOOLS` (allowlist; supports `all`/`*` and `none`)
-- `GSD_BROWSER_MCP_DISABLED_TOOLS` (denylist)
+- `GSD_MCP_ENABLED_TOOLS` (allowlist; supports `all`/`*` and `none`)
+- `GSD_MCP_DISABLED_TOOLS` (denylist)
 
-Convenience commands (edits `~/.config/gsd-browser/.env` unless `GSD_BROWSER_ENV_FILE` is set):
+Convenience commands (edits `~/.config/gsd/.env` unless `GSD_ENV_FILE` is set):
 ```bash
 gsd mcp tools list
 gsd mcp tools disable setup_browser_state
@@ -117,6 +117,28 @@ gsd mcp tools reset
 ```
 
 Restart your MCP host/session (Codex/Claude) after changing tool policy so it refreshes `list_tools`.
+
+## Task Execution Timeouts
+
+By default, `web_eval_agent` uses browser-use's built-in defaults for timeouts and step limits. You can override these via environment variables or MCP client parameters.
+
+**Environment variables** (optional - leave unset to use browser-use defaults):
+- `GSD_WEB_EVAL_BUDGET_S` – overall task timeout in seconds
+- `GSD_WEB_EVAL_MAX_STEPS` – maximum number of agent steps
+- `GSD_WEB_EVAL_STEP_TIMEOUT_S` – per-step timeout in seconds
+
+**Priority order** (highest to lowest):
+1. MCP client parameters (passed directly to `web_eval_agent`)
+2. Environment variables (if set)
+3. browser-use library defaults (if env vars unset)
+
+Example: Set a 5-minute budget with max 50 steps:
+```bash
+GSD_WEB_EVAL_BUDGET_S=300
+GSD_WEB_EVAL_MAX_STEPS=50
+```
+
+MCP clients can also pass `budget_s`, `max_steps`, and `step_timeout_s` parameters directly to override any defaults.
 
 ## Browser Streaming
 See `docs/STREAMING.md` for running the streaming server, the dashboard UI, and auth configuration.

@@ -20,7 +20,7 @@ def test_detect_local_browser_uses_pinned_path(
 ) -> None:
     exe = tmp_path / "bin" / "chrome"
     _touch_executable(exe)
-    monkeypatch.setenv("GSD_BROWSER_BROWSER_EXECUTABLE_PATH", str(exe))
+    monkeypatch.setenv("GSD_BROWSER_EXECUTABLE_PATH", str(exe))
     assert browser_install.detect_local_browser_executable() == str(exe)
 
 

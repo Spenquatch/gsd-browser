@@ -1,4 +1,4 @@
-"""Typer CLI entry point for the GSD Browser MCP server."""
+"""Typer CLI entry point for the GSD MCP server."""
 
 from __future__ import annotations
 
@@ -29,7 +29,7 @@ from .mcp_tool_policy import (
 from .user_config import default_env_path, ensure_env_file, update_env_file
 
 console = Console()
-app = typer.Typer(help="GSD Browser MCP server CLI", invoke_without_command=True)
+app = typer.Typer(help="GSD MCP server CLI", invoke_without_command=True)
 mcp_tools_app = typer.Typer(help="Manage MCP tool exposure (enable/disable tools)")
 app.add_typer(mcp_tools_app, name="mcp-tools")
 
@@ -40,7 +40,7 @@ _MCP_TOOLS_SET_DISABLED_ARG = typer.Argument(None, help="Tool name(s) to denylis
 
 
 def _env_path_for_user_config() -> Path:
-    override = (os.getenv("GSD_BROWSER_ENV_FILE") or "").strip()
+    override = (os.getenv("GSD_ENV_FILE") or "").strip()
     return Path(override).expanduser() if override else default_env_path()
 
 
@@ -85,7 +85,7 @@ def callback(
 ) -> None:
     """Base callback for global options."""
     if version:
-        console.print(f"gsd-browser v{__version__}")
+        console.print(f"gsd v{__version__}")
         raise typer.Exit()
 
 
@@ -125,9 +125,9 @@ def serve(
     """Start the FastMCP stdio server."""
     overrides: dict[str, str] = {}
     if llm_provider is not None:
-        overrides["GSD_BROWSER_LLM_PROVIDER"] = llm_provider
+        overrides["GSD_LLM_PROVIDER"] = llm_provider
     if llm_model is not None:
-        overrides["GSD_BROWSER_MODEL"] = llm_model
+        overrides["GSD_MODEL"] = llm_model
     if ollama_host is not None:
         overrides["OLLAMA_HOST"] = ollama_host
 
@@ -174,8 +174,8 @@ def list_tools() -> None:
     )
 
     console.print(f"[dim]Config[/dim]: {env_path}")
-    file_enabled = file_values.get("GSD_BROWSER_MCP_ENABLED_TOOLS", "")
-    file_disabled = file_values.get("GSD_BROWSER_MCP_DISABLED_TOOLS", "")
+    file_enabled = file_values.get("GSD_MCP_ENABLED_TOOLS", "")
+    file_disabled = file_values.get("GSD_MCP_DISABLED_TOOLS", "")
     console.print(f"[dim].env enabled[/dim]: {file_enabled}")
     console.print(f"[dim].env disabled[/dim]: {file_disabled}")
     console.print(f"[dim]Effective enabled[/dim]: {settings.mcp_enabled_tools}")
@@ -195,7 +195,7 @@ def list_tools() -> None:
 
 @mcp_tools_app.command("list")
 def mcp_tools_list() -> None:
-    """Alias for `gsd-browser list-tools`."""
+    """Alias for `gsd list-tools`."""
 
     list_tools()
 
@@ -212,8 +212,8 @@ def mcp_tools_enable(
     current = _read_env_file_values(env_path)
 
     known = set(KNOWN_MCP_TOOLS)
-    enabled_raw = current.get("GSD_BROWSER_MCP_ENABLED_TOOLS", "")
-    disabled_raw = current.get("GSD_BROWSER_MCP_DISABLED_TOOLS", "")
+    enabled_raw = current.get("GSD_MCP_ENABLED_TOOLS", "")
+    disabled_raw = current.get("GSD_MCP_DISABLED_TOOLS", "")
 
     enabled_mode, enabled_names = parse_tool_selector(enabled_raw)
     _disabled_mode, disabled_names = parse_tool_selector(disabled_raw)
@@ -232,8 +232,8 @@ def mcp_tools_enable(
         next_enabled_raw = ""
 
     updates = {
-        "GSD_BROWSER_MCP_ENABLED_TOOLS": next_enabled_raw,
-        "GSD_BROWSER_MCP_DISABLED_TOOLS": _format_tools(next_disabled),
+        "GSD_MCP_ENABLED_TOOLS": next_enabled_raw,
+        "GSD_MCP_DISABLED_TOOLS": _format_tools(next_disabled),
     }
     update_env_file(path=env_path, updates=updates)
     console.print(f"[green]✓ Enabled[/green]: {', '.join(normalized)}")
@@ -253,23 +253,23 @@ def mcp_tools_disable(
     current = _read_env_file_values(env_path)
 
     known = set(KNOWN_MCP_TOOLS)
-    enabled_raw = current.get("GSD_BROWSER_MCP_ENABLED_TOOLS", "")
-    disabled_raw = current.get("GSD_BROWSER_MCP_DISABLED_TOOLS", "")
+    enabled_raw = current.get("GSD_MCP_ENABLED_TOOLS", "")
+    disabled_raw = current.get("GSD_MCP_DISABLED_TOOLS", "")
 
     enabled_mode, enabled_names = parse_tool_selector(enabled_raw)
     _disabled_mode, disabled_names = parse_tool_selector(disabled_raw)
 
     next_disabled = (disabled_names | set(normalized)) & known
 
-    updates: dict[str, str] = {"GSD_BROWSER_MCP_DISABLED_TOOLS": _format_tools(next_disabled)}
+    updates: dict[str, str] = {"GSD_MCP_DISABLED_TOOLS": _format_tools(next_disabled)}
     if enabled_mode == "all" or not enabled_raw.strip():
         # Baseline is all tools; leave allowlist untouched.
         pass
     elif enabled_mode == "none":
-        updates["GSD_BROWSER_MCP_ENABLED_TOOLS"] = "none"
+        updates["GSD_MCP_ENABLED_TOOLS"] = "none"
     else:
         next_enabled = (enabled_names - set(normalized)) & known
-        updates["GSD_BROWSER_MCP_ENABLED_TOOLS"] = _format_tools(next_enabled)
+        updates["GSD_MCP_ENABLED_TOOLS"] = _format_tools(next_enabled)
 
     update_env_file(path=env_path, updates=updates)
     console.print(f"[green]✓ Disabled[/green]: {', '.join(normalized)}")
@@ -285,7 +285,7 @@ def mcp_tools_reset() -> None:
     ensure_env_file(path=env_path, overwrite=False)
     update_env_file(
         path=env_path,
-        updates={"GSD_BROWSER_MCP_ENABLED_TOOLS": "", "GSD_BROWSER_MCP_DISABLED_TOOLS": ""},
+        updates={"GSD_MCP_ENABLED_TOOLS": "", "GSD_MCP_DISABLED_TOOLS": ""},
     )
     console.print("[green]✓ Reset MCP tool policy[/green]")
     console.print(f"[dim]Updated[/dim]: {env_path}")
@@ -299,7 +299,7 @@ def mcp_tools_set_enabled(
     none: bool = typer.Option(False, "--none", help="Allowlist no tools (baseline=none)"),
     clear: bool = typer.Option(False, "--clear", help="Unset allowlist (defaults to all tools)"),
 ) -> None:
-    """Set the MCP allowlist (GSD_BROWSER_MCP_ENABLED_TOOLS)."""
+    """Set the MCP allowlist (GSD_MCP_ENABLED_TOOLS)."""
 
     if sum([bool(all_tools), bool(none), bool(clear)]) > 1:
         console.print("[red]Use only one of --all, --none, or --clear[/red]")
@@ -309,21 +309,21 @@ def mcp_tools_set_enabled(
     ensure_env_file(path=env_path, overwrite=False)
 
     if clear:
-        update_env_file(path=env_path, updates={"GSD_BROWSER_MCP_ENABLED_TOOLS": ""})
+        update_env_file(path=env_path, updates={"GSD_MCP_ENABLED_TOOLS": ""})
         console.print("[green]✓ Cleared allowlist[/green]")
         console.print(f"[dim]Updated[/dim]: {env_path}")
         _print_mcp_restart_notice()
         return
 
     if all_tools:
-        update_env_file(path=env_path, updates={"GSD_BROWSER_MCP_ENABLED_TOOLS": "all"})
+        update_env_file(path=env_path, updates={"GSD_MCP_ENABLED_TOOLS": "all"})
         console.print("[green]✓ Set allowlist[/green]: all")
         console.print(f"[dim]Updated[/dim]: {env_path}")
         _print_mcp_restart_notice()
         return
 
     if none:
-        update_env_file(path=env_path, updates={"GSD_BROWSER_MCP_ENABLED_TOOLS": "none"})
+        update_env_file(path=env_path, updates={"GSD_MCP_ENABLED_TOOLS": "none"})
         console.print("[green]✓ Set allowlist[/green]: none")
         console.print(f"[dim]Updated[/dim]: {env_path}")
         _print_mcp_restart_notice()
@@ -336,7 +336,7 @@ def mcp_tools_set_enabled(
 
     normalized = _validate_tool_names(tools)
     update_env_file(
-        path=env_path, updates={"GSD_BROWSER_MCP_ENABLED_TOOLS": _format_tools(set(normalized))}
+        path=env_path, updates={"GSD_MCP_ENABLED_TOOLS": _format_tools(set(normalized))}
     )
     console.print(f"[green]✓ Set allowlist[/green]: {', '.join(normalized)}")
     console.print(f"[dim]Updated[/dim]: {env_path}")
@@ -348,13 +348,13 @@ def mcp_tools_set_disabled(
     tools: list[str] | None = _MCP_TOOLS_SET_DISABLED_ARG,
     clear: bool = typer.Option(False, "--clear", help="Clear denylist"),
 ) -> None:
-    """Set the MCP denylist (GSD_BROWSER_MCP_DISABLED_TOOLS)."""
+    """Set the MCP denylist (GSD_MCP_DISABLED_TOOLS)."""
 
     env_path = _env_path_for_user_config()
     ensure_env_file(path=env_path, overwrite=False)
 
     if clear:
-        update_env_file(path=env_path, updates={"GSD_BROWSER_MCP_DISABLED_TOOLS": ""})
+        update_env_file(path=env_path, updates={"GSD_MCP_DISABLED_TOOLS": ""})
         console.print("[green]✓ Cleared denylist[/green]")
         console.print(f"[dim]Updated[/dim]: {env_path}")
         _print_mcp_restart_notice()
@@ -367,7 +367,7 @@ def mcp_tools_set_disabled(
 
     normalized = _validate_tool_names(tools)
     update_env_file(
-        path=env_path, updates={"GSD_BROWSER_MCP_DISABLED_TOOLS": _format_tools(set(normalized))}
+        path=env_path, updates={"GSD_MCP_DISABLED_TOOLS": _format_tools(set(normalized))}
     )
     console.print(f"[green]✓ Set denylist[/green]: {', '.join(normalized)}")
     console.print(f"[dim]Updated[/dim]: {env_path}")
@@ -412,9 +412,9 @@ def serve_browser(
     """Start the browser streaming server (Socket.IO + /healthz)."""
     overrides: dict[str, str] = {}
     if llm_provider is not None:
-        overrides["GSD_BROWSER_LLM_PROVIDER"] = llm_provider
+        overrides["GSD_LLM_PROVIDER"] = llm_provider
     if llm_model is not None:
-        overrides["GSD_BROWSER_MODEL"] = llm_model
+        overrides["GSD_MODEL"] = llm_model
     if ollama_host is not None:
         overrides["OLLAMA_HOST"] = ollama_host
 
@@ -449,20 +449,20 @@ def diagnose() -> None:
 
     console.print(f"[bold]System[/bold]: {platform.platform()}")
     console.print(f"[bold]Python[/bold]: {platform.python_version()}")
-    for tool in ("uv", "poetry", "pipx", "gsd-browser"):
+    for tool in ("uv", "poetry", "pipx", "gsd"):
         path = shutil.which(tool)
         console.print(f"[bold]{tool}[/bold]: {path or '(not found)'}")
 
     console.print("[bold]Environment[/bold]:")
     for key in (
-        "GSD_BROWSER_LLM_PROVIDER",
+        "GSD_LLM_PROVIDER",
         "ANTHROPIC_API_KEY",
         "OPENAI_API_KEY",
         "BROWSER_USE_API_KEY",
         "OLLAMA_HOST",
-        "GSD_BROWSER_MODEL",
+        "GSD_MODEL",
         "LOG_LEVEL",
-        "GSD_BROWSER_JSON_LOGS",
+        "GSD_JSON_LOGS",
     ):
         present = "set" if os.environ.get(key) else "unset"
         console.print(f"- {key}: {present}")
@@ -488,9 +488,9 @@ def validate_llm(
     """Validate LLM provider configuration for browser-use."""
     overrides: dict[str, str] = {}
     if llm_provider is not None:
-        overrides["GSD_BROWSER_LLM_PROVIDER"] = llm_provider
+        overrides["GSD_LLM_PROVIDER"] = llm_provider
     if llm_model is not None:
-        overrides["GSD_BROWSER_MODEL"] = llm_model
+        overrides["GSD_MODEL"] = llm_model
     if ollama_host is not None:
         overrides["OLLAMA_HOST"] = ollama_host
 
@@ -598,7 +598,7 @@ def init_env(
         "--path",
         help=(
             "Optional destination path for the user .env file "
-            "(default: ~/.config/gsd-browser/.env)"
+            "(default: ~/.config/gsd/.env)"
         ),
     ),
     overwrite: bool = typer.Option(
@@ -619,7 +619,7 @@ def configure(
     env_path: Path | None = typer.Option(  # noqa: B008
         None,
         "--env-path",
-        help="Path to the user env file (default: ~/.config/gsd-browser/.env)",
+        help="Path to the user env file (default: ~/.config/gsd/.env)",
     ),
     anthropic_api_key: str | None = typer.Option(
         None,
@@ -700,11 +700,11 @@ def ensure_browser(
     if found:
         console.print(f"[green]✓ Browser found[/green]: {found}")
         if write_config:
-            env_file = (os.getenv("GSD_BROWSER_ENV_FILE") or "").strip()
+            env_file = (os.getenv("GSD_ENV_FILE") or "").strip()
             env_path = Path(env_file).expanduser() if env_file else default_env_path()
             ensure_env_file(path=env_path, overwrite=False)
             update_env_file(
-                path=env_path, updates={"GSD_BROWSER_BROWSER_EXECUTABLE_PATH": str(found)}
+                path=env_path, updates={"GSD_BROWSER_EXECUTABLE_PATH": str(found)}
             )
             console.print(f"[dim]Pinned in config[/dim]: {env_path}")
         return
@@ -746,10 +746,10 @@ def ensure_browser(
 
     console.print(f"[green]✓ Browser installed[/green]: {found_after}")
     if write_config:
-        env_file = (os.getenv("GSD_BROWSER_ENV_FILE") or "").strip()
+        env_file = (os.getenv("GSD_ENV_FILE") or "").strip()
         env_path = Path(env_file).expanduser() if env_file else default_env_path()
         ensure_env_file(path=env_path, overwrite=False)
-        update_env_file(path=env_path, updates={"GSD_BROWSER_BROWSER_EXECUTABLE_PATH": found_after})
+        update_env_file(path=env_path, updates={"GSD_BROWSER_EXECUTABLE_PATH": found_after})
         console.print(f"[dim]Pinned in config[/dim]: {env_path}")
 
 
@@ -760,7 +760,7 @@ def mcp_config_add(
         help="Target CLI to add config to: 'claude' or 'codex'",
     ),
 ) -> None:
-    """Add gsd-browser MCP server config to Claude Code or Codex."""
+    """Add gsd MCP server config to Claude Code or Codex."""
     target_normalized = target.lower()
 
     if target_normalized not in ["claude", "codex"]:
@@ -807,7 +807,7 @@ def _add_to_claude_via_cli(settings) -> bool:
         # Try to add the MCP server
         mcp_json = settings.to_mcp_snippet()
         config_data = json.loads(mcp_json)
-        server_config = config_data["mcpServers"]["gsd-browser"]
+        server_config = config_data["mcpServers"]["gsd"]
 
         # Build command: claude mcp add --transport stdio -e KEY=value -- name command args
         # IMPORTANT: The -- separator comes BEFORE the server name, command, and args
@@ -821,7 +821,7 @@ def _add_to_claude_via_cli(settings) -> bool:
         cmd.append("--")
 
         # Add server name, then command and args
-        cmd.append("gsd-browser")
+        cmd.append("gsd")
         cmd.append(server_config["command"])
         cmd.extend(server_config["args"])
 
@@ -831,7 +831,7 @@ def _add_to_claude_via_cli(settings) -> bool:
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
 
         if result.returncode == 0:
-            console.print("[green]✓ Successfully added gsd-browser to Claude Code config![/green]")
+            console.print("[green]✓ Successfully added gsd to Claude Code config![/green]")
             return True
         else:
             console.print(f"[yellow]'claude mcp add' failed: {result.stderr.strip()}[/yellow]")
@@ -865,10 +865,10 @@ def _add_to_codex_via_cli(settings) -> bool:
         ensure_env_file(overwrite=False)
 
         config_data = json.loads(settings.to_mcp_snippet())
-        server_config = config_data["mcpServers"]["gsd-browser"]
+        server_config = config_data["mcpServers"]["gsd"]
 
-        # Build command: codex mcp add gsd-browser --env KEY=VALUE -- gsd mcp serve
-        cmd = ["codex", "mcp", "add", "gsd-browser"]
+        # Build command: codex mcp add gsd --env KEY=VALUE -- gsd mcp serve
+        cmd = ["codex", "mcp", "add", "gsd"]
         for key, value in server_config["env"].items():
             cmd.extend(["--env", f"{key}={value}"])
         cmd.append("--")
@@ -878,7 +878,7 @@ def _add_to_codex_via_cli(settings) -> bool:
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=15)
 
         if result.returncode == 0:
-            console.print("[green]✓ Successfully added gsd-browser to Codex config![/green]")
+            console.print("[green]✓ Successfully added gsd to Codex config![/green]")
             # Codex may treat duplicate server names as a no-op; ensure the on-disk config uses
             # the canonical `gsd mcp serve` command/args even if the CLI returned success.
             _add_to_codex_direct(settings)
@@ -922,16 +922,16 @@ def _add_to_claude_direct(settings) -> None:
     if "mcpServers" not in config:
         config["mcpServers"] = {}
 
-    # Add gsd-browser config
+    # Add gsd config
     mcp_json = settings.to_mcp_snippet()
     config_data = json.loads(mcp_json)
-    config["mcpServers"]["gsd-browser"] = config_data["mcpServers"]["gsd-browser"]
+    config["mcpServers"]["gsd"] = config_data["mcpServers"]["gsd"]
 
     # Write back
     with open(config_path, "w") as f:
         json.dump(config, f, indent=2)
 
-    console.print(f"[green]✓ Successfully added gsd-browser to {config_path}![/green]")
+    console.print(f"[green]✓ Successfully added gsd to {config_path}![/green]")
 
 
 def _add_to_codex_direct(settings) -> None:
@@ -943,36 +943,35 @@ def _add_to_codex_direct(settings) -> None:
 
     mcp_toml = settings.to_mcp_toml()
 
-    # Check if file exists and has gsd-browser already
+    # Check if file exists and has gsd already
     if config_path.exists():
         content = config_path.read_text()
-        if "[mcp_servers.gsd-browser]" in content:
+        if "[mcp_servers.gsd]" in content:
             updated = content
             # Update the server command/args in-place (preserve the rest of the config file).
-            updated = updated.replace('command = "gsd-browser"\n', 'command = "gsd"\n')
             updated = updated.replace('args = ["serve"]\n', 'args = ["mcp", "serve"]\n')
             if updated != content:
                 config_path.write_text(updated, encoding="utf-8")
-                console.print(f"[green]✓ Updated gsd-browser entry in {config_path}![/green]")
+                console.print(f"[green]✓ Updated gsd entry in {config_path}![/green]")
             else:
                 console.print(
-                    "[yellow]! gsd-browser already exists in Codex config "
+                    "[yellow]! gsd already exists in Codex config "
                     "(no changes needed).[/yellow]"
                 )
             return
 
         # Append to existing file
         with open(config_path, "a") as f:
-            f.write("\n\n# GSD Browser MCP Server\n")
+            f.write("\n\n# GSD MCP Server\n")
             f.write(mcp_toml)
     else:
         # Create new file
         with open(config_path, "w") as f:
             f.write("# Codex MCP Configuration\n\n")
-            f.write("# GSD Browser MCP Server\n")
+            f.write("# GSD MCP Server\n")
             f.write(mcp_toml)
 
-    console.print(f"[green]✓ Successfully added gsd-browser to {config_path}![/green]")
+    console.print(f"[green]✓ Successfully added gsd to {config_path}![/green]")
 
 
 if __name__ == "__main__":

@@ -2,8 +2,8 @@
   "started_at": "2026-01-05T00:00:00Z",
   "out_dir": "artifacts/real_world_sanity/20260105-000000",
   "env_hint": {
-    "GSD_BROWSER_LLM_PROVIDER": "openai",
-    "GSD_BROWSER_MODEL": "gpt-4o-mini",
+    "GSD_LLM_PROVIDER": "openai",
+    "GSD_MODEL": "gpt-4o-mini",
     "ANTHROPIC_API_KEY_set": false,
     "OPENAI_API_KEY_set": true,
     "BROWSER_USE_API_KEY_set": false,

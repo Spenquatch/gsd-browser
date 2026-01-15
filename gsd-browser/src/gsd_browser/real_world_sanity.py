@@ -1,4 +1,4 @@
-"""Opt-in real-world scenario harness for gsd-browser web_eval_agent.
+"""Opt-in real-world scenario harness for gsd web_eval_agent.
 
 This harness is intentionally not part of `pytest` or `make smoke`:
 - it depends on external websites
@@ -402,7 +402,7 @@ async def _run_one(
 
 def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Run opt-in real-world sanity scenarios for gsd-browser"
+        description="Run opt-in real-world sanity scenarios for gsd"
     )
     parser.add_argument(
         "--out",
@@ -439,7 +439,7 @@ def _select_scenarios(selected: list[str] | None) -> list[Scenario]:
 
 def _render_markdown(summary: dict[str, Any]) -> str:
     lines: list[str] = []
-    lines.append("# gsd-browser real-world sanity report")
+    lines.append("# gsd real-world sanity report")
     lines.append("")
     lines.append(f"- Timestamp (UTC): `{summary['started_at']}`")
     lines.append(f"- Output dir: `{summary['out_dir']}`")
@@ -508,8 +508,8 @@ def main(argv: list[str] | None = None) -> None:
 
     # Avoid printing secrets; just a quick “configured?” hint.
     env_hint = {
-        "GSD_BROWSER_LLM_PROVIDER": os.environ.get("GSD_BROWSER_LLM_PROVIDER", ""),
-        "GSD_BROWSER_MODEL": os.environ.get("GSD_BROWSER_MODEL", ""),
+        "GSD_LLM_PROVIDER": os.environ.get("GSD_LLM_PROVIDER", ""),
+        "GSD_MODEL": os.environ.get("GSD_MODEL", ""),
         "ANTHROPIC_API_KEY_set": bool(os.environ.get("ANTHROPIC_API_KEY")),
         "OPENAI_API_KEY_set": bool(os.environ.get("OPENAI_API_KEY")),
         "BROWSER_USE_API_KEY_set": bool(os.environ.get("BROWSER_USE_API_KEY")),

@@ -44,7 +44,7 @@ def test_mcp_config_prints_gsd_command_and_args(runner: CliRunner, tmp_path: Pat
     result = runner.invoke(
         gsd_cli.app,
         ["mcp", "config", "--format", "json"],
-        env={"GSD_BROWSER_ENV_FILE": str(env_path)},
+        env={"GSD_ENV_FILE": str(env_path)},
     )
     assert result.exit_code == 0, result.output
     assert '"command": "gsd"' in result.output
@@ -60,15 +60,15 @@ def test_tool_policy_mutation_output_contract_and_parsing(
     result = runner.invoke(
         gsd_cli.app,
         ["mcp", "tools", "deny", "get_screenshots,web-eval-agent"],
-        env={"GSD_BROWSER_ENV_FILE": str(env_path)},
+        env={"GSD_ENV_FILE": str(env_path)},
     )
     assert result.exit_code == 0, result.output
 
     lines = [line for line in result.output.splitlines() if line.strip()]
     assert len(lines) == 4
     assert lines[0] == f"Updated: {env_path}"
-    assert lines[1].startswith("GSD_BROWSER_MCP_ENABLED_TOOLS=")
-    assert lines[2] == "GSD_BROWSER_MCP_DISABLED_TOOLS=get_screenshots,web_eval_agent"
+    assert lines[1].startswith("GSD_MCP_ENABLED_TOOLS=")
+    assert lines[2] == "GSD_MCP_DISABLED_TOOLS=get_screenshots,web_eval_agent"
     assert lines[3] == "Restart your MCP host/session"
 
 
@@ -77,7 +77,7 @@ def test_unknown_tool_exits_2_and_prints_known_list(runner: CliRunner, tmp_path:
     result = runner.invoke(
         gsd_cli.app,
         ["mcp", "tools", "disable", "not_a_tool"],
-        env={"GSD_BROWSER_ENV_FILE": str(env_path)},
+        env={"GSD_ENV_FILE": str(env_path)},
     )
     assert result.exit_code == 2
     assert "Known tools:" in result.stderr
@@ -87,7 +87,7 @@ def test_legacy_shim_warns_on_stderr_and_matches_exit_code(
     runner: CliRunner, tmp_path: Path
 ) -> None:
     env_path = tmp_path / ".env"
-    env = {"GSD_BROWSER_ENV_FILE": str(env_path)}
+    env = {"GSD_ENV_FILE": str(env_path)}
 
     canonical_args = ["mcp", "tools", "deny", "get_screenshots"]
     legacy_args = ["mcp-tools", "set-disabled", "get_screenshots"]

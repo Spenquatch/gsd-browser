@@ -118,7 +118,7 @@ def detect_local_browser_executable() -> str | None:
     """Return a local browser executable path if one is available, else None."""
 
     # Allow users/operators to pin an explicit browser path.
-    pinned = (os.getenv("GSD_BROWSER_BROWSER_EXECUTABLE_PATH") or "").strip()
+    pinned = (os.getenv("GSD_BROWSER_EXECUTABLE_PATH") or "").strip()
     if pinned:
         path = Path(pinned).expanduser()
         if path.exists() and path.is_file():

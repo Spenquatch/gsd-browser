@@ -28,7 +28,7 @@ def _parse_single_text_payload(response: list[Any]) -> dict[str, Any]:
 def _o2b_get_run_events_tool_present() -> bool:
     module_src = inspect.getsource(mcp_server_mod)
     return (
-        "gsd-browser.get_run_events.v1" in module_src
+        "gsd.get_run_events.v1" in module_src
         or 'name="get_run_events"' in module_src
         or "name='get_run_events'" in module_src
     )
@@ -120,7 +120,7 @@ def test_o2b_get_run_events_enforces_limits_and_filters(monkeypatch: pytest.Monk
     monkeypatch.setattr(mcp_server_mod, "get_runtime", lambda: _DummyRuntime(run_events=store))
 
     payload = _parse_single_text_payload(_run(get_run_events(session_id=session_id)))
-    assert payload["version"] == "gsd-browser.get_run_events.v1"
+    assert payload["version"] == "gsd.get_run_events.v1"
     assert payload["session_id"] == session_id
     assert isinstance(payload.get("events"), list)
     assert len(payload["events"]) == 50

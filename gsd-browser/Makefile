@@ -7,7 +7,7 @@ PROMPT_COMPARE_CONFIRM ?=
 
 help:
 	@echo ""
-	@echo "gsd-browser (Python) targets:"
+	@echo "gsd (Python) targets:"
 	@echo "  make dev           Create .venv and install deps"
 	@echo "  make lint          Run Ruff lint (requires dev)"
 	@echo "  make test          Run Pytest (requires dev)"
@@ -54,9 +54,9 @@ sanity-real:
 		exit 2; \
 	fi
 	@if [ -x .venv/bin/python ]; then \
-		GSD_BROWSER_MODEL=$${GSD_BROWSER_MODEL:-claude-sonnet-4-5} \
-		GSD_BROWSER_WEB_EVAL_STEP_TIMEOUT_S=$${GSD_BROWSER_WEB_EVAL_STEP_TIMEOUT_S:-30.0} \
-		GSD_BROWSER_WEB_EVAL_BUDGET_S=$${GSD_BROWSER_WEB_EVAL_BUDGET_S:-120.0} \
+		GSD_MODEL=$${GSD_MODEL:-claude-sonnet-4-5} \
+		GSD_WEB_EVAL_STEP_TIMEOUT_S=$${GSD_WEB_EVAL_STEP_TIMEOUT_S:-30.0} \
+		GSD_WEB_EVAL_BUDGET_S=$${GSD_WEB_EVAL_BUDGET_S:-120.0} \
 		. .venv/bin/activate && python ./scripts/real_world_sanity.py $(SANITY_REAL_ARGS); \
 	else \
 		echo "Run 'make dev' first to create .venv"; \
@@ -76,13 +76,13 @@ prompt-compare:
 		echo "To run: PROMPT_COMPARE_CONFIRM=1 make prompt-compare"; \
 		echo ""; \
 		echo "Options:"; \
-		echo "  GSD_BROWSER_MODEL=<model>        Override model (default: claude-haiku-4-5)"; \
+		echo "  GSD_MODEL=<model>        Override model (default: claude-haiku-4-5)"; \
 		echo "  --step-timeout=<seconds>         Override step timeout (default: 60.0)"; \
 		echo "  --budget=<seconds>               Override budget timeout (default: 240.0)"; \
 		exit 2; \
 	fi
 	@if [ -x .venv/bin/python ]; then \
-		GSD_BROWSER_MODEL=$${GSD_BROWSER_MODEL:-claude-haiku-4-5} \
+		GSD_MODEL=$${GSD_MODEL:-claude-haiku-4-5} \
 		. .venv/bin/activate && python ./scripts/prompt_comparison_harness.py; \
 	else \
 		echo "Run 'make dev' first to create .venv"; \
@@ -93,7 +93,7 @@ diagnose:
 	./scripts/diagnose.sh
 
 docker-build:
-	docker build -t gsd-browser:dev -f docker/Dockerfile .
+	docker build -t gsd:dev -f docker/Dockerfile .
 
 docker-run:
-	docker run --rm -e ANTHROPIC_API_KEY=$${ANTHROPIC_API_KEY} gsd-browser:dev
+	docker run --rm -e ANTHROPIC_API_KEY=$${ANTHROPIC_API_KEY} gsd:dev

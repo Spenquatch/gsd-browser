@@ -61,7 +61,7 @@ def test_cli_llm_provider_overrides_env_selection(monkeypatch: pytest.MonkeyPatc
 
     llm = providers.get_browser_use_llm(
         llm_provider="chatbrowseruse",
-        env={"GSD_BROWSER_LLM_PROVIDER": "ollama", "BROWSER_USE_API_KEY": "test-key"},
+        env={"GSD_LLM_PROVIDER": "ollama", "BROWSER_USE_API_KEY": "test-key"},
     )
 
     assert llm is not None
@@ -76,7 +76,7 @@ def test_env_llm_provider_used_when_cli_unset(monkeypatch: pytest.MonkeyPatch) -
 
     llm = providers.get_browser_use_llm(
         llm_provider=None,
-        env={"GSD_BROWSER_LLM_PROVIDER": "ollama"},
+        env={"GSD_LLM_PROVIDER": "ollama"},
     )
 
     assert llm is not None
@@ -92,7 +92,7 @@ def test_cloud_provider_missing_api_key_errors_helpfully(monkeypatch: pytest.Mon
     with pytest.raises(RuntimeError) as excinfo:
         providers.get_browser_use_llm(
             llm_provider="chatbrowseruse",
-            env={"GSD_BROWSER_LLM_PROVIDER": "chatbrowseruse"},
+            env={"GSD_LLM_PROVIDER": "chatbrowseruse"},
         )
 
     message = str(excinfo.value)

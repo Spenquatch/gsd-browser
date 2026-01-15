@@ -1,4 +1,4 @@
-"""Configuration loader for the GSD Browser MCP server."""
+"""Configuration loader for the GSD MCP server."""
 
 from __future__ import annotations
 
@@ -23,25 +23,25 @@ from .user_config import default_env_path
 class Settings(BaseModel):
     """User configuration driven by environment variables or .env files."""
 
-    llm_provider: LLMProvider = Field("anthropic", alias="GSD_BROWSER_LLM_PROVIDER")
+    llm_provider: LLMProvider = Field("anthropic", alias="GSD_LLM_PROVIDER")
 
     # Model selection
     # DEFAULT: claude-haiku-4-5 with Sonnet fallback (cost-optimized with reliability safety net)
     # Alternative: claude-sonnet-4-5 (100% pass rate, higher cost, no fallback needed)
-    # Override via GSD_BROWSER_MODEL environment variable or .env file
+    # Override via GSD_MODEL environment variable or .env file
     # See .env.example and artifacts/real_world_sanity/MODEL_COMPARISON_haiku_vs_sonnet.md
-    model: str = Field("claude-haiku-4-5", alias="GSD_BROWSER_MODEL")
+    model: str = Field("claude-haiku-4-5", alias="GSD_MODEL")
 
     fallback_llm_provider: LLMProvider | None = Field(
-        "anthropic", alias="GSD_BROWSER_FALLBACK_LLM_PROVIDER"
+        "anthropic", alias="GSD_FALLBACK_LLM_PROVIDER"
     )
-    fallback_model: str = Field("claude-sonnet-4-5", alias="GSD_BROWSER_FALLBACK_MODEL")
+    fallback_model: str = Field("claude-sonnet-4-5", alias="GSD_FALLBACK_MODEL")
 
     openai_add_schema_to_system_prompt: bool = Field(
-        True, alias="GSD_BROWSER_OPENAI_ADD_SCHEMA_TO_SYSTEM_PROMPT"
+        True, alias="GSD_OPENAI_ADD_SCHEMA_TO_SYSTEM_PROMPT"
     )
     openai_dont_force_structured_output: bool = Field(
-        False, alias="GSD_BROWSER_OPENAI_DONT_FORCE_STRUCTURED_OUTPUT"
+        False, alias="GSD_OPENAI_DONT_FORCE_STRUCTURED_OUTPUT"
     )
 
     anthropic_api_key: str = Field("", alias="ANTHROPIC_API_KEY")
@@ -49,17 +49,17 @@ class Settings(BaseModel):
     browser_use_api_key: str = Field("", alias="BROWSER_USE_API_KEY")
     browser_use_llm_url: str = Field("", alias="BROWSER_USE_LLM_URL")
     ollama_host: str = Field("http://localhost:11434", alias="OLLAMA_HOST")
-    browser_executable_path: str = Field("", alias="GSD_BROWSER_BROWSER_EXECUTABLE_PATH")
+    browser_executable_path: str = Field("", alias="GSD_BROWSER_EXECUTABLE_PATH")
 
     # MCP tool exposure controls
     # - If enabled_tools is set, only those tools are advertised (allowlist).
     # - If disabled_tools is set, those tools are removed from the advertised set (denylist).
     # - If enabled_tools is unset/empty, all tools are enabled by default.
-    mcp_enabled_tools: str = Field("", alias="GSD_BROWSER_MCP_ENABLED_TOOLS")
-    mcp_disabled_tools: str = Field("", alias="GSD_BROWSER_MCP_DISABLED_TOOLS")
+    mcp_enabled_tools: str = Field("", alias="GSD_MCP_ENABLED_TOOLS")
+    mcp_disabled_tools: str = Field("", alias="GSD_MCP_DISABLED_TOOLS")
 
     log_level: str = Field("INFO", alias="LOG_LEVEL")
-    json_logs: bool = Field(False, alias="GSD_BROWSER_JSON_LOGS")
+    json_logs: bool = Field(False, alias="GSD_JSON_LOGS")
     streaming_mode: StreamingMode = Field("cdp", alias="STREAMING_MODE")
     streaming_quality: StreamingQuality = Field("med", alias="STREAMING_QUALITY")
 
@@ -68,9 +68,9 @@ class Settings(BaseModel):
     # explicitly set via environment variables or MCP client parameters.
     # Priority: MCP client params > env vars > None (browser-use defaults)
     # Browser-use defaults: step_timeout=180s, llm_timeout=90s (Claude)
-    web_eval_budget_s: float | None = Field(None, alias="GSD_BROWSER_WEB_EVAL_BUDGET_S")
-    web_eval_max_steps: int | None = Field(None, alias="GSD_BROWSER_WEB_EVAL_MAX_STEPS")
-    web_eval_step_timeout_s: float | None = Field(None, alias="GSD_BROWSER_WEB_EVAL_STEP_TIMEOUT_S")
+    web_eval_budget_s: float | None = Field(None, alias="GSD_WEB_EVAL_BUDGET_S")
+    web_eval_max_steps: int | None = Field(None, alias="GSD_WEB_EVAL_MAX_STEPS")
+    web_eval_step_timeout_s: float | None = Field(None, alias="GSD_WEB_EVAL_STEP_TIMEOUT_S")
 
     # Vision mode configuration
     # Controls how browser-use perceives web pages (DOM-only, vision-only, or hybrid)
@@ -79,9 +79,9 @@ class Settings(BaseModel):
     #   - "true": Always use vision (hybrid DOM+Vision, most reliable but expensive)
     #   - "false": DOM-only (no screenshots, fastest and cheapest)
     # RECOMMENDED: "auto" for balanced cost and capability
-    use_vision: str = Field("auto", alias="GSD_BROWSER_USE_VISION")
+    use_vision: str = Field("auto", alias="GSD_USE_VISION")
 
-    auto_pause_on_take_control: bool = Field(True, alias="GSD_BROWSER_AUTO_PAUSE_ON_TAKE_CONTROL")
+    auto_pause_on_take_control: bool = Field(True, alias="GSD_AUTO_PAUSE_ON_TAKE_CONTROL")
 
     model_config = ConfigDict(populate_by_name=True)
 
@@ -93,11 +93,11 @@ class Settings(BaseModel):
         """
 
         if not include_key_placeholders:
-            return {"GSD_BROWSER_ENV_FILE": str(default_env_path())}
+            return {"GSD_ENV_FILE": str(default_env_path())}
 
         env: dict[str, str] = {
-            "GSD_BROWSER_LLM_PROVIDER": self.llm_provider,
-            "GSD_BROWSER_MODEL": self.model,
+            "GSD_LLM_PROVIDER": self.llm_provider,
+            "GSD_MODEL": self.model,
         }
 
         if self.llm_provider == "ollama":
@@ -114,9 +114,9 @@ class Settings(BaseModel):
 
             # Include fallback configuration if set
             if self.fallback_llm_provider:
-                env["GSD_BROWSER_FALLBACK_LLM_PROVIDER"] = str(self.fallback_llm_provider)
+                env["GSD_FALLBACK_LLM_PROVIDER"] = str(self.fallback_llm_provider)
             if self.fallback_model:
-                env["GSD_BROWSER_FALLBACK_MODEL"] = self.fallback_model
+                env["GSD_FALLBACK_MODEL"] = self.fallback_model
 
         return env
 
@@ -124,12 +124,12 @@ class Settings(BaseModel):
         """Return JSON snippet for MCP configuration."""
         snippet = {
             "mcpServers": {
-                "gsd-browser": {
+                "gsd": {
                     "type": "stdio",
                     "command": "gsd",
                     "args": ["mcp", "serve"],
                     "env": self._mcp_env(include_key_placeholders=include_key_placeholders),
-                    "description": "GSD Browser MCP server",
+                    "description": "GSD MCP server",
                 }
             }
         }
@@ -140,12 +140,12 @@ class Settings(BaseModel):
         env = self._mcp_env(include_key_placeholders=include_key_placeholders)
         env_lines = "\n".join(f'{key} = "{value}"' for key, value in env.items())
         return (
-            "[mcp_servers.gsd-browser]\n"
+            "[mcp_servers.gsd]\n"
             'command = "gsd"\n'
             'args = ["mcp", "serve"]\n'
-            'description = "GSD Browser MCP server"\n'
+            'description = "GSD MCP server"\n'
             "\n"
-            "[mcp_servers.gsd-browser.env]\n"
+            "[mcp_servers.gsd.env]\n"
             f"{env_lines}\n"
         )
 
@@ -169,10 +169,10 @@ def load_settings(
     # different working directory, e.g. from an MCP host like Claude).
     if env_file == ".env":
         override_env_file = None
-        if env and env.get("GSD_BROWSER_ENV_FILE"):
-            override_env_file = env.get("GSD_BROWSER_ENV_FILE")
-        elif os.environ.get("GSD_BROWSER_ENV_FILE"):
-            override_env_file = os.environ.get("GSD_BROWSER_ENV_FILE")
+        if env and env.get("GSD_ENV_FILE"):
+            override_env_file = env.get("GSD_ENV_FILE")
+        elif os.environ.get("GSD_ENV_FILE"):
+            override_env_file = os.environ.get("GSD_ENV_FILE")
         if override_env_file:
             selected_env_file = override_env_file
 
@@ -180,7 +180,7 @@ def load_settings(
         env_path = Path(selected_env_file).expanduser()
         if env_path.exists():
             load_dotenv(env_path, override=False)
-        elif selected_env_file == ".env" and not (env and env.get("GSD_BROWSER_ENV_FILE")):
+        elif selected_env_file == ".env" and not (env and env.get("GSD_ENV_FILE")):
             # Production default: also look for a stable per-user config file so a
             # pipx-installed CLI works from any directory without extra env vars.
             user_env_path = default_env_path()
@@ -188,8 +188,8 @@ def load_settings(
                 load_dotenv(user_env_path, override=False)
 
     merged = _build_env_mapping(env)
-    llm_provider = normalize_llm_provider(merged.get("GSD_BROWSER_LLM_PROVIDER"))
-    fallback_llm_provider_raw = merged.get("GSD_BROWSER_FALLBACK_LLM_PROVIDER")
+    llm_provider = normalize_llm_provider(merged.get("GSD_LLM_PROVIDER"))
+    fallback_llm_provider_raw = merged.get("GSD_FALLBACK_LLM_PROVIDER")
     fallback_llm_provider = (
         normalize_llm_provider(fallback_llm_provider_raw) if fallback_llm_provider_raw else None
     )
@@ -197,14 +197,14 @@ def load_settings(
     streaming_quality = normalize_streaming_quality(merged.get("STREAMING_QUALITY"))
     try:
         payload: dict[str, object] = {
-            "GSD_BROWSER_LLM_PROVIDER": llm_provider,
+            "GSD_LLM_PROVIDER": llm_provider,
             "STREAMING_MODE": streaming_mode,
             "STREAMING_QUALITY": streaming_quality,
         }
         # Only include fallback provider if explicitly set in environment
         # (otherwise Pydantic Field default will be used)
         if fallback_llm_provider is not None:
-            payload["GSD_BROWSER_FALLBACK_LLM_PROVIDER"] = fallback_llm_provider
+            payload["GSD_FALLBACK_LLM_PROVIDER"] = fallback_llm_provider
         if merged.get("ANTHROPIC_API_KEY") is not None:
             payload["ANTHROPIC_API_KEY"] = merged["ANTHROPIC_API_KEY"]
         if merged.get("OPENAI_API_KEY") is not None:
@@ -215,58 +215,58 @@ def load_settings(
             payload["BROWSER_USE_LLM_URL"] = merged["BROWSER_USE_LLM_URL"]
         if merged.get("OLLAMA_HOST") is not None:
             payload["OLLAMA_HOST"] = merged["OLLAMA_HOST"]
-        if merged.get("GSD_BROWSER_BROWSER_EXECUTABLE_PATH") is not None:
-            payload["GSD_BROWSER_BROWSER_EXECUTABLE_PATH"] = merged[
-                "GSD_BROWSER_BROWSER_EXECUTABLE_PATH"
+        if merged.get("GSD_BROWSER_EXECUTABLE_PATH") is not None:
+            payload["GSD_BROWSER_EXECUTABLE_PATH"] = merged[
+                "GSD_BROWSER_EXECUTABLE_PATH"
             ]
-        if merged.get("GSD_BROWSER_MCP_ENABLED_TOOLS") is not None:
-            payload["GSD_BROWSER_MCP_ENABLED_TOOLS"] = merged["GSD_BROWSER_MCP_ENABLED_TOOLS"]
-        if merged.get("GSD_BROWSER_MCP_DISABLED_TOOLS") is not None:
-            payload["GSD_BROWSER_MCP_DISABLED_TOOLS"] = merged["GSD_BROWSER_MCP_DISABLED_TOOLS"]
+        if merged.get("GSD_MCP_ENABLED_TOOLS") is not None:
+            payload["GSD_MCP_ENABLED_TOOLS"] = merged["GSD_MCP_ENABLED_TOOLS"]
+        if merged.get("GSD_MCP_DISABLED_TOOLS") is not None:
+            payload["GSD_MCP_DISABLED_TOOLS"] = merged["GSD_MCP_DISABLED_TOOLS"]
 
-        model_value = merged.get("GSD_BROWSER_MODEL")
+        model_value = merged.get("GSD_MODEL")
         model_value = model_value.strip() if isinstance(model_value, str) else None
         if model_value:
-            payload["GSD_BROWSER_MODEL"] = model_value
+            payload["GSD_MODEL"] = model_value
         elif llm_provider == "chatbrowseruse":
-            payload["GSD_BROWSER_MODEL"] = "bu-latest"
+            payload["GSD_MODEL"] = "bu-latest"
         elif llm_provider == "openai":
-            payload["GSD_BROWSER_MODEL"] = "gpt-4o-mini"
+            payload["GSD_MODEL"] = "gpt-4o-mini"
         elif llm_provider == "ollama":
-            payload["GSD_BROWSER_MODEL"] = "llama3.2"
+            payload["GSD_MODEL"] = "llama3.2"
 
-        if merged.get("GSD_BROWSER_FALLBACK_MODEL") is not None:
-            payload["GSD_BROWSER_FALLBACK_MODEL"] = merged["GSD_BROWSER_FALLBACK_MODEL"]
-        if merged.get("GSD_BROWSER_OPENAI_ADD_SCHEMA_TO_SYSTEM_PROMPT") is not None:
-            payload["GSD_BROWSER_OPENAI_ADD_SCHEMA_TO_SYSTEM_PROMPT"] = merged[
-                "GSD_BROWSER_OPENAI_ADD_SCHEMA_TO_SYSTEM_PROMPT"
+        if merged.get("GSD_FALLBACK_MODEL") is not None:
+            payload["GSD_FALLBACK_MODEL"] = merged["GSD_FALLBACK_MODEL"]
+        if merged.get("GSD_OPENAI_ADD_SCHEMA_TO_SYSTEM_PROMPT") is not None:
+            payload["GSD_OPENAI_ADD_SCHEMA_TO_SYSTEM_PROMPT"] = merged[
+                "GSD_OPENAI_ADD_SCHEMA_TO_SYSTEM_PROMPT"
             ]
-        if merged.get("GSD_BROWSER_OPENAI_DONT_FORCE_STRUCTURED_OUTPUT") is not None:
-            payload["GSD_BROWSER_OPENAI_DONT_FORCE_STRUCTURED_OUTPUT"] = merged[
-                "GSD_BROWSER_OPENAI_DONT_FORCE_STRUCTURED_OUTPUT"
+        if merged.get("GSD_OPENAI_DONT_FORCE_STRUCTURED_OUTPUT") is not None:
+            payload["GSD_OPENAI_DONT_FORCE_STRUCTURED_OUTPUT"] = merged[
+                "GSD_OPENAI_DONT_FORCE_STRUCTURED_OUTPUT"
             ]
         if merged.get("LOG_LEVEL") is not None:
             payload["LOG_LEVEL"] = merged["LOG_LEVEL"]
-        if merged.get("GSD_BROWSER_JSON_LOGS") is not None:
-            payload["GSD_BROWSER_JSON_LOGS"] = merged["GSD_BROWSER_JSON_LOGS"]
-        if merged.get("GSD_BROWSER_WEB_EVAL_BUDGET_S") is not None:
-            payload["GSD_BROWSER_WEB_EVAL_BUDGET_S"] = merged["GSD_BROWSER_WEB_EVAL_BUDGET_S"]
-        if merged.get("GSD_BROWSER_WEB_EVAL_MAX_STEPS") is not None:
-            payload["GSD_BROWSER_WEB_EVAL_MAX_STEPS"] = merged["GSD_BROWSER_WEB_EVAL_MAX_STEPS"]
-        if merged.get("GSD_BROWSER_WEB_EVAL_STEP_TIMEOUT_S") is not None:
-            payload["GSD_BROWSER_WEB_EVAL_STEP_TIMEOUT_S"] = merged[
-                "GSD_BROWSER_WEB_EVAL_STEP_TIMEOUT_S"
+        if merged.get("GSD_JSON_LOGS") is not None:
+            payload["GSD_JSON_LOGS"] = merged["GSD_JSON_LOGS"]
+        if merged.get("GSD_WEB_EVAL_BUDGET_S") is not None:
+            payload["GSD_WEB_EVAL_BUDGET_S"] = merged["GSD_WEB_EVAL_BUDGET_S"]
+        if merged.get("GSD_WEB_EVAL_MAX_STEPS") is not None:
+            payload["GSD_WEB_EVAL_MAX_STEPS"] = merged["GSD_WEB_EVAL_MAX_STEPS"]
+        if merged.get("GSD_WEB_EVAL_STEP_TIMEOUT_S") is not None:
+            payload["GSD_WEB_EVAL_STEP_TIMEOUT_S"] = merged[
+                "GSD_WEB_EVAL_STEP_TIMEOUT_S"
             ]
-        if merged.get("GSD_BROWSER_USE_VISION") is not None:
-            payload["GSD_BROWSER_USE_VISION"] = merged["GSD_BROWSER_USE_VISION"]
-        if merged.get("GSD_BROWSER_AUTO_PAUSE_ON_TAKE_CONTROL") is not None:
-            payload["GSD_BROWSER_AUTO_PAUSE_ON_TAKE_CONTROL"] = merged[
-                "GSD_BROWSER_AUTO_PAUSE_ON_TAKE_CONTROL"
+        if merged.get("GSD_USE_VISION") is not None:
+            payload["GSD_USE_VISION"] = merged["GSD_USE_VISION"]
+        if merged.get("GSD_AUTO_PAUSE_ON_TAKE_CONTROL") is not None:
+            payload["GSD_AUTO_PAUSE_ON_TAKE_CONTROL"] = merged[
+                "GSD_AUTO_PAUSE_ON_TAKE_CONTROL"
             ]
 
         return Settings.model_validate(payload, strict=strict)
     except ValidationError as exc:
-        raise RuntimeError(f"Invalid gsd-browser configuration: {exc}") from exc
+        raise RuntimeError(f"Invalid gsd configuration: {exc}") from exc
 
 
 __all__ = ["Settings", "load_settings"]

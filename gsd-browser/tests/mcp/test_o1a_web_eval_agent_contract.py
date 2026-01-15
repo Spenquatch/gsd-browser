@@ -19,7 +19,7 @@ def _run(value: Any) -> Any:
 
 def _o1a_contract_present() -> bool:
     module_src = inspect.getsource(mcp_server_mod)
-    return "gsd-browser.web_eval_agent.v1" in module_src
+    return "gsd.web_eval_agent.v1" in module_src
 
 
 def _assert_uuid(value: str) -> None:
@@ -121,7 +121,7 @@ def test_o1a_web_eval_agent_json_shape_and_final_result_mapping(
     }
     assert required_keys.issubset(payload.keys())
 
-    assert payload["version"] == "gsd-browser.web_eval_agent.v1"
+    assert payload["version"] == "gsd.web_eval_agent.v1"
     _assert_uuid(payload["session_id"])
     _assert_uuid(payload["tool_call_id"])
 

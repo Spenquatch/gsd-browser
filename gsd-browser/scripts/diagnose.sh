@@ -18,7 +18,7 @@ uname -a || true
 $PY_BIN --version || true
 
 headline "Tooling availability"
-for tool in uv poetry pipx gsd-browser; do
+for tool in uv poetry pipx gsd; do
   if command -v "$tool" >/dev/null 2>&1; then
     echo "- $tool: $(command -v "$tool")"
   else
@@ -27,7 +27,7 @@ for tool in uv poetry pipx gsd-browser; do
 done
 
 headline "Environment vars"
-printenv | grep -E 'ANTHROPIC|GSD_BROWSER_MODEL|GSD_BROWSER_JSON_LOGS|LOG_LEVEL' || echo "(none set)"
+printenv | grep -E 'ANTHROPIC|GSD_MODEL|GSD_JSON_LOGS|LOG_LEVEL' || echo "(none set)"
 
 headline "Config validation"
  "$PY_BIN" - <<'PY'

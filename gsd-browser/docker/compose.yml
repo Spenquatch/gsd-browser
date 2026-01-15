@@ -1,9 +1,9 @@
 services:
-  gsd-browser:
+  gsd:
     build: ..
     environment:
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
-      - GSD_BROWSER_MODEL=${GSD_BROWSER_MODEL:-claude-haiku-4-5}
+      - GSD_MODEL=${GSD_MODEL:-claude-haiku-4-5}
     ports:
       - "5009:5009"
     command: serve

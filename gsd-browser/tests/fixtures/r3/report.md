@@ -1,4 +1,4 @@
-# gsd-browser real-world sanity report
+# gsd real-world sanity report
 
 - Timestamp (UTC): `2026-01-05T00:00:00Z`
 - Output dir: `artifacts/real_world_sanity/20260105-000000`

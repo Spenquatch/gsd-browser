@@ -36,7 +36,7 @@ def validate_llm_settings(settings: Settings) -> None:
     model_lower = model.strip().lower()
     if not model_lower:
         raise ValueError(
-            "Missing GSD_BROWSER_MODEL. Set a provider-specific model name (example: "
+            "Missing GSD_MODEL. Set a provider-specific model name (example: "
             "claude-haiku-4-5, gpt-4o-mini, bu-latest, llama3.2)."
         )
 
@@ -44,11 +44,11 @@ def validate_llm_settings(settings: Settings) -> None:
         if not settings.browser_use_api_key:
             raise ValueError(
                 "Missing BROWSER_USE_API_KEY (required when "
-                "GSD_BROWSER_LLM_PROVIDER=chatbrowseruse)."
+                "GSD_LLM_PROVIDER=chatbrowseruse)."
             )
         if model not in ("bu-latest", "bu-1-0") and not model.startswith("browser-use/"):
             raise ValueError(
-                "Invalid GSD_BROWSER_MODEL for chatbrowseruse; expected bu-latest, bu-1-0, "
+                "Invalid GSD_MODEL for chatbrowseruse; expected bu-latest, bu-1-0, "
                 "or browser-use/<model>."
             )
         return
@@ -56,11 +56,11 @@ def validate_llm_settings(settings: Settings) -> None:
     if provider == "openai":
         if not settings.openai_api_key:
             raise ValueError(
-                "Missing OPENAI_API_KEY (required when GSD_BROWSER_LLM_PROVIDER=openai)."
+                "Missing OPENAI_API_KEY (required when GSD_LLM_PROVIDER=openai)."
             )
         if model_lower.startswith(("claude-", "bu-", "browser-use/")):
             raise ValueError(
-                "GSD_BROWSER_MODEL looks incompatible with GSD_BROWSER_LLM_PROVIDER=openai. "
+                "GSD_MODEL looks incompatible with GSD_LLM_PROVIDER=openai. "
                 "Set an OpenAI model (recommended: gpt-4o-mini) or switch providers."
             )
 
@@ -79,9 +79,9 @@ def validate_llm_settings(settings: Settings) -> None:
         if not supports_json_schema and not settings.openai_dont_force_structured_output:
             raise ValueError(
                 "OpenAI provider requires a model that supports JSON schema structured output "
-                "for browser-use actions. Set GSD_BROWSER_MODEL to a modern model "
+                "for browser-use actions. Set GSD_MODEL to a modern model "
                 "(recommended: gpt-4o-mini) or opt into unforced structured output by setting "
-                "GSD_BROWSER_OPENAI_DONT_FORCE_STRUCTURED_OUTPUT=true "
+                "GSD_OPENAI_DONT_FORCE_STRUCTURED_OUTPUT=true "
                 "(may increase AgentOutput validation failures)."
             )
         return
@@ -89,26 +89,26 @@ def validate_llm_settings(settings: Settings) -> None:
     if provider == "anthropic":
         if not settings.anthropic_api_key:
             raise ValueError(
-                "Missing ANTHROPIC_API_KEY (required when GSD_BROWSER_LLM_PROVIDER=anthropic)."
+                "Missing ANTHROPIC_API_KEY (required when GSD_LLM_PROVIDER=anthropic)."
             )
         if model_lower.startswith(("gpt-", "o1", "o3", "o4", "bu-", "browser-use/")):
             raise ValueError(
-                "GSD_BROWSER_MODEL looks incompatible with GSD_BROWSER_LLM_PROVIDER=anthropic. "
+                "GSD_MODEL looks incompatible with GSD_LLM_PROVIDER=anthropic. "
                 "Set a Claude model (recommended: claude-haiku-4-5) or switch providers."
             )
         return
 
     if provider == "ollama":
         if not settings.ollama_host:
-            raise ValueError("Missing OLLAMA_HOST (required when GSD_BROWSER_LLM_PROVIDER=ollama).")
+            raise ValueError("Missing OLLAMA_HOST (required when GSD_LLM_PROVIDER=ollama).")
         if model_lower.startswith(("gpt-", "o1", "o3", "o4", "claude-", "bu-", "browser-use/")):
             raise ValueError(
-                "GSD_BROWSER_MODEL looks incompatible with GSD_BROWSER_LLM_PROVIDER=ollama. "
+                "GSD_MODEL looks incompatible with GSD_LLM_PROVIDER=ollama. "
                 "Set the name of a local Ollama model (example: llama3.2)."
             )
         return
 
-    raise ValueError(f"Unsupported GSD_BROWSER_LLM_PROVIDER: {provider!r}")
+    raise ValueError(f"Unsupported GSD_LLM_PROVIDER: {provider!r}")
 
 
 @dataclass(frozen=True)
@@ -154,7 +154,7 @@ def _create_llm(
             **(timeout_kwargs or {}),
         )
 
-    raise ValueError(f"Unsupported GSD_BROWSER_LLM_PROVIDER: {provider!r}")
+    raise ValueError(f"Unsupported GSD_LLM_PROVIDER: {provider!r}")
 
 
 def create_browser_use_llms(
@@ -167,18 +167,18 @@ def create_browser_use_llms(
         import browser_use  # type: ignore[import-not-found]  # noqa: F401
     except Exception as exc:  # noqa: BLE001
         raise RuntimeError(
-            "browser-use is not installed. Install gsd-browser with the browser-use dependency."
+            "browser-use is not installed. Install gsd with the browser-use dependency."
         ) from exc
 
     fallback_provider = settings.fallback_llm_provider
     fallback_model = settings.fallback_model.strip()
     if fallback_provider is None and fallback_model:
         raise ValueError(
-            "GSD_BROWSER_FALLBACK_MODEL is set but GSD_BROWSER_FALLBACK_LLM_PROVIDER is missing."
+            "GSD_FALLBACK_MODEL is set but GSD_FALLBACK_LLM_PROVIDER is missing."
         )
     if fallback_provider is not None and not fallback_model:
         raise ValueError(
-            "GSD_BROWSER_FALLBACK_LLM_PROVIDER is set but GSD_BROWSER_FALLBACK_MODEL is missing."
+            "GSD_FALLBACK_LLM_PROVIDER is set but GSD_FALLBACK_MODEL is missing."
         )
 
     primary = _create_llm(settings.llm_provider, settings.model, settings, timeout_s=timeout_s)
