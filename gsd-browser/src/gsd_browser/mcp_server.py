@@ -581,20 +581,33 @@ async def web_eval_agent(
     normalized_url = _normalize_url(url)
 
     warnings: list[str] = []
-    default_budget_s = float(getattr(settings, "web_eval_budget_s", 60.0))
-    default_max_steps = int(getattr(settings, "web_eval_max_steps", 25))
-    default_step_timeout_s = float(getattr(settings, "web_eval_step_timeout_s", 15.0))
+    # Get defaults from settings (may be None if not set in env)
+    default_budget_s = getattr(settings, "web_eval_budget_s", None)
+    default_max_steps = getattr(settings, "web_eval_max_steps", None)
+    default_step_timeout_s = getattr(settings, "web_eval_step_timeout_s", None)
     try:
-        effective_budget_s = default_budget_s if budget_s is None else float(budget_s)
-        effective_max_steps = default_max_steps if max_steps is None else int(max_steps)
-        effective_step_timeout_s = (
-            default_step_timeout_s if step_timeout_s is None else float(step_timeout_s)
+        # Priority: MCP client params > env vars > None (browser-use defaults)
+        effective_budget_s: float | None = (
+            float(budget_s) if budget_s is not None
+            else float(default_budget_s) if default_budget_s is not None
+            else None
         )
-        if effective_budget_s <= 0:
+        effective_max_steps: int | None = (
+            int(max_steps) if max_steps is not None
+            else int(default_max_steps) if default_max_steps is not None
+            else None
+        )
+        effective_step_timeout_s: float | None = (
+            float(step_timeout_s) if step_timeout_s is not None
+            else float(default_step_timeout_s) if default_step_timeout_s is not None
+            else None
+        )
+        # Validation: if set, values must be positive
+        if effective_budget_s is not None and effective_budget_s <= 0:
             raise ValueError("budget_s must be > 0")
-        if effective_max_steps <= 0:
+        if effective_max_steps is not None and effective_max_steps <= 0:
             raise ValueError("max_steps must be > 0")
-        if effective_step_timeout_s <= 0:
+        if effective_step_timeout_s is not None and effective_step_timeout_s <= 0:
             raise ValueError("step_timeout_s must be > 0")
     except (TypeError, ValueError) as exc:
         payload = {
@@ -1294,21 +1307,22 @@ async def web_eval_agent(
                     agent_kwargs.pop("initial_actions", None)
                 if "max_failures" not in signature.parameters and not has_kwargs:
                     agent_kwargs.pop("max_failures", None)
-                if "max_steps" in signature.parameters or has_kwargs:
-                    agent_kwargs["max_steps"] = effective_max_steps
-                else:
-                    warnings.append(
-                        "browser-use Agent does not support max_steps; default not enforced"
-                    )
-                # Let browser-use use its defaults: step_timeout=180s, llm_timeout=90s (for Claude)
-                # if "step_timeout" in signature.parameters or has_kwargs:
-                #     agent_kwargs["step_timeout"] = effective_step_timeout_s
-                # else:
-                #     warnings.append(
-                #         "browser-use Agent does not support step_timeout; default not enforced"
-                #     )
-                # if "llm_timeout" in signature.parameters or has_kwargs:
-                #     agent_kwargs["llm_timeout"] = effective_step_timeout_s
+                # Only pass max_steps if explicitly set (env or client param)
+                if effective_max_steps is not None:
+                    if "max_steps" in signature.parameters or has_kwargs:
+                        agent_kwargs["max_steps"] = effective_max_steps
+                    else:
+                        warnings.append(
+                            "browser-use Agent does not support max_steps; value not enforced"
+                        )
+                # Only pass step_timeout if explicitly set (env or client param)
+                if effective_step_timeout_s is not None:
+                    if "step_timeout" in signature.parameters or has_kwargs:
+                        agent_kwargs["step_timeout"] = effective_step_timeout_s
+                    else:
+                        warnings.append(
+                            "browser-use Agent does not support step_timeout; value not enforced"
+                        )
             except (TypeError, ValueError):
                 pass
 
@@ -1340,19 +1354,28 @@ async def web_eval_agent(
                 )
                 if "on_step_end" in signature.parameters or has_kwargs:
                     run_kwargs["on_step_end"] = pause_gate
-                if "max_steps" in signature.parameters or has_kwargs:
-                    run_kwargs.setdefault("max_steps", effective_max_steps)
-                # Let browser-use use its default step_timeout (180s)
-                # if "step_timeout" in signature.parameters or has_kwargs:
-                #     run_kwargs.setdefault("step_timeout", effective_step_timeout_s)
+                # Only pass max_steps if explicitly set
+                if effective_max_steps is not None:
+                    if "max_steps" in signature.parameters or has_kwargs:
+                        run_kwargs.setdefault("max_steps", effective_max_steps)
+                # Only pass step_timeout if explicitly set
+                if effective_step_timeout_s is not None:
+                    if "step_timeout" in signature.parameters or has_kwargs:
+                        run_kwargs.setdefault("step_timeout", effective_step_timeout_s)
             except (TypeError, ValueError):
                 run_kwargs["on_step_end"] = pause_gate
 
-            # Apply budget timeout to agent.run() execution only
+            # Apply budget timeout to agent.run() execution only if explicitly set
             # Don't count setup overhead (browser creation, CDP, agent initialization)
-            # against user's budget.
-            async with asyncio.timeout(effective_budget_s):
-                history = await agent.run(**run_kwargs)
+            # against user's budget. If not set, let browser-use govern its own timeouts.
+            async def run_agent() -> Any:
+                return await agent.run(**run_kwargs)
+
+            if effective_budget_s is not None:
+                async with asyncio.timeout(effective_budget_s):
+                    history = await run_agent()
+            else:
+                history = await run_agent()
         finally:
             cdp_attach_task.cancel()
             try:

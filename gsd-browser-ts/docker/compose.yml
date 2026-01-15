@@ -1,7 +1,0 @@
-services:
-  gsd-browser-ts:
-    build: ..
-    environment:
-      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
-      GSD_BROWSER_MODEL: ${GSD_BROWSER_MODEL:-claude-haiku-4-5}
-    command: serve

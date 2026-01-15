@@ -64,13 +64,13 @@ class Settings(BaseModel):
     streaming_quality: StreamingQuality = Field("med", alias="STREAMING_QUALITY")
 
     # Web evaluation timeouts
-    # NOTE: Defaults optimized for claude-haiku-4-5 with Sonnet fallback
-    # Budget is set generously (240s) since max_steps (25) is the real safety limit
-    # If task completes in 30s, budget of 240s doesn't matter - set generously
-    # See .env.example and artifacts/real_world_sanity/MODEL_COMPARISON_haiku_vs_sonnet.md
-    web_eval_budget_s: float = Field(240.0, alias="GSD_BROWSER_WEB_EVAL_BUDGET_S")
-    web_eval_max_steps: int = Field(25, alias="GSD_BROWSER_WEB_EVAL_MAX_STEPS")
-    web_eval_step_timeout_s: float = Field(15.0, alias="GSD_BROWSER_WEB_EVAL_STEP_TIMEOUT_S")
+    # NOTE: All defaults are None - browser-use's internal defaults are used unless
+    # explicitly set via environment variables or MCP client parameters.
+    # Priority: MCP client params > env vars > None (browser-use defaults)
+    # Browser-use defaults: step_timeout=180s, llm_timeout=90s (Claude)
+    web_eval_budget_s: float | None = Field(None, alias="GSD_BROWSER_WEB_EVAL_BUDGET_S")
+    web_eval_max_steps: int | None = Field(None, alias="GSD_BROWSER_WEB_EVAL_MAX_STEPS")
+    web_eval_step_timeout_s: float | None = Field(None, alias="GSD_BROWSER_WEB_EVAL_STEP_TIMEOUT_S")
 
     # Vision mode configuration
     # Controls how browser-use perceives web pages (DOM-only, vision-only, or hybrid)
