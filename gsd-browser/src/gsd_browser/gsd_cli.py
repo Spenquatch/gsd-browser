@@ -764,6 +764,20 @@ def browser_state_setup(
         "--executable-path",
         help="Optional browser executable path (uses Playwright-managed Chromium if unset).",
     ),
+    user_data_dir: str | None = typer.Option(
+        None,
+        "--user-data-dir",
+        help=(
+            "Launch Chrome/Chromium with a persistent user data directory "
+            "(uses your browser profile). For Chrome, this is typically the "
+            "'User Data' directory. Close other Chrome instances first."
+        ),
+    ),
+    profile_directory: str | None = typer.Option(
+        None,
+        "--profile-directory",
+        help="Chrome profile directory name inside user-data-dir (e.g. Default, 'Profile 1').",
+    ),
 ) -> None:
     """Open a visible browser, complete login, then save storage state to ~/.gsd."""
 
@@ -786,6 +800,8 @@ def browser_state_setup(
                 close_timeout_ms=close_timeout_ms,
                 browser_channel=browser_channel,
                 executable_path=executable_path,
+                user_data_dir=user_data_dir,
+                profile_directory=profile_directory,
             )
         )
     typer.echo("Saved browser state.")
@@ -832,6 +848,20 @@ def browser_state_open(
         "--executable-path",
         help="Optional browser executable path (uses Playwright-managed Chromium if unset).",
     ),
+    user_data_dir: str | None = typer.Option(
+        None,
+        "--user-data-dir",
+        help=(
+            "Launch Chrome/Chromium with a persistent user data directory "
+            "(opens your browser profile). If --save-back is set, exports that "
+            "profile state into the state file on exit."
+        ),
+    ),
+    profile_directory: str | None = typer.Option(
+        None,
+        "--profile-directory",
+        help="Chrome profile directory name inside user-data-dir (e.g. Default, 'Profile 1').",
+    ),
 ) -> None:
     """Open a visible browser with a saved state loaded (manual verification)."""
 
@@ -855,6 +885,8 @@ def browser_state_open(
                 browser_channel=browser_channel,
                 executable_path=executable_path,
                 save_back=save_back,
+                user_data_dir=user_data_dir,
+                profile_directory=profile_directory,
             )
         )
     typer.echo(f"Opened with state: {state_path}")

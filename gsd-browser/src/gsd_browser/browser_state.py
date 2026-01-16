@@ -125,6 +125,8 @@ async def capture_state_interactive(
     close_timeout_ms: float = 0,
     browser_channel: str | None = None,
     executable_path: str | None = None,
+    user_data_dir: str | None = None,
+    profile_directory: str | None = None,
 ) -> Path:
     """Launch a visible browser for login and persist the resulting storage_state JSON."""
 
@@ -142,28 +144,87 @@ async def capture_state_interactive(
             if inferred:
                 launch_kwargs["executable_path"] = str(inferred)
 
-        browser = await playwright.chromium.launch(**launch_kwargs)  # type: ignore[arg-type]
-        context = await browser.new_context()
-        page = await context.new_page()
-        if url:
+        if user_data_dir:
+            args: list[str] = []
+            if profile_directory:
+                args.append(f"--profile-directory={profile_directory}")
+
+            context = await playwright.chromium.launch_persistent_context(  # type: ignore[arg-type]
+                user_data_dir=str(Path(user_data_dir).expanduser()),
+                args=args or None,
+                **launch_kwargs,
+            )
+            browser = getattr(context, "browser", None)
+            stop = asyncio.Event()
+
+            async def _save_once() -> None:
+                try:
+                    await context.storage_state(path=str(state_path))
+                    try:
+                        state_path.chmod(0o600)
+                    except OSError:
+                        pass
+                except Exception:
+                    return
+
+            async def _autosave_loop() -> None:
+                while not stop.is_set():
+                    await _save_once()
+                    try:
+                        await asyncio.wait_for(stop.wait(), timeout=5.0)
+                    except TimeoutError:
+                        continue
+
+            autosave_task = asyncio.create_task(_autosave_loop())
             try:
-                await page.goto(url, wait_until="domcontentloaded")
-            except Exception:
-                # Interactive mode: if initial navigation is slow/blocked, let the user drive.
+                page = context.pages[0] if context.pages else await context.new_page()
+                if url:
+                    try:
+                        await page.goto(url, wait_until="domcontentloaded")
+                    except Exception:
+                        pass
+
+                # Wait for the user to close the browser (or time out if configured).
+                if browser is not None:
+                    await _wait_for_browser_disconnected(
+                        browser=browser, timeout_ms=close_timeout_ms
+                    )
+                else:
+                    await context.wait_for_event("close", timeout=close_timeout_ms)
+            finally:
+                stop.set()
+                try:
+                    await autosave_task
+                except Exception:
+                    pass
+                await _save_once()
+                try:
+                    await context.close()
+                except Exception:
+                    pass
+        else:
+            browser = await playwright.chromium.launch(**launch_kwargs)  # type: ignore[arg-type]
+            context = await browser.new_context()
+            page = await context.new_page()
+            if url:
+                try:
+                    await page.goto(url, wait_until="domcontentloaded")
+                except Exception:
+                    # Interactive mode: if initial navigation is slow/blocked, let the user drive.
+                    pass
+
+            # Playwright defaults many waits to 30s; for interactive login capture we want to wait
+            # until the user closes the browser window (or the page is otherwise closed).
+            await page.wait_for_event("close", timeout=close_timeout_ms)
+
+            await context.storage_state(path=str(state_path))
+            try:
+                state_path.chmod(0o600)
+            except OSError:
                 pass
 
-        # Playwright defaults many waits to 30s; for interactive login capture we want to wait
-        # until the user closes the browser window (or the page is otherwise closed).
-        await page.wait_for_event("close", timeout=close_timeout_ms)
-
-        await context.storage_state(path=str(state_path))
-        try:
-            state_path.chmod(0o600)
-        except OSError:
-            pass
-
-        await context.close()
-        await browser.close()
+            await context.close()
+            await browser.close()
 
     return state_path
 
@@ -246,6 +307,8 @@ async def open_with_state_interactive(
     browser_channel: str | None = None,
     executable_path: str | None = None,
     save_back: bool = False,
+    user_data_dir: str | None = None,
+    profile_directory: str | None = None,
 ) -> Path:
     """Launch a visible browser with a saved storage_state loaded for manual verification.
 
@@ -254,8 +317,9 @@ async def open_with_state_interactive(
     """
 
     state_path = browser_state_path_for_id(state_id)
-    if not state_path.exists():
+    if not user_data_dir and not state_path.exists():
         raise FileNotFoundError(f"State file not found: {state_path}")
+    state_path.parent.mkdir(parents=True, exist_ok=True)
 
     async with async_playwright() as playwright:
         launch_kwargs: dict[str, object] = {"headless": False}
@@ -268,23 +332,53 @@ async def open_with_state_interactive(
             if inferred:
                 launch_kwargs["executable_path"] = str(inferred)
 
-        browser = await playwright.chromium.launch(**launch_kwargs)  # type: ignore[arg-type]
-        context = await browser.new_context(storage_state=str(state_path))
-        page = await context.new_page()
-        if url:
-            try:
-                await page.goto(url, wait_until="domcontentloaded")
-            except Exception:
-                pass
+        if user_data_dir:
+            args: list[str] = []
+            if profile_directory:
+                args.append(f"--profile-directory={profile_directory}")
+            context = await playwright.chromium.launch_persistent_context(  # type: ignore[arg-type]
+                user_data_dir=str(Path(user_data_dir).expanduser()),
+                args=args or None,
+                **launch_kwargs,
+            )
+            browser = getattr(context, "browser", None)
 
-        await _wait_for_browser_disconnected(browser=browser, timeout_ms=close_timeout_ms)
+            if url:
+                try:
+                    page = context.pages[0] if context.pages else await context.new_page()
+                    await page.goto(url, wait_until="domcontentloaded")
+                except Exception:
+                    pass
 
-        if save_back:
-            await context.storage_state(path=str(state_path))
-            try:
-                state_path.chmod(0o600)
-            except OSError:
-                pass
+            if browser is not None:
+                await _wait_for_browser_disconnected(browser=browser, timeout_ms=close_timeout_ms)
+            else:
+                await context.wait_for_event("close", timeout=close_timeout_ms)
+
+            if save_back:
+                await context.storage_state(path=str(state_path))
+                try:
+                    state_path.chmod(0o600)
+                except OSError:
+                    pass
+        else:
+            browser = await playwright.chromium.launch(**launch_kwargs)  # type: ignore[arg-type]
+            context = await browser.new_context(storage_state=str(state_path))
+            page = await context.new_page()
+            if url:
+                try:
+                    await page.goto(url, wait_until="domcontentloaded")
+                except Exception:
+                    pass
+
+            await _wait_for_browser_disconnected(browser=browser, timeout_ms=close_timeout_ms)
+
+            if save_back:
+                await context.storage_state(path=str(state_path))
+                try:
+                    state_path.chmod(0o600)
+                except OSError:
+                    pass
 
     return state_path
 
