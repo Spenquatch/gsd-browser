@@ -4,6 +4,7 @@ Set-StrictMode -Version Latest
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 $OutputEncoding = [Console]::OutputEncoding
 $env:PYTHONIOENCODING = "utf-8"
+$env:PYTHONUTF8 = "1"
 
 param(
   [switch]$PurgeConfig
@@ -30,8 +31,18 @@ function Resolve-Python {
 }
 
 $pythonCmd = Resolve-Python
-$pythonExe = $pythonCmd.Exe
+$pythonExe = ($pythonCmd.Exe | Out-String).Trim().Trim('"')
 $pythonPrefix = $pythonCmd.Prefix
+
+try {
+  $resolved = & $pythonExe @pythonPrefix -c "import sys; print(sys.executable)"
+  if ($LASTEXITCODE -eq 0 -and $resolved) {
+    $pythonExe = ($resolved | Out-String).Trim().Trim('"')
+    $pythonPrefix = @()
+  }
+} catch {
+  # best-effort: fall back to resolved command
+}
 
 $env:PIPX_DEFAULT_PYTHON = $pythonExe
 

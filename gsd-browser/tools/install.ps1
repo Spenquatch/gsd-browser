@@ -4,6 +4,7 @@ Set-StrictMode -Version Latest
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 $OutputEncoding = [Console]::OutputEncoding
 $env:PYTHONIOENCODING = "utf-8"
+$env:PYTHONUTF8 = "1"
 
 function Resolve-Python {
   $python = Get-Command python -ErrorAction SilentlyContinue
@@ -73,6 +74,19 @@ function Ensure-OnPathForSession {
   $env:PATH = "$Dir;$env:PATH"
 }
 
+function Resolve-RealPythonExe {
+  param(
+    [Parameter(Mandatory = $true)][string]$PythonExe,
+    [string[]]$PythonPrefix = @()
+  )
+
+  $resolved = & $PythonExe @PythonPrefix -c "import sys; print(sys.executable)"
+  if ($LASTEXITCODE -ne 0 -or -not $resolved) {
+    throw "Failed to resolve sys.executable from: $PythonExe"
+  }
+  return ($resolved | Out-String).Trim().Trim('"')
+}
+
 $scriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 $rootDir = Resolve-Path (Join-Path $scriptRoot "..")
 $manifestDir = Join-Path $HOME ".gsd"
@@ -80,8 +94,12 @@ $manifestFile = Join-Path $manifestDir "install.json"
 New-Item -ItemType Directory -Force -Path $manifestDir | Out-Null
 
 $pythonCmd = Resolve-Python
-$pythonExe = $pythonCmd.Exe
+$pythonExe = ($pythonCmd.Exe | Out-String).Trim().Trim('"')
 $pythonPrefix = $pythonCmd.Prefix
+
+# If we're running through a shim (pyenv), prefer the real interpreter path for pipx.
+$pythonExe = Resolve-RealPythonExe -PythonExe $pythonExe -PythonPrefix $pythonPrefix
+$pythonPrefix = @()
 
 # Force pipx to use the detected Python (avoids pyenv shim ambiguity / stale PIPX_DEFAULT_PYTHON).
 $env:PIPX_DEFAULT_PYTHON = $pythonExe
