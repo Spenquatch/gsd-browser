@@ -20,6 +20,22 @@ from urllib.request import urlopen
 from playwright.async_api import async_playwright
 
 
+def _infer_local_browser_executable() -> str | None:
+    """Best-effort local browser detection for Playwright interactive flows.
+
+    If Playwright-managed browsers are not installed (common in pipx installs on Windows),
+    launching without an explicit executable/channel fails. Prefer a locally installed
+    Chrome/Edge when available.
+    """
+
+    try:
+        from .browser_install import detect_local_browser_executable
+
+        return detect_local_browser_executable()
+    except Exception:
+        return None
+
+
 def normalize_browser_state_id(state_id: str) -> str:
     """Normalize a browser state id into a safe filename component."""
 
@@ -121,6 +137,10 @@ async def capture_state_interactive(
             launch_kwargs["channel"] = str(browser_channel)
         if executable_path:
             launch_kwargs["executable_path"] = str(executable_path)
+        elif not browser_channel:
+            inferred = _infer_local_browser_executable()
+            if inferred:
+                launch_kwargs["executable_path"] = str(inferred)
 
         browser = await playwright.chromium.launch(**launch_kwargs)  # type: ignore[arg-type]
         context = await browser.new_context()
@@ -243,6 +263,10 @@ async def open_with_state_interactive(
             launch_kwargs["channel"] = str(browser_channel)
         if executable_path:
             launch_kwargs["executable_path"] = str(executable_path)
+        elif not browser_channel:
+            inferred = _infer_local_browser_executable()
+            if inferred:
+                launch_kwargs["executable_path"] = str(inferred)
 
         browser = await playwright.chromium.launch(**launch_kwargs)  # type: ignore[arg-type]
         context = await browser.new_context(storage_state=str(state_path))
