@@ -5,6 +5,10 @@ Set-StrictMode -Version Latest
 $OutputEncoding = [Console]::OutputEncoding
 $env:PYTHONIOENCODING = "utf-8"
 $env:PYTHONUTF8 = "1"
+$env:PIP_DISABLE_PIP_VERSION_CHECK = "1"
+$env:PIP_NO_PYTHON_VERSION_WARNING = "1"
+$env:PIP_NO_COLOR = "1"
+$env:PIP_PROGRESS_BAR = "off"
 
 function Resolve-Python {
   $python = Get-Command python -ErrorAction SilentlyContinue
