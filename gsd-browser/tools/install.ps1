@@ -35,7 +35,7 @@ function Invoke-Exe {
 function Ensure-Pipx {
   param(
     [Parameter(Mandatory = $true)][string]$PythonExe,
-    [Parameter(Mandatory = $true)][string[]]$PythonPrefix
+    [string[]]$PythonPrefix = @()
   )
 
   & $PythonExe @PythonPrefix -m pipx --version | Out-Null
@@ -51,7 +51,7 @@ function Ensure-Pipx {
 function Get-PipxBinDir {
   param(
     [Parameter(Mandatory = $true)][string]$PythonExe,
-    [Parameter(Mandatory = $true)][string[]]$PythonPrefix
+    [string[]]$PythonPrefix = @()
   )
 
   $bin = & $PythonExe @PythonPrefix -c "import pipx.paths; print(pipx.paths.ctx.bin_dir)"
