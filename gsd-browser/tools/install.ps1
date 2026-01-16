@@ -78,6 +78,17 @@ function Ensure-OnPathForSession {
   $env:PATH = "$Dir;$env:PATH"
 }
 
+function Invoke-PipxInstallFromSource {
+  param(
+    [Parameter(Mandatory = $true)][string]$PythonExe,
+    [Parameter(Mandatory = $true)][string]$SourceDir
+  )
+
+  Invoke-Exe -Exe $PythonExe -Args @(
+    "-m", "pipx", "install", "--python", $PythonExe, "--force", $SourceDir
+  )
+}
+
 function Resolve-RealPythonExe {
   param(
     [Parameter(Mandatory = $true)][string]$PythonExe,
@@ -113,9 +124,26 @@ $pipxBin = Get-PipxBinDir -PythonExe $pythonExe -PythonPrefix $pythonPrefix
 Ensure-OnPathForSession -Dir $pipxBin
 
 Write-Host "Installing gsd via pipx from $rootDir ..."
-Invoke-Exe -Exe $pythonExe -Args @(
-  $pythonPrefix + @("-m", "pipx", "install", "--python", $pythonExe, "--force", "$rootDir")
-)
+try {
+  Invoke-PipxInstallFromSource -PythonExe $pythonExe -SourceDir "$rootDir"
+} catch {
+  Write-Host ""
+  Write-Host "pipx install failed; retrying with an isolated pipx home under ~/.gsd (to avoid pyenv/pipx state conflicts)..."
+
+  $isolatedHome = Join-Path $HOME ".gsd\pipx_home"
+  $isolatedBin = Join-Path $HOME ".gsd\bin"
+  New-Item -ItemType Directory -Force -Path $isolatedHome | Out-Null
+  New-Item -ItemType Directory -Force -Path $isolatedBin | Out-Null
+
+  $env:PIPX_HOME = $isolatedHome
+  $env:PIPX_BIN_DIR = $isolatedBin
+  Ensure-OnPathForSession -Dir $isolatedBin
+
+  # Ensure PATH is persisted for future shells (best-effort).
+  & $pythonExe -m pipx ensurepath --force *> $null
+
+  Invoke-PipxInstallFromSource -PythonExe $pythonExe -SourceDir "$rootDir"
+}
 
 $version = & $pythonExe @pythonPrefix -c @"
 import tomllib
