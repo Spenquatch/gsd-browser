@@ -5,13 +5,28 @@ function Resolve-Python {
   param([Parameter(Mandatory = $true)][string]$RootDir)
 
   $venvPython = Join-Path $RootDir ".venv\Scripts\python.exe"
-  if (Test-Path $venvPython) { return @($venvPython) }
+  if (Test-Path $venvPython) {
+    return [pscustomobject]@{
+      Exe    = $venvPython
+      Prefix = @()
+    }
+  }
 
   $python = Get-Command python -ErrorAction SilentlyContinue
-  if ($python) { return @($python.Source) }
+  if ($python) {
+    return [pscustomobject]@{
+      Exe    = $python.Source
+      Prefix = @()
+    }
+  }
 
   $py = Get-Command py -ErrorAction SilentlyContinue
-  if ($py) { return @($py.Source, "-3") }
+  if ($py) {
+    return [pscustomobject]@{
+      Exe    = $py.Source
+      Prefix = @("-3")
+    }
+  }
 
   throw "python is required (install Python 3.11+ and ensure it is on PATH)."
 }
@@ -23,10 +38,9 @@ function Headline([string]$Text) {
 
 $scriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 $rootDir = Resolve-Path (Join-Path $scriptRoot "..")
-$pythonParts = Resolve-Python -RootDir "$rootDir"
-$pythonExe = $pythonParts[0]
-$pythonPrefix = @()
-if ($pythonParts.Length -gt 1) { $pythonPrefix = @($pythonParts[1]) }
+$pythonCmd = Resolve-Python -RootDir "$rootDir"
+$pythonExe = $pythonCmd.Exe
+$pythonPrefix = $pythonCmd.Prefix
 
 $existingPythonPath = $env:PYTHONPATH
 if (-not $existingPythonPath) { $existingPythonPath = "" }

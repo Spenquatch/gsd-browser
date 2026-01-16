@@ -3,10 +3,20 @@ Set-StrictMode -Version Latest
 
 function Resolve-Python {
   $python = Get-Command python -ErrorAction SilentlyContinue
-  if ($python) { return @($python.Source) }
+  if ($python) {
+    return [pscustomobject]@{
+      Exe    = $python.Source
+      Prefix = @()
+    }
+  }
 
   $py = Get-Command py -ErrorAction SilentlyContinue
-  if ($py) { return @($py.Source, "-3") }
+  if ($py) {
+    return [pscustomobject]@{
+      Exe    = $py.Source
+      Prefix = @("-3")
+    }
+  }
 
   throw "python is required (install Python 3.11+ and ensure it is on PATH)."
 }
@@ -28,10 +38,9 @@ $manifestDir = Join-Path $HOME ".gsd"
 $manifestFile = Join-Path $manifestDir "install.json"
 New-Item -ItemType Directory -Force -Path $manifestDir | Out-Null
 
-$pythonParts = Resolve-Python
-$pythonExe = $pythonParts[0]
-$pythonPrefix = @()
-if ($pythonParts.Length -gt 1) { $pythonPrefix = @($pythonParts[1]) }
+$pythonCmd = Resolve-Python
+$pythonExe = $pythonCmd.Exe
+$pythonPrefix = $pythonCmd.Prefix
 
 & $pythonExe @pythonPrefix -m pipx --version | Out-Null
 if ($LASTEXITCODE -ne 0) {
