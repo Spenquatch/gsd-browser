@@ -1,6 +1,10 @@
 $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
 
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+$OutputEncoding = [Console]::OutputEncoding
+$env:PYTHONIOENCODING = "utf-8"
+
 function Resolve-Python {
   $python = Get-Command python -ErrorAction SilentlyContinue
   if ($python) {
@@ -45,7 +49,7 @@ function Ensure-Pipx {
   Invoke-Exe -Exe $PythonExe -Args @($PythonPrefix + @("-m", "pip", "install", "--user", "pipx"))
 
   # Ensure PATH contains pipx scripts for future shells.
-  & $PythonExe @PythonPrefix -m pipx ensurepath | Out-Null
+  & $PythonExe @PythonPrefix -m pipx ensurepath --force *> $null
 }
 
 function Get-PipxBinDir {
@@ -79,12 +83,17 @@ $pythonCmd = Resolve-Python
 $pythonExe = $pythonCmd.Exe
 $pythonPrefix = $pythonCmd.Prefix
 
+# Force pipx to use the detected Python (avoids pyenv shim ambiguity / stale PIPX_DEFAULT_PYTHON).
+$env:PIPX_DEFAULT_PYTHON = $pythonExe
+
 Ensure-Pipx -PythonExe $pythonExe -PythonPrefix $pythonPrefix
 $pipxBin = Get-PipxBinDir -PythonExe $pythonExe -PythonPrefix $pythonPrefix
 Ensure-OnPathForSession -Dir $pipxBin
 
 Write-Host "Installing gsd via pipx from $rootDir ..."
-Invoke-Exe -Exe $pythonExe -Args @($pythonPrefix + @("-m", "pipx", "install", "--force", "$rootDir"))
+Invoke-Exe -Exe $pythonExe -Args @(
+  $pythonPrefix + @("-m", "pipx", "install", "--python", $pythonExe, "--force", "$rootDir")
+)
 
 $version = & $pythonExe @pythonPrefix -c @"
 import tomllib

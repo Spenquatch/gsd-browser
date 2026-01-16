@@ -1,6 +1,10 @@
 $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
 
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+$OutputEncoding = [Console]::OutputEncoding
+$env:PYTHONIOENCODING = "utf-8"
+
 param(
   [switch]$PurgeConfig
 )
@@ -28,6 +32,8 @@ function Resolve-Python {
 $pythonCmd = Resolve-Python
 $pythonExe = $pythonCmd.Exe
 $pythonPrefix = $pythonCmd.Prefix
+
+$env:PIPX_DEFAULT_PYTHON = $pythonExe
 
 & $pythonExe @pythonPrefix -m pipx --version | Out-Null
 if ($LASTEXITCODE -eq 0) {

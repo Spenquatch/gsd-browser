@@ -1,6 +1,10 @@
 $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
 
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+$OutputEncoding = [Console]::OutputEncoding
+$env:PYTHONIOENCODING = "utf-8"
+
 function Resolve-Python {
   $python = Get-Command python -ErrorAction SilentlyContinue
   if ($python) {
@@ -42,13 +46,17 @@ $pythonCmd = Resolve-Python
 $pythonExe = $pythonCmd.Exe
 $pythonPrefix = $pythonCmd.Prefix
 
+$env:PIPX_DEFAULT_PYTHON = $pythonExe
+
 & $pythonExe @pythonPrefix -m pipx --version | Out-Null
 if ($LASTEXITCODE -ne 0) {
   throw "pipx is required for upgrades. Run tools/install.ps1 first."
 }
 
 Write-Host "Upgrading gsd via pipx from $rootDir ..."
-Invoke-Exe -Exe $pythonExe -Args @($pythonPrefix + @("-m", "pipx", "install", "--force", "$rootDir"))
+Invoke-Exe -Exe $pythonExe -Args @(
+  $pythonPrefix + @("-m", "pipx", "install", "--python", $pythonExe, "--force", "$rootDir")
+)
 
 $version = & $pythonExe @pythonPrefix -c @"
 import tomllib
