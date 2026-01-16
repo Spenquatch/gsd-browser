@@ -51,7 +51,7 @@ cd gsd-browser/gsd-browser
 git pull
 ./tools/upgrade.sh
 ```
-This reinstalls via pipx and refreshes `~/.config/gsd/install.json`.
+This reinstalls via pipx and refreshes `~/.gsd/install.json`.
 
 ## Logging Adjustments
 ```bash

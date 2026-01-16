@@ -99,9 +99,9 @@ gsd/
 
 **Configuration Loading Chain** (highest to lowest priority):
 1. Shell environment variables
-2. `GSD_BROWSER_ENV_FILE` (if set)
+2. `GSD_ENV_FILE` (if set)
 3. `.env` (current directory)
-4. `~/.config/gsd-browser/.env` (production default)
+4. `~/.gsd/.env` (production default)
 5. Pydantic field defaults
 
 **Key Modules**:
@@ -137,35 +137,35 @@ gsd/
 - `config.ts`: Zod schema validation for environment configuration
 - `logging.ts`: Pino logger with JSON/pretty modes
 
-**Configuration**: Zod schema validates `ANTHROPIC_API_KEY` (required), `GSD_BROWSER_MODEL`, `LOG_LEVEL`, `GSD_BROWSER_JSON_LOGS`
+**Configuration**: Pydantic validates `ANTHROPIC_API_KEY` (required), `GSD_MODEL`, `LOG_LEVEL`, `GSD_JSON_LOGS`
 
 ## Configuration Management
 
 ### Environment Variables
 
 **LLM Provider**:
-- `GSD_BROWSER_LLM_PROVIDER`: `anthropic` | `openai` | `chatbrowseruse` | `ollama`
-- `GSD_BROWSER_MODEL`: Provider-specific model name
+- `GSD_LLM_PROVIDER`: `anthropic` | `openai` | `chatbrowseruse` | `ollama`
+- `GSD_MODEL`: Provider-specific model name
 - `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `BROWSER_USE_API_KEY`, `OLLAMA_HOST`
 
 **Browser & Execution**:
-- `GSD_BROWSER_WEB_EVAL_BUDGET_S`: Task timeout (240s default)
-- `GSD_BROWSER_WEB_EVAL_MAX_STEPS`: Max agent iterations (25 default)
-- `GSD_BROWSER_WEB_EVAL_STEP_TIMEOUT_S`: Per-step timeout (15s default)
-- `GSD_BROWSER_USE_VISION`: `auto` | `true` | `false`
+- `GSD_WEB_EVAL_BUDGET_S`: Task timeout (240s default)
+- `GSD_WEB_EVAL_MAX_STEPS`: Max agent iterations (25 default)
+- `GSD_WEB_EVAL_STEP_TIMEOUT_S`: Per-step timeout (15s default)
+- `GSD_USE_VISION`: `auto` | `true` | `false`
 
 **Streaming**:
 - `STREAMING_MODE`: `cdp` | `screenshot`
 - `STREAMING_QUALITY`: `low` | `med` | `high`
 
 **MCP Tool Controls**:
-- `GSD_BROWSER_MCP_ENABLED_TOOLS`: Allowlist (comma-separated or `all`/`none`)
-- `GSD_BROWSER_MCP_DISABLED_TOOLS`: Denylist (comma-separated)
+- `GSD_MCP_ENABLED_TOOLS`: Allowlist (comma-separated or `all`/`none`)
+- `GSD_MCP_DISABLED_TOOLS`: Denylist (comma-separated)
 
 ### Configuration Files
 
 - `.env.example`: Template for environment variables (both Python and TypeScript)
-- `~/.config/gsd-browser/.env`: Production user config (managed by `gsd config` commands)
+- `~/.gsd/.env`: Production user config (managed by `gsd config` commands)
 - `config/mcp-config-example.json`: Example MCP host configuration
 
 ## Task-Driven Workflow
@@ -188,7 +188,7 @@ The project follows a strict task-driven workflow documented in `AI_ENTRYPOINT.m
 
 - **Do not break stdio MCP**: `gsd mcp serve` must not write non-JSON-RPC to stdout
 - **No secrets**: Never commit API keys or tokens
-- **Respect stable config location**: Use `$GSD_BROWSER_ENV_FILE` or `~/.config/gsd-browser/.env`
+- **Respect stable config location**: Use `$GSD_ENV_FILE` or `~/.gsd/.env`
 - **Avoid touching `wt/`**: Do not add/modify committed files under `wt/`
 
 ## Testing

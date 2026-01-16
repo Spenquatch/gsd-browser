@@ -7,7 +7,7 @@ CONFIG_NAME="gsd"       # Config directory name
 CANONICAL_CLI="gsd"
 LEGACY_CLI="gsd-browser"
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-MANIFEST_FILE="$HOME/.config/$CONFIG_NAME/install.json"
+MANIFEST_FILE="$HOME/.gsd/install.json"
 
 resolve_bin() {
   local name="$1"

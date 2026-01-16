@@ -20,6 +20,8 @@ logger = logging.getLogger("gsd_browser.mcp_tools")
 # Update alongside tool definitions in `mcp_server.py`.
 KNOWN_MCP_TOOLS: tuple[str, ...] = (
     "web_eval_agent",
+    "web_task_agent",
+    "web_task_agent_github",
     "get_run_events",
     "setup_browser_state",
     "get_screenshots",
@@ -128,4 +130,3 @@ def apply_tool_exposure_policy(*, mcp: FastMCP, policy: ToolExposurePolicy) -> N
         except Exception:  # noqa: BLE001
             # If the tool isn't registered (or already removed), keep going.
             logger.debug("remove_tool_failed", extra={"tool": name}, exc_info=True)
-

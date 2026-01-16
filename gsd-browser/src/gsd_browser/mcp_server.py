@@ -11,6 +11,7 @@ import os
 import time
 import traceback
 import uuid
+from contextvars import ContextVar
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -18,8 +19,8 @@ from urllib.parse import urlparse
 
 from mcp.server.fastmcp import Context, FastMCP
 from mcp.types import ImageContent, TextContent
-from playwright.async_api import async_playwright
 
+from .browser_state import browser_state_path_for_id, capture_state_interactive
 from .config import Settings, load_settings
 from .failure_ranking import rank_failures_for_session
 from .llm.browser_use import create_browser_use_llms
@@ -41,6 +42,15 @@ os.environ.setdefault("BROWSER_USE_SETUP_LOGGING", "false")
 
 _WEB_EVAL_AGENT_MODES = {"compact", "dev"}
 _RUN_EVENT_TYPES = {"agent", "console", "network"}
+
+_UNSET: object = object()
+# Task-local overrides used by higher-level MCP tools that wrap `web_eval_agent`.
+_BROWSER_STATE_ID_OVERRIDE: ContextVar[object] = ContextVar(
+    "gsd_browser_state_id_override", default=_UNSET
+)
+_PROMPT_PROFILE_OVERRIDE: ContextVar[str] = ContextVar(
+    "gsd_browser_prompt_profile_override", default="web_eval"
+)
 
 
 def apply_configured_tool_policy(*, settings: Settings) -> None:
@@ -72,7 +82,11 @@ def _normalize_url(url: str) -> str:
 
 
 def _browser_state_path() -> Path:
-    return Path(os.path.expanduser("~/.operative/browser_state/state.json"))
+    return browser_state_path_for_id(None)
+
+
+def _browser_state_path_for_id(state_id: str | None) -> Path:
+    return browser_state_path_for_id(state_id)
 
 
 def _truncate(text: str, *, max_len: int) -> str:
@@ -413,7 +427,46 @@ def _browser_use_prompt_wrapper(*, base_url: str) -> str:
     )
 
 
-def _get_enhanced_system_prompt(*, base_url: str) -> str | None:
+def _browser_use_prompt_wrapper_web_task(*, base_url: str) -> str:
+    return (
+        "You are an automated browser agent running inside an MCP tool call.\n"
+        f"Start URL: {base_url}\n\n"
+        "Rules:\n"
+        "- Start at the Start URL.\n"
+        "- You may navigate away from the Start URL if (and only if) the task explicitly "
+        "requires it.\n"
+        "- Do not enter passwords, 2FA codes, or payment details.\n"
+        "- Do not complete destructive actions (purchase, delete, cancel, submit irreversible "
+        "forms) unless the task explicitly asks you to.\n"
+        "- If the site requires login and you cannot proceed without credentials, STOP.\n"
+        "- If you encounter a CAPTCHA, bot wall, or similar automated-access restriction, STOP.\n"
+        "- If the task is impossible due to site restrictions (permissions, paywall, blocked "
+        "flows), STOP.\n"
+        "- You may retry a transient UI failure 1–2 times (timeouts, missed clicks), but do not "
+        "loop.\n\n"
+        "Output contract (browser-use):\n"
+        "- You MUST respond with valid JSON containing an 'action' field that is a list (array).\n"
+        "- The 'action' field must contain at least one action object.\n"
+        "- CRITICAL: When using the done action, it must be wrapped in the action array "
+        "like this:\n"
+        '  {"action": [{"done": {"success": true, "text": "your message"}}]}\n'
+        "- To stop for any reason (including completion), use the done action:\n"
+        '  - {"action": [{"done": {"success": true, "text": "final answer"}}]} '
+        "when completed successfully.\n"
+        '  - {"action": [{"done": {"success": false, "text": "reason for stopping"}}]} '
+        "for failures (login required, CAPTCHA/bot wall, impossible task).\n"
+        "- NEVER output done at the top level - it must always be inside the action array.\n"
+    )
+
+
+def _browser_use_prompt_wrapper_for_profile(*, profile: str, base_url: str) -> str:
+    normalized = str(profile).strip().lower() or "web_eval"
+    if normalized == "web_task":
+        return _browser_use_prompt_wrapper_web_task(base_url=base_url)
+    return _browser_use_prompt_wrapper(base_url=base_url)
+
+
+def _get_enhanced_system_prompt(*, base_url: str, tool_rules: str | None = None) -> str | None:
     """Load enhanced system prompt from file if override mode is enabled.
 
     Returns enhanced prompt string if GSD_OVERRIDE_SYSTEM_PROMPT=1,
@@ -469,6 +522,9 @@ def _get_enhanced_system_prompt(*, base_url: str) -> str | None:
             '  - {"action": [{"done": {"success": false, "text": "reason for stopping"}}]} '
             "for failures (login required, CAPTCHA/bot wall, impossible task).\n"
         )
+
+        if tool_rules:
+            mcp_rules = mcp_rules + "\n\nTool-specific guidance:\n" + tool_rules.strip() + "\n"
 
         return enhanced_prompt + mcp_rules
     except Exception as exc:  # noqa: BLE001
@@ -689,8 +745,15 @@ async def web_eval_agent(
         },
     )
 
-    state_path = _browser_state_path()
-    storage_state: str | None = str(state_path) if state_path.exists() else None
+    state_override = _BROWSER_STATE_ID_OVERRIDE.get()
+    if state_override is _UNSET:
+        state_path = _browser_state_path_for_id(None)
+        storage_state: str | None = str(state_path) if state_path.exists() else None
+    elif state_override is None:
+        storage_state = None
+    else:
+        state_path = _browser_state_path_for_id(str(state_override))
+        storage_state = str(state_path) if state_path.exists() else None
     step_screenshot_count = 0
     recorded_step_numbers: set[int] = set()
     last_step_observed: int | None = None
@@ -1089,6 +1152,13 @@ async def web_eval_agent(
 
         cdp_attached = False
 
+        def _get_cdp_client_safe(session: Any) -> Any:
+            """Safely get cdp_client, handling AssertionError from browser-use."""
+            try:
+                return session.cdp_client
+            except (AttributeError, AssertionError):
+                return None
+
         async def attach_streaming_when_ready() -> None:
             nonlocal streaming_disabled_reason
             if cdp_streamer is None:
@@ -1098,9 +1168,9 @@ async def web_eval_agent(
 
             started_wait = time.time()
             while True:
-                if not hasattr(browser_session, "cdp_client"):
-                    return
-                if getattr(browser_session, "cdp_client", None) is not None:
+                # browser-use's cdp_client property raises AssertionError before connection
+                cdp_client = _get_cdp_client_safe(browser_session)
+                if cdp_client is not None:
                     break
                 if time.time() - started_wait > 10.0:
                     streaming_disabled_reason = "cdp_not_ready"
@@ -1110,13 +1180,30 @@ async def web_eval_agent(
                     return
                 await asyncio.sleep(0.05)
 
-            try:
-                start_browser_use = getattr(cdp_streamer, "start_browser_use", None)
-                if not callable(start_browser_use):
-                    raise RuntimeError("cdp_streamer.start_browser_use unavailable")
-                await start_browser_use(browser_session=browser_session, session_id=session_id)
-            except Exception as exc:  # noqa: BLE001
-                streaming_disabled_reason = _truncate(f"{type(exc).__name__}: {exc}", max_len=400)
+            # Retry start_browser_use a few times - session manager may need time to initialize
+            start_browser_use = getattr(cdp_streamer, "start_browser_use", None)
+            if not callable(start_browser_use):
+                streaming_disabled_reason = "cdp_streamer.start_browser_use unavailable"
+                note_detached = getattr(streaming_stats, "note_cdp_detached", None)
+                if callable(note_detached):
+                    note_detached(error=streaming_disabled_reason)
+                return
+
+            last_error: Exception | None = None
+            for _attempt in range(20):  # Up to ~2 seconds of retries
+                try:
+                    await start_browser_use(browser_session=browser_session, session_id=session_id)
+                    return  # Success
+                except Exception as exc:  # noqa: BLE001
+                    last_error = exc
+                    # Check if we've exceeded overall timeout
+                    if time.time() - started_wait > 10.0:
+                        break
+                    await asyncio.sleep(0.1)
+
+            if last_error is not None:
+                err_msg = f"{type(last_error).__name__}: {last_error}"
+                streaming_disabled_reason = _truncate(err_msg, max_len=400)
                 note_detached = getattr(streaming_stats, "note_cdp_detached", None)
                 if callable(note_detached):
                     note_detached(error=streaming_disabled_reason)
@@ -1124,7 +1211,8 @@ async def web_eval_agent(
         async def attach_cdp_when_ready() -> None:
             nonlocal cdp_attached
             while True:
-                cdp_client = getattr(browser_session, "cdp_client", None)
+                # browser-use's cdp_client property raises AssertionError before connection
+                cdp_client = _get_cdp_client_safe(browser_session)
                 if cdp_client is not None:
                     try:
                         cdp_capture.attach(cdp_client)
@@ -1235,7 +1323,15 @@ async def web_eval_agent(
         history: Any | None = None
         try:
             # Check if override mode is enabled
-            enhanced_prompt = _get_enhanced_system_prompt(base_url=normalized_url)
+            prompt_profile = _PROMPT_PROFILE_OVERRIDE.get()
+            prompt_wrapper = _browser_use_prompt_wrapper_for_profile(
+                profile=prompt_profile, base_url=normalized_url
+            )
+
+            enhanced_prompt = _get_enhanced_system_prompt(
+                base_url=normalized_url,
+                tool_rules=None if prompt_profile == "web_eval" else prompt_wrapper,
+            )
             use_override_mode = enhanced_prompt is not None
 
             if use_override_mode:
@@ -1245,7 +1341,6 @@ async def web_eval_agent(
                 )
 
             # Prepare agent configuration
-            prompt_wrapper = _browser_use_prompt_wrapper(base_url=normalized_url)
 
             # Convert use_vision from string to proper type
             use_vision_raw = str(getattr(settings, "use_vision", "auto")).lower()
@@ -1799,6 +1894,115 @@ async def web_eval_agent(
         return [TextContent(type="text", text=json.dumps(payload, ensure_ascii=False))]
 
 
+def _retag_web_eval_payload(
+    response: list[TextContent], *, tool_name: str, version: str
+) -> list[TextContent]:
+    if not response:
+        return response
+    first = response[0]
+    if getattr(first, "type", None) != "text":
+        return response
+    text = getattr(first, "text", None)
+    if not isinstance(text, str) or not text.strip():
+        return response
+    try:
+        payload = json.loads(text)
+    except Exception:  # noqa: BLE001
+        return response
+    if not isinstance(payload, dict):
+        return response
+    payload["tool"] = tool_name
+    payload["version"] = version
+    return [TextContent(type="text", text=json.dumps(payload, ensure_ascii=False))]
+
+
+@mcp.tool(name="web_task_agent")
+async def web_task_agent(
+    url: str,
+    task: str,
+    ctx: Context,
+    headless_browser: bool = False,
+    mode: str | None = None,
+    budget_s: float | None = None,
+    max_steps: int | None = None,
+    step_timeout_s: float | None = None,
+) -> list[TextContent]:
+    """Run a short, safe browser workflow on a website.
+
+    Use this tool for general web tasks (not limited to localhost). It is conservative:
+    it avoids using any stored authenticated browser state by default, and it will stop
+    if login/CAPTCHA is required.
+
+    For authenticated workflows, first create a dedicated state file with:
+      setup_browser_state(url=..., state_id="your_state")
+    Then use a dedicated tool/workflow that is wired to that state_id (example:
+    web_task_agent_github).
+    """
+
+    _ = ctx
+    prompt_token = _PROMPT_PROFILE_OVERRIDE.set("web_task")
+    state_token = _BROWSER_STATE_ID_OVERRIDE.set(None)
+    try:
+        response = await web_eval_agent(
+            url=url,
+            task=task,
+            ctx=ctx,
+            headless_browser=headless_browser,
+            mode=mode,
+            budget_s=budget_s,
+            max_steps=max_steps,
+            step_timeout_s=step_timeout_s,
+        )
+    finally:
+        _PROMPT_PROFILE_OVERRIDE.reset(prompt_token)
+        _BROWSER_STATE_ID_OVERRIDE.reset(state_token)
+
+    return _retag_web_eval_payload(
+        response, tool_name="web_task_agent", version="gsd.web_task_agent.v1"
+    )
+
+
+@mcp.tool(name="web_task_agent_github")
+async def web_task_agent_github(
+    url: str,
+    task: str,
+    ctx: Context,
+    headless_browser: bool = False,
+    mode: str | None = None,
+    budget_s: float | None = None,
+    max_steps: int | None = None,
+    step_timeout_s: float | None = None,
+) -> list[TextContent]:
+    """Run a short browser workflow on GitHub using the dedicated `github` saved state.
+
+    Prerequisite (one-time): run setup_browser_state(url="https://github.com/login",
+    state_id="github")
+    and complete login in the opened browser window.
+    """
+
+    _ = ctx
+    prompt_token = _PROMPT_PROFILE_OVERRIDE.set("web_task")
+    state_token = _BROWSER_STATE_ID_OVERRIDE.set("github")
+    try:
+        response = await web_eval_agent(
+            url=url,
+            task=task,
+            ctx=ctx,
+            headless_browser=headless_browser,
+            mode=mode,
+            budget_s=budget_s,
+            max_steps=max_steps,
+            step_timeout_s=step_timeout_s,
+        )
+    finally:
+        _PROMPT_PROFILE_OVERRIDE.reset(prompt_token)
+        _BROWSER_STATE_ID_OVERRIDE.reset(state_token)
+
+    return _retag_web_eval_payload(
+        response, tool_name="web_task_agent_github", version="gsd.web_task_agent_github.v1"
+    )
+
+
 @mcp.tool(name="get_run_events")
 async def get_run_events(
     session_id: str | None = None,
@@ -1900,7 +2104,9 @@ async def get_run_events(
 
 @mcp.tool(name="setup_browser_state")
 async def setup_browser_state(
-    url: str | None = None, ctx: Context | None = None
+    url: str | None = None,
+    state_id: str | None = None,
+    ctx: Context | None = None,
 ) -> list[TextContent]:
     """Sets up and saves browser state for future use.
 
@@ -1912,6 +2118,9 @@ async def setup_browser_state(
 
     Args:
         url: Optional URL to navigate to upon opening the browser.
+        state_id: Optional browser state identifier. Use distinct IDs to keep separate
+            authenticated sessions (e.g. "github", "google"). If unset, uses the default
+            path `~/.gsd/browser_state/state.json`.
         ctx: The MCP context (used for progress reporting, not directly here).
 
     Returns:
@@ -1926,35 +2135,38 @@ async def setup_browser_state(
 
     tool_call_id = str(uuid.uuid4())
     normalized_url = _normalize_url(url) if url else None
-    state_path = _browser_state_path()
+    try:
+        state_path = (
+            _browser_state_path_for_id(state_id)
+            if state_id is not None
+            else _browser_state_path()
+        )
+    except ValueError as exc:
+        return [TextContent(type="text", text=f"Invalid state_id: {exc}")]
     state_path.parent.mkdir(parents=True, exist_ok=True)
 
     logger.info(
         "setup_browser_state called",
-        extra={"tool_call_id": tool_call_id, "url": normalized_url, "state_path": str(state_path)},
+        extra={
+            "tool_call_id": tool_call_id,
+            "url": normalized_url,
+            "state_id": state_id,
+            "state_path": str(state_path),
+        },
     )
 
     try:
-        async with async_playwright() as playwright:
-            browser = await playwright.chromium.launch(headless=False)
-            context = await browser.new_context()
-            page = await context.new_page()
-            if normalized_url:
-                await page.goto(normalized_url, wait_until="domcontentloaded")
-
-            await page.wait_for_event("close")
-
-            await context.storage_state(path=str(state_path))
-            await context.close()
-            await browser.close()
+        state_path = await capture_state_interactive(url=normalized_url, state_id=state_id)
 
         return [
             TextContent(
                 type="text",
                 text=(
                     "Saved browser state.\n"
+                    f"- state_id: {state_id or 'default'}\n"
                     f"- path: {state_path}\n"
-                    "Use setup_browser_state(url=...) to refresh it if the session expires."
+                    "Use setup_browser_state(url=..., state_id=...) to refresh it if the session "
+                    "expires."
                 ),
             ),
         ]

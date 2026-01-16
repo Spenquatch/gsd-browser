@@ -33,6 +33,8 @@ app = typer.Typer(help="GSD MCP server CLI", invoke_without_command=True)
 mcp_tools_app = typer.Typer(help="Manage MCP tool exposure (enable/disable tools)")
 app.add_typer(mcp_tools_app, name="mcp-tools")
 
+_DEFAULT_ENV_PATH_DISPLAY = str(default_env_path())
+
 _MCP_TOOLS_ENABLE_ARG = typer.Argument(..., help="Tool name(s) to enable")
 _MCP_TOOLS_DISABLE_ARG = typer.Argument(..., help="Tool name(s) to disable")
 _MCP_TOOLS_SET_ENABLED_ARG = typer.Argument(None, help="Tool name(s) to allowlist")
@@ -598,7 +600,7 @@ def init_env(
         "--path",
         help=(
             "Optional destination path for the user .env file "
-            "(default: ~/.config/gsd/.env)"
+            f"(default: {_DEFAULT_ENV_PATH_DISPLAY})"
         ),
     ),
     overwrite: bool = typer.Option(
@@ -619,7 +621,7 @@ def configure(
     env_path: Path | None = typer.Option(  # noqa: B008
         None,
         "--env-path",
-        help="Path to the user env file (default: ~/.config/gsd/.env)",
+        help=f"Path to the user env file (default: {_DEFAULT_ENV_PATH_DISPLAY})",
     ),
     anthropic_api_key: str | None = typer.Option(
         None,

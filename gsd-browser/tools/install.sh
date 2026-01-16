@@ -7,7 +7,7 @@ CONFIG_NAME="gsd"       # Config directory name
 CANONICAL_CLI="gsd"
 LEGACY_CLI="gsd-browser"
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-MANIFEST_DIR="$HOME/.config/$CONFIG_NAME"
+MANIFEST_DIR="$HOME/.gsd"
 MANIFEST_FILE="$MANIFEST_DIR/install.json"
 
 mkdir -p "$MANIFEST_DIR"
@@ -85,13 +85,13 @@ if [ -n "$BIN" ] && [ -x "$BIN" ]; then
 fi
 
 if [ -n "$BIN" ] && [ -x "$BIN" ]; then
-  echo "Ensuring user config exists at ~/.config/$CONFIG_NAME/.env ..."
+  echo "Ensuring user config exists at ~/.gsd/.env ..."
   if [ "$CLI_STYLE" = "canonical" ]; then
     "$BIN" config init >/dev/null || true
   else
     "$BIN" init-env >/dev/null || true
   fi
-  echo "Config path: $HOME/.config/$PACKAGE/.env"
+  echo "Config path: $HOME/.gsd/.env"
   if [ "$CLI_STYLE" = "canonical" ]; then
     echo "Tip: run '$CANONICAL_CLI config set' to add API keys."
   else

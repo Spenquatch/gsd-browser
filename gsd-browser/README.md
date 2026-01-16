@@ -26,7 +26,7 @@ make dev        # sets up .venv (uv-backed)
 `gsd` loads `.env` from the current working directory (if present) and then reads shell env vars (shell wins).
 
 For production installs, prefer a stable user env file and point the server at it:
-- Default user config: `~/.config/gsd/.env`
+- Default user config: `~/.gsd/.env`
 - Override path: `GSD_ENV_FILE=/absolute/path/to/.env`
 
 Create/update the default user config with `gsd config init` and `gsd config set`.
@@ -90,8 +90,25 @@ Notes:
 ## MCP Tools
 Once configured as an MCP server, Claude can call:
 - `web_eval_agent(url, task, headless_browser=False)` – runs a short Playwright evaluation and records screenshots.
-- `setup_browser_state(url=None)` – opens a non-headless browser so you can log in, then saves state to `~/.operative/browser_state/state.json`.
+- `web_task_agent(url, task, headless_browser=False)` – general-purpose web task runner (does not use saved auth state by default).
+- `web_task_agent_github(url, task, headless_browser=False)` – GitHub workflows using a dedicated `github` saved state.
+- `setup_browser_state(url=None, state_id=None)` – opens a non-headless browser so you can log in, then saves state to `~/.gsd/browser_state/state.json` (or `~/.gsd/browser_state/states/<state_id>.json`).
 - `get_screenshots(last_n=5, screenshot_type="agent_step", session_id=None, from_timestamp=None, has_error=None, include_images=True)` – retrieves recent screenshots (max `last_n=20`); set `include_images=False` for metadata-only.
+
+You can also capture browser state from the CLI:
+```bash
+gsd browser state setup --url "https://github.com/login" --state-id github
+```
+
+To manually verify a saved state loads (and that you’re signed in), open a browser with it:
+```bash
+gsd browser state open --url "https://chatgpt.com" --state-id gpt-pro
+```
+
+If a site flags Playwright-managed Chromium as automated, try using your system Chrome:
+```bash
+gsd browser state setup --url "https://chatgpt.com" --state-id gpt-pro --browser-channel chrome
+```
 
 For a quick end-to-end check:
 ```bash

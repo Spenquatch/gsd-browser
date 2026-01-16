@@ -4,8 +4,8 @@ set -euo pipefail
 
 PACKAGE="gsd"           # PyPI package name (for pipx)
 CONFIG_NAME="gsd"       # Config directory name
-MANIFEST_FILE="$HOME/.config/$CONFIG_NAME/install.json"
-CONFIG_DIR="$HOME/.config/$CONFIG_NAME"
+MANIFEST_FILE="$HOME/.gsd/install.json"
+CONFIG_DIR="$HOME/.gsd"
 
 PURGE_CONFIG=0
 if [ "${1:-}" = "--purge-config" ]; then

@@ -19,6 +19,34 @@ gsd browser ensure --write-config
 gsd mcp config --format json
 ```
 
+## Windows (native)
+The `tools/*.sh` and `scripts/*.sh` helpers are bash scripts (Linux/macOS). On Windows, install via pipx and use the `gsd` CLI directly:
+
+```powershell
+cd gsd-browser\gsd-browser
+
+python -m pip install --user pipx
+pipx ensurepath
+# restart your shell
+pipx install gsd
+
+gsd config init
+gsd config set --anthropic-api-key sk-ant-...
+gsd browser ensure --write-config
+gsd mcp config --format json
+```
+
+Alternatively, use the PowerShell helpers:
+```powershell
+cd gsd-browser\gsd-browser
+.\tools\install.ps1
+.\scripts\diagnose.ps1
+
+# later:
+.\tools\upgrade.ps1
+.\tools\uninstall.ps1 -PurgeConfig
+```
+
 ## Local Development
 ```bash
 git clone ~/gsd/gsd-browser
@@ -85,7 +113,7 @@ uv run ./scripts/print-mcp-config.py --format toml
 ```
 Copy the output into your MCP host config (Codex or Claude Code).
 
-By default, the snippet points at `~/.config/gsd/.env` via `GSD_ENV_FILE` so it works regardless of working directory.
+By default, the snippet points at `~/.gsd/.env` via `GSD_ENV_FILE` so it works regardless of working directory.
 Initialize/update that file with:
 ```bash
 gsd config set
@@ -99,16 +127,46 @@ Notes:
 ## MCP Tools
 After Claude is connected to `gsd`, it can call:
 - `web_eval_agent` (runs a Playwright navigation + captures screenshots)
+- `web_task_agent` (general-purpose web task runner; does not use saved auth state by default)
+- `web_task_agent_github` (GitHub workflows using a dedicated `github` saved state)
 - `get_screenshots` (retrieves recent screenshots; set `include_images=False` for metadata-only)
 - `get_run_events` (fetches stored console/network/agent run events for a session)
-- `setup_browser_state` (interactive login + saves browser state)
+- `setup_browser_state` (interactive login + saves browser state; supports `state_id` for multiple profiles)
+
+### Browser state profiles (multiple saved sessions)
+`setup_browser_state` supports a `state_id` so you can maintain separate authenticated sessions per tool/workflow.
+
+Examples:
+- Default state: `setup_browser_state(url="https://example.com/login")` → `~/.gsd/browser_state/state.json`
+- Named state: `setup_browser_state(url="https://github.com/login", state_id="github")` → `~/.gsd/browser_state/states/github.json`
+
+The `web_task_agent` tool does not use saved state by default. State-bound tools (example: `web_task_agent_github`) load only their configured `state_id`.
+
+You can also capture state from the CLI:
+```bash
+gsd browser state setup --url "https://github.com/login" --state-id github
+```
+
+To manually verify a saved state loads (and that you’re signed in), open a browser with it:
+```bash
+gsd browser state open --url "https://chatgpt.com" --state-id gpt-pro
+```
+
+If a site flags Playwright-managed Chromium as automated, try using your system Chrome:
+```bash
+gsd browser state setup --url "https://chatgpt.com" --state-id gpt-pro --browser-channel chrome
+```
+
+To add your own state-bound tool/workflow:
+1. Add a new `@mcp.tool` wrapper in `gsd-browser/src/gsd_browser/mcp_server.py` that sets a fixed `state_id` override and calls `web_eval_agent`.
+2. Add the tool name to `gsd-browser/src/gsd_browser/mcp_tool_policy.py` so it shows up in `gsd mcp tools list` and can be enabled/disabled.
 
 ### Tool exposure controls (enable/disable tools)
 You can restrict which tools are advertised to MCP clients via:
 - `GSD_MCP_ENABLED_TOOLS` (allowlist; supports `all`/`*` and `none`)
 - `GSD_MCP_DISABLED_TOOLS` (denylist)
 
-Convenience commands (edits `~/.config/gsd/.env` unless `GSD_ENV_FILE` is set):
+Convenience commands (edits `~/.gsd/.env` unless `GSD_ENV_FILE` is set):
 ```bash
 gsd mcp tools list
 gsd mcp tools disable setup_browser_state

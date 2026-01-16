@@ -3,7 +3,7 @@
 GSD supports configuration via shell environment variables and/or a .env file.
 For production installs (pipx), we standardize on a stable per-user env file location:
 
-  ~/.config/gsd/.env
+  ~/.gsd/.env
 
 MCP host configs can then set GSD_ENV_FILE to that path so the server loads the
 same credentials regardless of working directory. Shell env vars still take precedence.
@@ -11,6 +11,7 @@ same credentials regardless of working directory. Shell env vars still take prec
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 DEFAULT_ENV_TEMPLATE = """# gsd user config
@@ -50,7 +51,10 @@ GSD_MCP_DISABLED_TOOLS=
 
 
 def default_config_dir() -> Path:
-    return Path.home() / ".config" / "gsd"
+    override = (os.getenv("GSD_CONFIG_DIR") or "").strip()
+    if override:
+        return Path(override).expanduser()
+    return Path.home() / ".gsd"
 
 
 def default_env_path() -> Path:

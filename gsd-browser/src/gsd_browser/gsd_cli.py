@@ -5,6 +5,7 @@ This file intentionally starts small and grows as tasks in `tasks.json` are comp
 
 from __future__ import annotations
 
+import asyncio
 import os
 import sys
 from pathlib import Path
@@ -17,6 +18,12 @@ from .browser_install import (
     detect_local_browser_executable,
     install_playwright_chromium,
     should_use_with_deps,
+)
+from .browser_state import (
+    capture_state_interactive,
+    capture_state_over_cdp,
+    open_with_state_interactive,
+    open_with_state_over_cdp,
 )
 from .cli import diagnose as legacy_diagnose
 from .cli import mcp_config_add as legacy_mcp_config_add
@@ -59,6 +66,15 @@ browser_app = typer.Typer(
     add_completion=False,
     epilog="Examples:\n  gsd browser --help\n  gsd browser ensure\n",
 )
+browser_state_app = typer.Typer(
+    help="Browser state helpers (authenticated sessions)",
+    add_completion=False,
+    epilog=(
+        "Examples:\n"
+        '  gsd browser state setup --url "https://github.com/login" --state-id github\n'
+        '  gsd browser state --url "https://github.com/login" --state-id github\n'
+    ),
+)
 stream_app = typer.Typer(
     help="Streaming server and dashboard",
     add_completion=False,
@@ -78,6 +94,7 @@ dev_app = typer.Typer(
 app.add_typer(mcp_app, name="mcp")
 app.add_typer(config_app, name="config")
 app.add_typer(browser_app, name="browser")
+browser_app.add_typer(browser_state_app, name="state")
 app.add_typer(stream_app, name="stream")
 app.add_typer(llm_app, name="llm")
 app.add_typer(dev_app, name="dev")
@@ -596,6 +613,62 @@ def _browser_callback() -> None:
     """
 
 
+@browser_state_app.callback(invoke_without_command=True)
+def _browser_state_callback(
+    ctx: typer.Context,
+    url: str | None = typer.Option(
+        None, "--url", help="Optional URL to open (e.g. https://github.com/login)"
+    ),
+    cdp_url: str | None = typer.Option(
+        None,
+        "--cdp-url",
+        help=(
+            "Attach to an existing Chromium instance via CDP (e.g. http://127.0.0.1:9222). "
+            "When set, the browser is not launched by Playwright."
+        ),
+    ),
+    state_id: str | None = typer.Option(
+        None,
+        "--state-id",
+        help="Optional state id (e.g. github). Default writes ~/.gsd/browser_state/state.json.",
+    ),
+    close_timeout_s: float = typer.Option(
+        0.0,
+        "--close-timeout-s",
+        help="Seconds to wait for manual window close; 0 disables timeout.",
+    ),
+    auto_save_interval_s: float = typer.Option(
+        5.0,
+        "--auto-save-interval-s",
+        help="Autosave interval while waiting for close (used for --cdp-url).",
+    ),
+    browser_channel: str | None = typer.Option(
+        None,
+        "--browser-channel",
+        help="Playwright Chromium channel to use (e.g. chrome, chromium, msedge).",
+    ),
+    executable_path: str | None = typer.Option(
+        None,
+        "--executable-path",
+        help="Optional browser executable path (uses Playwright-managed Chromium if unset).",
+    ),
+) -> None:
+    if ctx.invoked_subcommand is not None:
+        return
+    if url is None and state_id is None and cdp_url is None:
+        return
+    browser_state_setup(
+        url=url,
+        cdp_url=cdp_url,
+        state_id=state_id,
+        close_timeout_s=close_timeout_s,
+        auto_save_interval_s=auto_save_interval_s,
+        browser_channel=browser_channel,
+        executable_path=executable_path,
+    )
+    raise typer.Exit()
+
+
 @browser_app.command("ensure")
 def browser_ensure(
     install: bool = typer.Option(
@@ -651,6 +724,140 @@ def browser_ensure(
         ensure_env_file(path=env_path, overwrite=False)
         update_env_file(path=env_path, updates={"GSD_BROWSER_EXECUTABLE_PATH": found_after})
         typer.echo(f"Updated: {env_path}")
+
+
+@browser_state_app.command("setup")
+def browser_state_setup(
+    url: str | None = typer.Option(
+        None, "--url", help="Optional URL to open (e.g. https://github.com/login)"
+    ),
+    cdp_url: str | None = typer.Option(
+        None,
+        "--cdp-url",
+        help=(
+            "Attach to an existing Chromium instance via CDP (e.g. http://127.0.0.1:9222). "
+            "When set, the browser is not launched by Playwright."
+        ),
+    ),
+    state_id: str | None = typer.Option(
+        None,
+        "--state-id",
+        help="Optional state id (e.g. github). Default writes ~/.gsd/browser_state/state.json.",
+    ),
+    close_timeout_s: float = typer.Option(
+        0.0,
+        "--close-timeout-s",
+        help="Seconds to wait for manual window close; 0 disables timeout.",
+    ),
+    auto_save_interval_s: float = typer.Option(
+        5.0,
+        "--auto-save-interval-s",
+        help="Autosave interval while waiting for close (used for --cdp-url).",
+    ),
+    browser_channel: str | None = typer.Option(
+        None,
+        "--browser-channel",
+        help="Playwright Chromium channel to use (e.g. chrome, chromium, msedge).",
+    ),
+    executable_path: str | None = typer.Option(
+        None,
+        "--executable-path",
+        help="Optional browser executable path (uses Playwright-managed Chromium if unset).",
+    ),
+) -> None:
+    """Open a visible browser, complete login, then save storage state to ~/.gsd."""
+
+    close_timeout_ms = max(0.0, float(close_timeout_s)) * 1000.0
+    if cdp_url:
+        state_path = asyncio.run(
+            capture_state_over_cdp(
+                cdp_url=cdp_url,
+                url=url,
+                state_id=state_id,
+                close_timeout_ms=close_timeout_ms,
+                auto_save_interval_s=auto_save_interval_s,
+            )
+        )
+    else:
+        state_path = asyncio.run(
+            capture_state_interactive(
+                url=url,
+                state_id=state_id,
+                close_timeout_ms=close_timeout_ms,
+                browser_channel=browser_channel,
+                executable_path=executable_path,
+            )
+        )
+    typer.echo("Saved browser state.")
+    typer.echo(f"state_id={state_id or 'default'}")
+    typer.echo(f"path={state_path}")
+
+
+@browser_state_app.command("open")
+def browser_state_open(
+    url: str | None = typer.Option(
+        None, "--url", help="Optional URL to open (e.g. https://chatgpt.com)"
+    ),
+    cdp_url: str | None = typer.Option(
+        None,
+        "--cdp-url",
+        help=(
+            "Attach to an existing Chromium instance via CDP (e.g. http://192.168.x.x:9222) "
+            "and open a state-backed context for manual verification."
+        ),
+    ),
+    state_id: str | None = typer.Option(
+        None,
+        "--state-id",
+        help="Optional state id (e.g. gpt-pro). Default loads ~/.gsd/browser_state/state.json.",
+    ),
+    close_timeout_s: float = typer.Option(
+        0.0,
+        "--close-timeout-s",
+        help="Seconds to wait for manual window close; 0 disables timeout.",
+    ),
+    save_back: bool = typer.Option(
+        False,
+        "--save-back",
+        is_flag=True,
+        help="Overwrite the state file on exit (refresh cookies/storage).",
+    ),
+    browser_channel: str | None = typer.Option(
+        None,
+        "--browser-channel",
+        help="Playwright Chromium channel to use (e.g. chrome, chromium, msedge).",
+    ),
+    executable_path: str | None = typer.Option(
+        None,
+        "--executable-path",
+        help="Optional browser executable path (uses Playwright-managed Chromium if unset).",
+    ),
+) -> None:
+    """Open a visible browser with a saved state loaded (manual verification)."""
+
+    close_timeout_ms = max(0.0, float(close_timeout_s)) * 1000.0
+    if cdp_url:
+        state_path = asyncio.run(
+            open_with_state_over_cdp(
+                cdp_url=cdp_url,
+                url=url,
+                state_id=state_id,
+                close_timeout_ms=close_timeout_ms,
+                save_back=save_back,
+            )
+        )
+    else:
+        state_path = asyncio.run(
+            open_with_state_interactive(
+                url=url,
+                state_id=state_id,
+                close_timeout_ms=close_timeout_ms,
+                browser_channel=browser_channel,
+                executable_path=executable_path,
+                save_back=save_back,
+            )
+        )
+    typer.echo(f"Opened with state: {state_path}")
 
 
 @stream_app.callback()

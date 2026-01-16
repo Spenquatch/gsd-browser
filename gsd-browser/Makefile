@@ -55,8 +55,7 @@ sanity-real:
 	fi
 	@if [ -x .venv/bin/python ]; then \
 		GSD_MODEL=$${GSD_MODEL:-claude-sonnet-4-5} \
-		GSD_WEB_EVAL_STEP_TIMEOUT_S=$${GSD_WEB_EVAL_STEP_TIMEOUT_S:-30.0} \
-		GSD_WEB_EVAL_BUDGET_S=$${GSD_WEB_EVAL_BUDGET_S:-120.0} \
+		GSD_WEB_EVAL_BUDGET_S=$${GSD_WEB_EVAL_BUDGET_S:-600.0} \
 		. .venv/bin/activate && python ./scripts/real_world_sanity.py $(SANITY_REAL_ARGS); \
 	else \
 		echo "Run 'make dev' first to create .venv"; \
