@@ -1,3 +1,7 @@
+param(
+  [switch]$PurgeConfig
+)
+
 $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
 
@@ -5,10 +9,6 @@ Set-StrictMode -Version Latest
 $OutputEncoding = [Console]::OutputEncoding
 $env:PYTHONIOENCODING = "utf-8"
 $env:PYTHONUTF8 = "1"
-
-param(
-  [switch]$PurgeConfig
-)
 
 function Resolve-Python {
   $python = Get-Command python -ErrorAction SilentlyContinue
