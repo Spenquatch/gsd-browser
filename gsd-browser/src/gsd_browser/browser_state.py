@@ -15,9 +15,23 @@ import inspect
 import json
 import os
 import time
+from dataclasses import dataclass
 from pathlib import Path
 from urllib.parse import urlparse, urlunparse
 from urllib.request import urlopen
+
+
+@dataclass(frozen=True)
+class BrowserUseRuntimePaths:
+    downloads_path: Path
+
+
+def _browser_use_runtime_paths() -> BrowserUseRuntimePaths:
+    config_dir = Path(os.getenv("GSD_CONFIG_DIR", "~/.gsd")).expanduser()
+    tmp_dir = config_dir / "tmp"
+    downloads = tmp_dir / "browser-use-downloads"
+    downloads.mkdir(parents=True, exist_ok=True)
+    return BrowserUseRuntimePaths(downloads_path=downloads)
 
 
 def _infer_local_browser_executable() -> str | None:
@@ -273,12 +287,14 @@ async def capture_state_interactive(
     state_path.parent.mkdir(parents=True, exist_ok=True)
 
     inferred = executable_path or _infer_local_browser_executable()
+    runtime_paths = _browser_use_runtime_paths()
     session_cls = _load_browser_use_session_class()
     session_kwargs: dict[str, object] = {
         "is_local": True,
         "headless": False,
         "user_data_dir": user_data_dir,
         "profile_directory": profile_directory,
+        "downloads_path": runtime_paths.downloads_path,
     }
     if browser_channel:
         # Back-compat: `--browser-channel chrome` maps to browser-use's `channel` option.
@@ -294,11 +310,13 @@ async def capture_state_interactive(
         try:
             await _browser_use_connect(session)
         except Exception as exc:
+            detail = f"{type(exc).__name__}: {exc}".strip()
             raise RuntimeError(
                 "Failed to launch a local browser for state capture. "
                 "If you already have Chrome running with remote debugging, pass "
                 "--cdp-url http://127.0.0.1:9222. Otherwise, install Chrome/Edge and/or set "
-                "GSD_BROWSER_EXECUTABLE_PATH (or pass --executable-path)."
+                "GSD_BROWSER_EXECUTABLE_PATH (or pass --executable-path). "
+                f"(root cause: {detail})"
             ) from exc
         if url:
             try:
@@ -368,11 +386,13 @@ async def capture_state_over_cdp(
     normalized_interval = max(0.5, float(auto_save_interval_s))
     ws_url = _resolve_cdp_ws_url(endpoint=cdp_url)
 
+    runtime_paths = _browser_use_runtime_paths()
     session_cls = _load_browser_use_session_class()
     session = session_cls(  # type: ignore[call-arg]
         headless=False,
         cdp_url=ws_url,
         is_local=True,
+        downloads_path=runtime_paths.downloads_path,
     )
 
     try:
@@ -445,12 +465,14 @@ async def open_with_state_interactive(
     state_path.parent.mkdir(parents=True, exist_ok=True)
 
     inferred = executable_path or _infer_local_browser_executable()
+    runtime_paths = _browser_use_runtime_paths()
     session_cls = _load_browser_use_session_class()
     session_kwargs: dict[str, object] = {
         "is_local": True,
         "headless": False,
         "user_data_dir": user_data_dir,
         "profile_directory": profile_directory,
+        "downloads_path": runtime_paths.downloads_path,
     }
     if browser_channel:
         session_kwargs["channel"] = str(browser_channel)
@@ -513,12 +535,14 @@ async def open_with_state_over_cdp(
         raise FileNotFoundError(f"State file not found: {state_path}")
 
     ws_url = _resolve_cdp_ws_url(endpoint=cdp_url)
+    runtime_paths = _browser_use_runtime_paths()
     session_cls = _load_browser_use_session_class()
     session = session_cls(  # type: ignore[call-arg]
         headless=False,
         cdp_url=ws_url,
         storage_state=str(state_path),
         is_local=True,
+        downloads_path=runtime_paths.downloads_path,
     )
 
     normalized_interval = max(0.5, float(auto_save_interval_s))
