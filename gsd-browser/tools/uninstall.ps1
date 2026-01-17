@@ -1,5 +1,5 @@
 param(
-  [switch]$PurgeConfig
+  [switch]$PurgeConfig = $false
 )
 
 $ErrorActionPreference = "Stop"

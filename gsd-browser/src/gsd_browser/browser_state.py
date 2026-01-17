@@ -152,7 +152,19 @@ async def _browser_use_connect(session: object) -> None:
         candidate = getattr(profile, "cdp_url", None) if profile is not None else None
         if isinstance(candidate, str) and candidate.strip():
             cdp_url = candidate.strip()
-        result = connect(cdp_url)
+        try:
+            if cdp_url:
+                result = connect(cdp_url)
+            else:
+                # Some browser-use versions treat an explicit `None` as "CDP attach" and
+                # will error. Prefer calling connect() with no args for local launch.
+                result = connect()
+        except TypeError:
+            # Fall back to explicit args for older/newer signatures.
+            if cdp_url:
+                result = connect(cdp_url=cdp_url)
+            else:
+                result = connect(cdp_url=None)
         if inspect.isawaitable(result):
             await result
         return
@@ -165,6 +177,58 @@ async def _browser_use_connect(session: object) -> None:
         return
 
     raise AttributeError("BrowserSession has no connect/start/get_or_create_cdp_session")
+
+
+async def _browser_use_force_load_storage_state(session: object, *, state_path: Path) -> None:
+    """Best-effort: re-apply a Playwright-compatible storage_state after connect.
+
+    In some environments (notably WSL), browser-use can attempt to load storage state
+    before it has an "agent focus" target, which causes cookie/localStorage application
+    to effectively no-op. Re-dispatching the load after focus exists makes state
+    persistence much more reliable.
+    """
+
+    if not state_path.exists():
+        return
+
+    # Ensure a focus/target exists first (required for some CDP operations).
+    get_or_create = getattr(session, "get_or_create_cdp_session", None)
+    if callable(get_or_create):
+        try:
+            result = get_or_create(target_id=None)
+        except TypeError:
+            result = get_or_create()
+        if inspect.isawaitable(result):
+            try:
+                await result
+            except Exception:
+                pass
+
+    try:
+        from browser_use.browser.events import (  # type: ignore[import-not-found]  # noqa: I001
+            LoadStorageStateEvent,
+        )
+    except Exception:
+        return
+
+    event_bus = getattr(session, "event_bus", None)
+    if event_bus is None:
+        return
+
+    for method_name in ("dispatch", "emit", "publish", "send"):
+        method = getattr(event_bus, method_name, None)
+        if not callable(method):
+            continue
+        try:
+            result = method(LoadStorageStateEvent(path=str(state_path)))
+        except TypeError:
+            try:
+                result = method(LoadStorageStateEvent(str(state_path)))
+            except Exception:
+                continue
+        if inspect.isawaitable(result):
+            await result
+        return
 
 
 async def _disable_browser_use_storage_watchdog_autosave(session: object) -> None:
@@ -372,7 +436,6 @@ async def capture_state_interactive(
     try:
         try:
             await _browser_use_connect(session)
-            await _disable_browser_use_storage_watchdog_autosave(session)
             await _browser_use_assert_connected(session)
         except Exception as exc:
             detail = f"{type(exc).__name__}: {exc}".strip()
@@ -388,6 +451,7 @@ async def capture_state_interactive(
                 await _browser_use_navigate(session, url)
             except Exception:
                 pass
+        await _disable_browser_use_storage_watchdog_autosave(session)
 
         stop = asyncio.Event()
 
@@ -462,13 +526,13 @@ async def capture_state_over_cdp(
 
     try:
         await _browser_use_connect(session)
-        await _disable_browser_use_storage_watchdog_autosave(session)
         await _browser_use_assert_connected(session)
         if url:
             try:
                 await _browser_use_navigate(session, url)
             except Exception:
                 pass
+        await _disable_browser_use_storage_watchdog_autosave(session)
 
         stop = asyncio.Event()
 
@@ -553,13 +617,18 @@ async def open_with_state_interactive(
 
     try:
         await _browser_use_connect(session)
-        await _disable_browser_use_storage_watchdog_autosave(session)
         await _browser_use_assert_connected(session)
+        if not user_data_dir:
+            try:
+                await _browser_use_force_load_storage_state(session, state_path=state_path)
+            except Exception:
+                pass
         if url:
             try:
                 await _browser_use_navigate(session, url)
             except Exception:
                 pass
+        await _disable_browser_use_storage_watchdog_autosave(session)
 
         if save_back:
             started = time.monotonic()
@@ -617,13 +686,17 @@ async def open_with_state_over_cdp(
     normalized_interval = max(0.5, float(auto_save_interval_s))
     try:
         await _browser_use_connect(session)
-        await _disable_browser_use_storage_watchdog_autosave(session)
         await _browser_use_assert_connected(session)
+        try:
+            await _browser_use_force_load_storage_state(session, state_path=state_path)
+        except Exception:
+            pass
         if url:
             try:
                 await _browser_use_navigate(session, url)
             except Exception:
                 pass
+        await _disable_browser_use_storage_watchdog_autosave(session)
 
         if save_back:
             started = time.monotonic()
