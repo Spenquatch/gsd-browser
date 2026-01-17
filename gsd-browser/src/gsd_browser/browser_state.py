@@ -138,16 +138,21 @@ def _load_browser_use_session_class() -> type[object]:
 
 
 async def _browser_use_connect(session: object) -> None:
-    connect = getattr(session, "connect", None)
-    if callable(connect):
-        result = connect()
+    start = getattr(session, "start", None)
+    if callable(start):
+        result = start()
         if inspect.isawaitable(result):
             await result
         return
 
-    start = getattr(session, "start", None)
-    if callable(start):
-        result = start()
+    connect = getattr(session, "connect", None)
+    if callable(connect):
+        cdp_url: str | None = None
+        profile = getattr(session, "browser_profile", None)
+        candidate = getattr(profile, "cdp_url", None) if profile is not None else None
+        if isinstance(candidate, str) and candidate.strip():
+            cdp_url = candidate.strip()
+        result = connect(cdp_url)
         if inspect.isawaitable(result):
             await result
         return
