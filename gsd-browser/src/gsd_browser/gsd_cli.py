@@ -14,11 +14,7 @@ import typer
 from rich.console import Console
 
 from . import __version__
-from .browser_install import (
-    detect_local_browser_executable,
-    install_playwright_chromium,
-    should_use_with_deps,
-)
+from .browser_install import detect_local_browser_executable
 from .browser_state import (
     capture_state_interactive,
     capture_state_over_cdp,
@@ -194,12 +190,14 @@ def mcp_smoke(
     host: str = typer.Option("127.0.0.1", "--host", help="Dashboard host (default 127.0.0.1)"),
     port: int = typer.Option(5009, "--port", help="Dashboard port (default 5009)"),
     timeout: float = typer.Option(20.0, "--timeout", help="Seconds to wait for dashboard startup"),
-    headless: bool = typer.Option(True, "--headless", is_flag=True, help="Run Playwright headless"),
+    headless: bool = typer.Option(
+        True, "--headless", is_flag=True, help="Run the browser headless"
+    ),
     no_headless: bool = typer.Option(
-        False, "--no-headless", is_flag=True, help="Run Playwright with a visible browser"
+        False, "--no-headless", is_flag=True, help="Run the browser with a visible window"
     ),
     skip_browser_task: bool = typer.Option(
-        False, "--skip-browser-task", help="Skip Playwright navigation (infra-only checks)"
+        False, "--skip-browser-task", help="Skip browser navigation (infra-only checks)"
     ),
     expect_streaming_mode: str = typer.Option(
         "cdp", "--expect-streaming-mode", help="Assert /healthz reports this mode"
@@ -624,7 +622,7 @@ def _browser_state_callback(
         "--cdp-url",
         help=(
             "Attach to an existing Chromium instance via CDP (e.g. http://127.0.0.1:9222). "
-            "When set, the browser is not launched by Playwright."
+            "When set, gsd does not launch a new browser."
         ),
     ),
     state_id: str | None = typer.Option(
@@ -640,17 +638,17 @@ def _browser_state_callback(
     auto_save_interval_s: float = typer.Option(
         5.0,
         "--auto-save-interval-s",
-        help="Autosave interval while waiting for close (used for --cdp-url).",
+        help="Autosave interval while waiting for close.",
     ),
     browser_channel: str | None = typer.Option(
         None,
         "--browser-channel",
-        help="Playwright Chromium channel to use (e.g. chrome, chromium, msedge).",
+        help="(Deprecated) Playwright Chromium channel (no longer used).",
     ),
     executable_path: str | None = typer.Option(
         None,
         "--executable-path",
-        help="Optional browser executable path (uses Playwright-managed Chromium if unset).",
+        help="Optional browser executable path (otherwise auto-detected).",
     ),
 ) -> None:
     if ctx.invoked_subcommand is not None:
@@ -674,17 +672,12 @@ def browser_ensure(
     install: bool = typer.Option(
         True,
         "--install/--no-install",
-        help="Install Playwright Chromium if no local browser is detected",
+        help="(Deprecated) Attempt to install a browser when missing.",
     ),
     write_config: bool = typer.Option(
         False,
         "--write-config/--no-write-config",
         help="Persist detected browser path to the user .env file.",
-    ),
-    with_deps: bool | None = typer.Option(
-        None,
-        "--with-deps/--no-with-deps",
-        help="Use `playwright install --with-deps` on Linux (root-only).",
     ),
 ) -> None:
     """Ensure a local Chromium/Chrome executable exists for browser-use.
@@ -707,23 +700,13 @@ def browser_ensure(
     if not install:
         raise typer.Exit(code=1)
 
-    deps = should_use_with_deps() if with_deps is None else bool(with_deps)
-    if deps and should_use_with_deps() is False and with_deps is True:
-        deps = False
-
-    result = install_playwright_chromium(with_deps=deps)
-    if result.returncode != 0:
-        raise typer.Exit(code=result.returncode)
-
-    found_after = detect_local_browser_executable()
-    if not found_after:
-        raise typer.Exit(code=2)
-
-    if write_config:
-        env_path = _select_env_path(explicit=None)
-        ensure_env_file(path=env_path, overwrite=False)
-        update_env_file(path=env_path, updates={"GSD_BROWSER_EXECUTABLE_PATH": found_after})
-        typer.echo(f"Updated: {env_path}")
+    typer.echo(
+        "No local Chromium/Chrome executable was detected.\n\n"
+        "Install Google Chrome or Microsoft Edge, then re-run:\n"
+        "  gsd browser ensure --write-config\n\n"
+        "Or set GSD_BROWSER_EXECUTABLE_PATH to the browser executable path."
+    )
+    raise typer.Exit(code=1)
 
 
 @browser_state_app.command("setup")
@@ -736,7 +719,7 @@ def browser_state_setup(
         "--cdp-url",
         help=(
             "Attach to an existing Chromium instance via CDP (e.g. http://127.0.0.1:9222). "
-            "When set, the browser is not launched by Playwright."
+            "When set, gsd does not launch a new browser."
         ),
     ),
     state_id: str | None = typer.Option(
@@ -752,17 +735,17 @@ def browser_state_setup(
     auto_save_interval_s: float = typer.Option(
         5.0,
         "--auto-save-interval-s",
-        help="Autosave interval while waiting for close (used for --cdp-url).",
+        help="Autosave interval while waiting for manual close.",
     ),
     browser_channel: str | None = typer.Option(
         None,
         "--browser-channel",
-        help="Playwright Chromium channel to use (e.g. chrome, chromium, msedge).",
+        help="(Deprecated) Playwright Chromium channel (no longer used).",
     ),
     executable_path: str | None = typer.Option(
         None,
         "--executable-path",
-        help="Optional browser executable path (uses Playwright-managed Chromium if unset).",
+        help="Optional browser executable path (otherwise auto-detected).",
     ),
     user_data_dir: str | None = typer.Option(
         None,
@@ -802,6 +785,7 @@ def browser_state_setup(
                 executable_path=executable_path,
                 user_data_dir=user_data_dir,
                 profile_directory=profile_directory,
+                auto_save_interval_s=auto_save_interval_s,
             )
         )
     typer.echo("Saved browser state.")
@@ -838,15 +822,20 @@ def browser_state_open(
         is_flag=True,
         help="Overwrite the state file on exit (refresh cookies/storage).",
     ),
+    auto_save_interval_s: float = typer.Option(
+        5.0,
+        "--auto-save-interval-s",
+        help="Autosave interval while waiting for manual close (only when --save-back).",
+    ),
     browser_channel: str | None = typer.Option(
         None,
         "--browser-channel",
-        help="Playwright Chromium channel to use (e.g. chrome, chromium, msedge).",
+        help="(Deprecated) Playwright Chromium channel (no longer used).",
     ),
     executable_path: str | None = typer.Option(
         None,
         "--executable-path",
-        help="Optional browser executable path (uses Playwright-managed Chromium if unset).",
+        help="Optional browser executable path (otherwise auto-detected).",
     ),
     user_data_dir: str | None = typer.Option(
         None,
@@ -874,6 +863,7 @@ def browser_state_open(
                 state_id=state_id,
                 close_timeout_ms=close_timeout_ms,
                 save_back=save_back,
+                auto_save_interval_s=auto_save_interval_s,
             )
         )
     else:
@@ -887,6 +877,7 @@ def browser_state_open(
                 save_back=save_back,
                 user_data_dir=user_data_dir,
                 profile_directory=profile_directory,
+                auto_save_interval_s=auto_save_interval_s,
             )
         )
     typer.echo(f"Opened with state: {state_path}")

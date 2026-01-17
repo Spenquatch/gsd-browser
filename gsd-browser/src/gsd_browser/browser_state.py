@@ -2,31 +2,26 @@
 
 This module defines:
 - where GSD stores browser storage state files
-- how to interactively capture a Playwright-compatible storage_state JSON file
+- how to capture and re-open Playwright-compatible ``storage_state`` JSON files
 
-Note: browser-use runs via CDP, but it can load Playwright-compatible storage_state files.
-Playwright is used here only for the interactive login capture flow.
+GSD uses ``browser-use`` for browser automation. ``browser-use`` is CDP-based and can both
+load and export Playwright-compatible storage state files.
 """
 
 from __future__ import annotations
 
 import asyncio
+import inspect
 import json
 import os
+import time
 from pathlib import Path
 from urllib.parse import urlparse, urlunparse
 from urllib.request import urlopen
 
-from playwright.async_api import async_playwright
-
 
 def _infer_local_browser_executable() -> str | None:
-    """Best-effort local browser detection for Playwright interactive flows.
-
-    If Playwright-managed browsers are not installed (common in pipx installs on Windows),
-    launching without an explicit executable/channel fails. Prefer a locally installed
-    Chrome/Edge when available.
-    """
+    """Best-effort local browser detection for browser-use headful flows."""
 
     try:
         from .browser_install import detect_local_browser_executable
@@ -118,6 +113,149 @@ def _resolve_cdp_ws_url(*, endpoint: str, timeout_s: float = 3.0) -> str:
     return urlunparse(fixed)
 
 
+def _load_browser_use_session_class() -> type[object]:
+    try:
+        from browser_use import BrowserSession  # type: ignore[import-not-found]
+    except Exception as exc:  # noqa: BLE001
+        raise RuntimeError(
+            "browser-use is not installed. Reinstall gsd with browser-use enabled."
+        ) from exc
+    return BrowserSession
+
+
+async def _browser_use_connect(session: object) -> None:
+    connect = getattr(session, "connect", None)
+    if callable(connect):
+        result = connect()
+        if inspect.isawaitable(result):
+            await result
+        return
+
+    start = getattr(session, "start", None)
+    if callable(start):
+        result = start()
+        if inspect.isawaitable(result):
+            await result
+        return
+
+    get_or_create = getattr(session, "get_or_create_cdp_session", None)
+    if callable(get_or_create):
+        result = get_or_create()
+        if inspect.isawaitable(result):
+            await result
+        return
+
+    raise AttributeError("BrowserSession has no connect/start/get_or_create_cdp_session")
+
+
+async def _browser_use_stop(session: object) -> None:
+    stop = getattr(session, "stop", None)
+    if not callable(stop):
+        return
+    result = stop()
+    if inspect.isawaitable(result):
+        await result
+
+
+async def _browser_use_navigate(session: object, url: str) -> None:
+    navigate = getattr(session, "navigate_to", None)
+    if callable(navigate):
+        result = navigate(url, new_tab=False)
+        if inspect.isawaitable(result):
+            await result
+        return
+
+    # Fall back to best-effort API surface.
+    goto = getattr(session, "goto", None)
+    if callable(goto):
+        result = goto(url)
+        if inspect.isawaitable(result):
+            await result
+
+
+async def _browser_use_export_storage_state(session: object, *, output_path: Path) -> None:
+    export = getattr(session, "export_storage_state", None)
+    if not callable(export):
+        raise AttributeError("BrowserSession.export_storage_state is unavailable")
+
+    try:
+        result = export(output_path=str(output_path))
+    except TypeError:
+        # Older/newer browser-use may take output_path as positional or `path=`.
+        try:
+            result = export(str(output_path))
+        except TypeError:
+            result = export(path=str(output_path))
+
+    if inspect.isawaitable(result):
+        await result
+
+    try:
+        output_path.chmod(0o600)
+    except OSError:
+        pass
+
+
+async def _browser_use_poll_until_disconnect(
+    session: object,
+    *,
+    close_timeout_ms: float,
+    poll_interval_s: float,
+    stop_event: asyncio.Event | None = None,
+) -> None:
+    timeout_s = max(0.0, float(close_timeout_ms)) / 1000.0
+    poll_s = max(0.25, float(poll_interval_s))
+    started = time.monotonic()
+
+    get_or_create = getattr(session, "get_or_create_cdp_session", None)
+    if not callable(get_or_create):
+        if stop_event is not None:
+            if timeout_s > 0:
+                try:
+                    await asyncio.wait_for(stop_event.wait(), timeout=timeout_s)
+                except TimeoutError:
+                    return
+            else:
+                await stop_event.wait()
+            return
+
+        # Fall back to a sleep loop (no disconnect signal available).
+        while True:
+            if timeout_s > 0 and (time.monotonic() - started) >= timeout_s:
+                return
+            await asyncio.sleep(poll_s)
+
+    while True:
+        if stop_event is not None and stop_event.is_set():
+            return
+        if timeout_s > 0 and (time.monotonic() - started) >= timeout_s:
+            return
+
+        try:
+            cdp_session = get_or_create()
+            if inspect.isawaitable(cdp_session):
+                cdp_session = await cdp_session
+
+            cdp_client = getattr(cdp_session, "cdp_client", None)
+            cdp_session_id = getattr(cdp_session, "session_id", None)
+            send_obj = getattr(cdp_client, "send", None) if cdp_client is not None else None
+            if callable(send_obj):
+                # Ping the browser; should fail if the CDP connection is gone.
+                try:
+                    result = send_obj("Browser.getVersion", session_id=cdp_session_id)
+                except TypeError:
+                    try:
+                        result = send_obj("Browser.getVersion")
+                    except TypeError:
+                        result = send_obj("Browser.getVersion", None)
+                if inspect.isawaitable(result):
+                    await result
+        except Exception:
+            return
+
+        await asyncio.sleep(poll_s)
+
+
 async def capture_state_interactive(
     *,
     url: str | None,
@@ -127,104 +265,72 @@ async def capture_state_interactive(
     executable_path: str | None = None,
     user_data_dir: str | None = None,
     profile_directory: str | None = None,
+    auto_save_interval_s: float = 5.0,
 ) -> Path:
-    """Launch a visible browser for login and persist the resulting storage_state JSON."""
+    """Launch a visible browser (via browser-use) and persist storage_state on close."""
+
+    del browser_channel  # legacy; browser-use selects the binary by executable_path/detection.
 
     state_path = browser_state_path_for_id(state_id)
     state_path.parent.mkdir(parents=True, exist_ok=True)
 
-    async with async_playwright() as playwright:
-        launch_kwargs: dict[str, object] = {"headless": False}
-        if browser_channel:
-            launch_kwargs["channel"] = str(browser_channel)
-        if executable_path:
-            launch_kwargs["executable_path"] = str(executable_path)
-        elif not browser_channel:
-            inferred = _infer_local_browser_executable()
-            if inferred:
-                launch_kwargs["executable_path"] = str(inferred)
+    inferred = executable_path or _infer_local_browser_executable()
+    session_cls = _load_browser_use_session_class()
+    session = session_cls(  # type: ignore[call-arg]
+        headless=False,
+        executable_path=inferred,
+        user_data_dir=user_data_dir,
+        profile_directory=profile_directory,
+    )
 
-        if user_data_dir:
-            args: list[str] = []
-            if profile_directory:
-                args.append(f"--profile-directory={profile_directory}")
+    normalized_interval = max(0.5, float(auto_save_interval_s))
 
-            context = await playwright.chromium.launch_persistent_context(  # type: ignore[arg-type]
-                user_data_dir=str(Path(user_data_dir).expanduser()),
-                args=args or None,
-                **launch_kwargs,
-            )
-            browser = getattr(context, "browser", None)
-            stop = asyncio.Event()
-
-            async def _save_once() -> None:
-                try:
-                    await context.storage_state(path=str(state_path))
-                    try:
-                        state_path.chmod(0o600)
-                    except OSError:
-                        pass
-                except Exception:
-                    return
-
-            async def _autosave_loop() -> None:
-                while not stop.is_set():
-                    await _save_once()
-                    try:
-                        await asyncio.wait_for(stop.wait(), timeout=5.0)
-                    except TimeoutError:
-                        continue
-
-            autosave_task = asyncio.create_task(_autosave_loop())
+    try:
+        await _browser_use_connect(session)
+        if url:
             try:
-                page = context.pages[0] if context.pages else await context.new_page()
-                if url:
-                    try:
-                        await page.goto(url, wait_until="domcontentloaded")
-                    except Exception:
-                        pass
-
-                # Wait for the user to close the browser (or time out if configured).
-                if browser is not None:
-                    await _wait_for_browser_disconnected(
-                        browser=browser, timeout_ms=close_timeout_ms
-                    )
-                else:
-                    await context.wait_for_event("close", timeout=close_timeout_ms)
-            finally:
-                stop.set()
-                try:
-                    await autosave_task
-                except Exception:
-                    pass
-                await _save_once()
-                try:
-                    await context.close()
-                except Exception:
-                    pass
-        else:
-            browser = await playwright.chromium.launch(**launch_kwargs)  # type: ignore[arg-type]
-            context = await browser.new_context()
-            page = await context.new_page()
-            if url:
-                try:
-                    await page.goto(url, wait_until="domcontentloaded")
-                except Exception:
-                    # Interactive mode: if initial navigation is slow/blocked, let the user drive.
-                    pass
-
-            # Playwright defaults many waits to 30s; for interactive login capture we want to wait
-            # until the user closes the browser window (or the page is otherwise closed).
-            await page.wait_for_event("close", timeout=close_timeout_ms)
-
-            await context.storage_state(path=str(state_path))
-            try:
-                state_path.chmod(0o600)
-            except OSError:
+                await _browser_use_navigate(session, url)
+            except Exception:
                 pass
 
-            await context.close()
-            await browser.close()
+        stop = asyncio.Event()
+
+        async def _autosave_loop() -> None:
+            consecutive_failures = 0
+            while not stop.is_set():
+                try:
+                    await _browser_use_export_storage_state(session, output_path=state_path)
+                    consecutive_failures = 0
+                except Exception:
+                    consecutive_failures += 1
+                    if consecutive_failures >= 3:
+                        stop.set()
+                        break
+                try:
+                    await asyncio.wait_for(stop.wait(), timeout=normalized_interval)
+                except TimeoutError:
+                    continue
+
+        autosave_task = asyncio.create_task(_autosave_loop())
+        try:
+            await _browser_use_poll_until_disconnect(
+                session,
+                close_timeout_ms=close_timeout_ms,
+                poll_interval_s=min(1.0, normalized_interval),
+                stop_event=stop,
+            )
+        finally:
+            stop.set()
+            try:
+                await autosave_task
+            except Exception:
+                pass
+    finally:
+        try:
+            await _browser_use_export_storage_state(session, output_path=state_path)
+        except Exception:
+            pass
+        await _browser_use_stop(session)
 
     return state_path
 
@@ -237,38 +343,45 @@ async def capture_state_over_cdp(
     close_timeout_ms: float = 0,
     auto_save_interval_s: float = 5.0,
 ) -> Path:
-    """Attach to an existing Chromium instance via CDP and export storage_state.
+    """Attach to an existing browser via CDP and export storage_state.
 
-    This is useful for capturing state from a non-Playwright-launched browser (e.g. Windows
-    Chrome from WSL). A small autosave loop runs while waiting for the page to close so
-    abrupt browser shutdowns still tend to produce a usable state file.
+    Useful for capturing state from a non-automated browser session, e.g. attaching to a
+    manually-launched Windows Chrome instance from WSL.
     """
 
     state_path = browser_state_path_for_id(state_id)
     state_path.parent.mkdir(parents=True, exist_ok=True)
 
     normalized_interval = max(0.5, float(auto_save_interval_s))
+    ws_url = _resolve_cdp_ws_url(endpoint=cdp_url)
 
-    async with async_playwright() as playwright:
-        ws_url = _resolve_cdp_ws_url(endpoint=cdp_url)
-        browser = await playwright.chromium.connect_over_cdp(ws_url)
-        context = browser.contexts[0] if browser.contexts else await browser.new_context()
+    session_cls = _load_browser_use_session_class()
+    session = session_cls(  # type: ignore[call-arg]
+        headless=False,
+        cdp_url=ws_url,
+    )
+
+    try:
+        await _browser_use_connect(session)
+        if url:
+            try:
+                await _browser_use_navigate(session, url)
+            except Exception:
+                pass
 
         stop = asyncio.Event()
 
-        async def _save_once() -> None:
-            try:
-                await context.storage_state(path=str(state_path))
-                try:
-                    state_path.chmod(0o600)
-                except OSError:
-                    pass
-            except Exception:
-                return
-
         async def _autosave_loop() -> None:
+            consecutive_failures = 0
             while not stop.is_set():
-                await _save_once()
+                try:
+                    await _browser_use_export_storage_state(session, output_path=state_path)
+                    consecutive_failures = 0
+                except Exception:
+                    consecutive_failures += 1
+                    if consecutive_failures >= 3:
+                        stop.set()
+                        break
                 try:
                     await asyncio.wait_for(stop.wait(), timeout=normalized_interval)
                 except TimeoutError:
@@ -276,25 +389,24 @@ async def capture_state_over_cdp(
 
         autosave_task = asyncio.create_task(_autosave_loop())
         try:
-            # Optionally open/navigate a page, but prefer a manual user-driven browser session
-            # to avoid sites treating the capture as automated.
-            if url:
-                try:
-                    page = await context.new_page()
-                    await page.goto(url, wait_until="domcontentloaded")
-                except Exception:
-                    pass
-
-            # Wait for the browser to disconnect (typically when the user closes the browser).
-            await _wait_for_browser_disconnected(browser=browser, timeout_ms=close_timeout_ms)
+            await _browser_use_poll_until_disconnect(
+                session,
+                close_timeout_ms=close_timeout_ms,
+                poll_interval_s=min(1.0, normalized_interval),
+                stop_event=stop,
+            )
         finally:
             stop.set()
             try:
                 await autosave_task
             except Exception:
                 pass
-
-        await _save_once()
+    finally:
+        try:
+            await _browser_use_export_storage_state(session, output_path=state_path)
+        except Exception:
+            pass
+        await _browser_use_stop(session)
 
     return state_path
 
@@ -309,76 +421,62 @@ async def open_with_state_interactive(
     save_back: bool = False,
     user_data_dir: str | None = None,
     profile_directory: str | None = None,
+    auto_save_interval_s: float = 5.0,
 ) -> Path:
-    """Launch a visible browser with a saved storage_state loaded for manual verification.
-
-    This is intended for humans to confirm a saved state is valid (e.g. signed in) by
-    browsing normally. If save_back is True, the state file is overwritten on exit.
-    """
+    """Launch a visible browser with a saved storage_state loaded for manual verification."""
 
     state_path = browser_state_path_for_id(state_id)
     if not user_data_dir and not state_path.exists():
         raise FileNotFoundError(f"State file not found: {state_path}")
     state_path.parent.mkdir(parents=True, exist_ok=True)
 
-    async with async_playwright() as playwright:
-        launch_kwargs: dict[str, object] = {"headless": False}
-        if browser_channel:
-            launch_kwargs["channel"] = str(browser_channel)
-        if executable_path:
-            launch_kwargs["executable_path"] = str(executable_path)
-        elif not browser_channel:
-            inferred = _infer_local_browser_executable()
-            if inferred:
-                launch_kwargs["executable_path"] = str(inferred)
+    del browser_channel  # legacy; browser-use selects the binary by executable_path/detection.
 
-        if user_data_dir:
-            args: list[str] = []
-            if profile_directory:
-                args.append(f"--profile-directory={profile_directory}")
-            context = await playwright.chromium.launch_persistent_context(  # type: ignore[arg-type]
-                user_data_dir=str(Path(user_data_dir).expanduser()),
-                args=args or None,
-                **launch_kwargs,
-            )
-            browser = getattr(context, "browser", None)
+    inferred = executable_path or _infer_local_browser_executable()
+    session_cls = _load_browser_use_session_class()
+    session_kwargs: dict[str, object] = {
+        "headless": False,
+        "executable_path": inferred,
+        "user_data_dir": user_data_dir,
+        "profile_directory": profile_directory,
+    }
+    if not user_data_dir:
+        session_kwargs["storage_state"] = str(state_path)
 
-            if url:
+    session = session_cls(**session_kwargs)  # type: ignore[arg-type]
+    normalized_interval = max(0.5, float(auto_save_interval_s))
+
+    try:
+        await _browser_use_connect(session)
+        if url:
+            try:
+                await _browser_use_navigate(session, url)
+            except Exception:
+                pass
+
+        if save_back:
+            started = time.monotonic()
+            while True:
+                if close_timeout_ms > 0:
+                    elapsed = time.monotonic() - started
+                    if elapsed >= (float(close_timeout_ms) / 1000.0):
+                        break
                 try:
-                    page = context.pages[0] if context.pages else await context.new_page()
-                    await page.goto(url, wait_until="domcontentloaded")
+                    await _browser_use_export_storage_state(session, output_path=state_path)
                 except Exception:
-                    pass
-
-            if browser is not None:
-                await _wait_for_browser_disconnected(browser=browser, timeout_ms=close_timeout_ms)
-            else:
-                await context.wait_for_event("close", timeout=close_timeout_ms)
-
-            if save_back:
-                await context.storage_state(path=str(state_path))
-                try:
-                    state_path.chmod(0o600)
-                except OSError:
-                    pass
+                    break
+                await asyncio.sleep(normalized_interval)
         else:
-            browser = await playwright.chromium.launch(**launch_kwargs)  # type: ignore[arg-type]
-            context = await browser.new_context(storage_state=str(state_path))
-            page = await context.new_page()
-            if url:
-                try:
-                    await page.goto(url, wait_until="domcontentloaded")
-                except Exception:
-                    pass
-
-            await _wait_for_browser_disconnected(browser=browser, timeout_ms=close_timeout_ms)
-
-            if save_back:
-                await context.storage_state(path=str(state_path))
-                try:
-                    state_path.chmod(0o600)
-                except OSError:
-                    pass
+            await _browser_use_poll_until_disconnect(
+                session, close_timeout_ms=close_timeout_ms, poll_interval_s=normalized_interval
+            )
+    finally:
+        if save_back:
+            try:
+                await _browser_use_export_storage_state(session, output_path=state_path)
+            except Exception:
+                pass
+        await _browser_use_stop(session)
 
     return state_path
 
@@ -390,35 +488,53 @@ async def open_with_state_over_cdp(
     state_id: str | None,
     close_timeout_ms: float = 0,
     save_back: bool = False,
+    auto_save_interval_s: float = 5.0,
 ) -> Path:
-    """Open a state-backed context inside an existing browser via CDP.
-
-    This is useful on WSL: attach to Windows Chrome over CDP and open an incognito-like
-    context that loads the saved storage_state for manual verification.
-    """
+    """Open a state-backed session inside an existing browser via CDP."""
 
     state_path = browser_state_path_for_id(state_id)
     if not state_path.exists():
         raise FileNotFoundError(f"State file not found: {state_path}")
 
-    async with async_playwright() as playwright:
-        ws_url = _resolve_cdp_ws_url(endpoint=cdp_url)
-        browser = await playwright.chromium.connect_over_cdp(ws_url)
-        context = await browser.new_context(storage_state=str(state_path))
-        page = await context.new_page()
+    ws_url = _resolve_cdp_ws_url(endpoint=cdp_url)
+    session_cls = _load_browser_use_session_class()
+    session = session_cls(  # type: ignore[call-arg]
+        headless=False,
+        cdp_url=ws_url,
+        storage_state=str(state_path),
+    )
+
+    normalized_interval = max(0.5, float(auto_save_interval_s))
+    try:
+        await _browser_use_connect(session)
         if url:
             try:
-                await page.goto(url, wait_until="domcontentloaded")
+                await _browser_use_navigate(session, url)
             except Exception:
                 pass
 
-        await _wait_for_browser_disconnected(browser=browser, timeout_ms=close_timeout_ms)
-
         if save_back:
-            await context.storage_state(path=str(state_path))
+            started = time.monotonic()
+            while True:
+                if close_timeout_ms > 0:
+                    elapsed = time.monotonic() - started
+                    if elapsed >= (float(close_timeout_ms) / 1000.0):
+                        break
+                try:
+                    await _browser_use_export_storage_state(session, output_path=state_path)
+                except Exception:
+                    break
+                await asyncio.sleep(normalized_interval)
+        else:
+            await _browser_use_poll_until_disconnect(
+                session, close_timeout_ms=close_timeout_ms, poll_interval_s=normalized_interval
+            )
+    finally:
+        if save_back:
             try:
-                state_path.chmod(0o600)
-            except OSError:
+                await _browser_use_export_storage_state(session, output_path=state_path)
+            except Exception:
                 pass
+        await _browser_use_stop(session)
 
     return state_path

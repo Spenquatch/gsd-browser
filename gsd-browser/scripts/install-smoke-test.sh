@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Full install smoke test:
 # - installs via ./tools/install.sh (pipx)
-# - launches dashboard + runs a Playwright task via `gsd mcp smoke`
+# - launches dashboard + runs a browser-use task via `gsd mcp smoke`
 # - validates /healthz, dashboard HTML, and screenshot capture
 set -euo pipefail
 
@@ -29,11 +29,6 @@ if [ ! -x "$BIN" ]; then
   exit 1
 fi
 
-if [ -x "$HOME/.local/bin/playwright" ]; then
-  echo "[install-smoke] Ensuring Playwright Chromium is installed..."
-  "$HOME/.local/bin/playwright" install chromium >/dev/null
-fi
-
 TMP_DIR="$(mktemp -d)"
 STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
 REPORT_PATH="${GSD_INSTALL_SMOKE_REPORT:-/tmp/gsd-install-smoke-report.${STAMP}.json}"
@@ -43,7 +38,7 @@ cleanup() {
 }
 trap cleanup EXIT
 
-echo "[install-smoke] Running end-to-end smoke (dashboard + Playwright + screenshots)..."
+echo "[install-smoke] Running end-to-end smoke (dashboard + browser-use + screenshots)..."
 (
   cd "$TMP_DIR"
   export GSD_ENV_FILE="$ENV_FILE_DEFAULT"

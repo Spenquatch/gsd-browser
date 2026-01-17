@@ -172,7 +172,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--skip-browser-task",
         action="store_true",
-        help="Skip Playwright navigation (for infra-only checks)",
+        help="Skip browser navigation (for infra-only checks)",
     )
     parser.add_argument(
         "--expect-streaming-mode",

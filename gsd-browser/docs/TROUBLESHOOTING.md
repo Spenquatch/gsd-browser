@@ -14,7 +14,7 @@ This script prints:
 ## Common Issues
 - **Missing API key**: Ensure the provider-specific variable is set (e.g. `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `BROWSER_USE_API_KEY`). Run `gsd llm validate` to confirm.
 - **.env not being picked up**: The server loads `.env` from the current working directory by default, and also checks `~/.gsd/.env` when no local `.env` exists. If your MCP host launches the server elsewhere, set `GSD_ENV_FILE=/absolute/path/to/.env`.
-- **No browser installed**: `browser-use` needs a local Chromium/Chrome executable. Run `gsd browser ensure` (this installs Playwright Chromium using the current Python environment).
+- **No browser installed**: `browser-use` needs a local Chrome/Edge/Chromium executable. Install a browser, then run `gsd browser ensure --write-config` (or set `GSD_BROWSER_EXECUTABLE_PATH`).
 - **Tool missing / not advertised**: Your MCP host only sees the tool list at session start. If you changed `GSD_MCP_ENABLED_TOOLS` / `GSD_MCP_DISABLED_TOOLS`, restart Codex/Claude (or otherwise restart the MCP session).
 - **pipx command not found**: Rerun `./tools/install.sh` which bootstraps pipx via `python3 -m pip install --user pipx` and instructs you to add `~/.local/bin` to PATH.
 - **Claude config entry not present**: Use `./scripts/check-mcp-config.sh` to inspect `~/.claude.json` and project `.claude.json`.

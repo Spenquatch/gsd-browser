@@ -19,7 +19,6 @@ dependencies = [
   "rich>=14,<15",
   "mcp>=1.6,<2.0",
   "fastapi>=0.110,<1.0",
-  "playwright>=1.41,<2.0",
   "browser-use>=0.11.2,<0.12",
   "python-socketio>=5.11,<6.0",
   "uvicorn[standard]>=0.27,<1.0"

@@ -89,7 +89,7 @@ Notes:
 
 ## MCP Tools
 Once configured as an MCP server, Claude can call:
-- `web_eval_agent(url, task, headless_browser=False)` – runs a short Playwright evaluation and records screenshots.
+- `web_eval_agent(url, task, headless_browser=False)` – runs a short browser-use evaluation and records screenshots.
 - `web_task_agent(url, task, headless_browser=False)` – general-purpose web task runner (does not use saved auth state by default).
 - `web_task_agent_github(url, task, headless_browser=False)` – GitHub workflows using a dedicated `github` saved state.
 - `setup_browser_state(url=None, state_id=None)` – opens a non-headless browser so you can log in, then saves state to `~/.gsd/browser_state/state.json` (or `~/.gsd/browser_state/states/<state_id>.json`).
@@ -105,9 +105,9 @@ To manually verify a saved state loads (and that you’re signed in), open a bro
 gsd browser state open --url "https://chatgpt.com" --state-id gpt-pro
 ```
 
-If a site flags Playwright-managed Chromium as automated, try using your system Chrome:
+If you want to capture state from an existing, manually-launched Chrome session, attach via CDP:
 ```bash
-gsd browser state setup --url "https://chatgpt.com" --state-id gpt-pro --browser-channel chrome
+gsd browser state setup --cdp-url "http://127.0.0.1:9222" --state-id gpt-pro
 ```
 
 For a quick end-to-end check:

@@ -12,11 +12,7 @@ import typer
 from rich.console import Console
 
 from . import __version__
-from .browser_install import (
-    detect_local_browser_executable,
-    install_playwright_chromium,
-    should_use_with_deps,
-)
+from .browser_install import detect_local_browser_executable
 from .config import load_settings
 from .logging_utils import setup_logging
 from .main import serve_stdio
@@ -538,12 +534,14 @@ def mcp_tool_smoke(
     host: str = typer.Option("127.0.0.1", "--host", help="Dashboard host (default 127.0.0.1)"),
     port: int = typer.Option(5009, "--port", help="Dashboard port (default 5009)"),
     timeout: float = typer.Option(20.0, "--timeout", help="Seconds to wait for dashboard startup"),
-    headless: bool = typer.Option(True, "--headless", is_flag=True, help="Run Playwright headless"),
+    headless: bool = typer.Option(
+        True, "--headless", is_flag=True, help="Run the browser headless"
+    ),
     no_headless: bool = typer.Option(
-        False, "--no-headless", is_flag=True, help="Run Playwright with a visible browser"
+        False, "--no-headless", is_flag=True, help="Run the browser with a visible window"
     ),
     skip_browser_task: bool = typer.Option(
-        False, "--skip-browser-task", help="Skip Playwright navigation (infra-only checks)"
+        False, "--skip-browser-task", help="Skip browser navigation (infra-only checks)"
     ),
     expect_streaming_mode: str = typer.Option(
         "cdp", "--expect-streaming-mode", help="Assert /healthz reports this mode"
@@ -684,17 +682,12 @@ def ensure_browser(
     install: bool = typer.Option(
         True,
         "--install/--no-install",
-        help="Install Playwright Chromium if no local browser is detected",
+        help="(Deprecated) Attempt to install a browser when missing.",
     ),
     write_config: bool = typer.Option(
         False,
         "--write-config/--no-write-config",
         help="Persist detected browser path to the user .env file.",
-    ),
-    with_deps: bool | None = typer.Option(
-        None,
-        "--with-deps/--no-with-deps",
-        help="Use `playwright install --with-deps` on Linux (root-only).",
     ),
 ) -> None:
     """Ensure a local Chromium/Chrome executable exists for browser-use."""
@@ -715,44 +708,13 @@ def ensure_browser(
     if not install:
         raise typer.Exit(code=1)
 
-    deps = should_use_with_deps() if with_deps is None else bool(with_deps)
-    if deps and should_use_with_deps() is False and with_deps is True:
-        console.print(
-            "[yellow]! --with-deps requested but not available; continuing without it[/yellow]"
-        )
-        deps = False
-
-    console.print("[dim]Installing Playwright Chromium...[/dim]")
-    result = install_playwright_chromium(with_deps=deps)
-    if result.returncode != 0:
-        console.print("[red]✗ Failed to install Chromium via Playwright[/red]")
-        if result.stderr:
-            console.print(result.stderr.strip())
-        raise typer.Exit(code=result.returncode)
-
-    found_after = detect_local_browser_executable()
-    if not found_after:
-        pw_path = (os.getenv("PLAYWRIGHT_BROWSERS_PATH") or "").strip()
-        console.print(
-            "[red]✗ Playwright install finished, but no browser executable was detected[/red]"
-        )
-        if pw_path:
-            console.print(f"[yellow]PLAYWRIGHT_BROWSERS_PATH[/yellow]: {pw_path}")
-        if result.stdout.strip():
-            console.print("[dim]playwright stdout:[/dim]")
-            console.print(result.stdout.strip())
-        if result.stderr.strip():
-            console.print("[dim]playwright stderr:[/dim]")
-            console.print(result.stderr.strip())
-        raise typer.Exit(code=2)
-
-    console.print(f"[green]✓ Browser installed[/green]: {found_after}")
-    if write_config:
-        env_file = (os.getenv("GSD_ENV_FILE") or "").strip()
-        env_path = Path(env_file).expanduser() if env_file else default_env_path()
-        ensure_env_file(path=env_path, overwrite=False)
-        update_env_file(path=env_path, updates={"GSD_BROWSER_EXECUTABLE_PATH": found_after})
-        console.print(f"[dim]Pinned in config[/dim]: {env_path}")
+    console.print(
+        "[red]No local Chromium/Chrome executable was detected.[/red]\n\n"
+        "Install Google Chrome or Microsoft Edge, then re-run:\n"
+        "  gsd-browser ensure-browser --write-config\n\n"
+        "Or set GSD_BROWSER_EXECUTABLE_PATH to the browser executable path."
+    )
+    raise typer.Exit(code=1)
 
 
 @app.command("mcp-config-add")

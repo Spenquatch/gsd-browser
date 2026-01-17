@@ -98,30 +98,11 @@ if [ -n "$BIN" ] && [ -x "$BIN" ]; then
     echo "Tip: run '$LEGACY_CLI configure' to add API keys (legacy alias; prefer '$CANONICAL_CLI config set')."
   fi
 
-  echo "Ensuring a local browser is available (Chromium/Chrome)..."
-  if [ -t 0 ] && [ -t 1 ]; then
-    if read -r -p "Install Playwright Chromium if missing? [Y/n] " ans; then
-      ans="${ans:-Y}"
-      if [[ "$ans" =~ ^[Yy]$ ]]; then
-        if [ "$CLI_STYLE" = "canonical" ]; then
-          "$BIN" browser ensure --write-config
-        else
-          "$BIN" ensure-browser --write-config
-        fi
-      else
-        if [ "$CLI_STYLE" = "canonical" ]; then
-          "$BIN" browser ensure --no-install --write-config || true
-        else
-          "$BIN" ensure-browser --no-install --write-config || true
-        fi
-      fi
-    fi
+  echo "Ensuring a local browser is available (Chrome/Edge)..."
+  if [ "$CLI_STYLE" = "canonical" ]; then
+    "$BIN" browser ensure --write-config || true
   else
-    if [ "$CLI_STYLE" = "canonical" ]; then
-      "$BIN" browser ensure --write-config
-    else
-      "$BIN" ensure-browser --write-config
-    fi
+    "$BIN" ensure-browser --write-config || true
   fi
 
   if command -v codex >/dev/null 2>&1; then
