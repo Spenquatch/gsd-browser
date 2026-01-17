@@ -9,6 +9,14 @@ LEGACY_CLI="gsd-browser"
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 MANIFEST_FILE="$HOME/.gsd/install.json"
 
+# Reduce pip noise that can break JSON parsing in some pipx flows.
+export PYTHONUTF8="${PYTHONUTF8:-1}"
+export PYTHONIOENCODING="${PYTHONIOENCODING:-utf-8}"
+export PIP_DISABLE_PIP_VERSION_CHECK="${PIP_DISABLE_PIP_VERSION_CHECK:-1}"
+export PIP_NO_PYTHON_VERSION_WARNING="${PIP_NO_PYTHON_VERSION_WARNING:-1}"
+export PIP_NO_COLOR="${PIP_NO_COLOR:-1}"
+export PIP_PROGRESS_BAR="${PIP_PROGRESS_BAR:-off}"
+
 resolve_bin() {
   local name="$1"
   local bin
@@ -21,9 +29,18 @@ resolve_bin() {
   echo "$bin"
 }
 
-if ! command -v pipx >/dev/null 2>&1; then
-  echo "pipx is required for upgrades" >&2
+if ! command -v python3 >/dev/null 2>&1; then
+  echo "python3 is required" >&2
   exit 1
+fi
+
+if ! command -v pipx >/dev/null 2>&1; then
+  echo "pipx not found; installing via pip --user"
+  if ! python3 -m pip install --user pipx; then
+    echo "pipx install failed; retrying with --break-system-packages (PEP 668 environments)"
+    python3 -m pip install --user --break-system-packages pipx
+  fi
+  export PATH="$HOME/.local/bin:$PATH"
 fi
 
 if command -v uv >/dev/null 2>&1 && [ -z "${PIPX_DEFAULT_PYTHON:-}" ]; then

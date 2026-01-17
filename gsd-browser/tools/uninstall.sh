@@ -7,6 +7,14 @@ CONFIG_NAME="gsd"       # Config directory name
 MANIFEST_FILE="$HOME/.gsd/install.json"
 CONFIG_DIR="$HOME/.gsd"
 
+# Reduce pip noise (defensive; some pipx flows parse JSON).
+export PYTHONUTF8="${PYTHONUTF8:-1}"
+export PYTHONIOENCODING="${PYTHONIOENCODING:-utf-8}"
+export PIP_DISABLE_PIP_VERSION_CHECK="${PIP_DISABLE_PIP_VERSION_CHECK:-1}"
+export PIP_NO_PYTHON_VERSION_WARNING="${PIP_NO_PYTHON_VERSION_WARNING:-1}"
+export PIP_NO_COLOR="${PIP_NO_COLOR:-1}"
+export PIP_PROGRESS_BAR="${PIP_PROGRESS_BAR:-off}"
+
 PURGE_CONFIG=0
 if [ "${1:-}" = "--purge-config" ]; then
   PURGE_CONFIG=1

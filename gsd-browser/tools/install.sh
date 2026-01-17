@@ -10,6 +10,14 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 MANIFEST_DIR="$HOME/.gsd"
 MANIFEST_FILE="$MANIFEST_DIR/install.json"
 
+# Reduce pip noise that can break JSON parsing in some pipx flows.
+export PYTHONUTF8="${PYTHONUTF8:-1}"
+export PYTHONIOENCODING="${PYTHONIOENCODING:-utf-8}"
+export PIP_DISABLE_PIP_VERSION_CHECK="${PIP_DISABLE_PIP_VERSION_CHECK:-1}"
+export PIP_NO_PYTHON_VERSION_WARNING="${PIP_NO_PYTHON_VERSION_WARNING:-1}"
+export PIP_NO_COLOR="${PIP_NO_COLOR:-1}"
+export PIP_PROGRESS_BAR="${PIP_PROGRESS_BAR:-off}"
+
 mkdir -p "$MANIFEST_DIR"
 
 resolve_bin() {
