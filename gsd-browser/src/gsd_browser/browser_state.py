@@ -127,6 +127,18 @@ def _resolve_cdp_ws_url(*, endpoint: str, timeout_s: float = 3.0) -> str:
     return urlunparse(fixed)
 
 
+def _load_storage_state(path: Path) -> dict[str, object]:
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except OSError as exc:
+        raise FileNotFoundError(f"State file not found: {path}") from exc
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"Invalid JSON in state file: {path}") from exc
+    if not isinstance(data, dict):
+        raise ValueError(f"Invalid storage_state payload (expected object): {path}")
+    return data
+
+
 def _load_browser_use_session_class() -> type[object]:
     try:
         from browser_use import BrowserSession  # type: ignore[import-not-found]
@@ -465,8 +477,11 @@ async def open_with_state_interactive(
     """Launch a visible browser with a saved storage_state loaded for manual verification."""
 
     state_path = browser_state_path_for_id(state_id)
-    if not user_data_dir and not state_path.exists():
-        raise FileNotFoundError(f"State file not found: {state_path}")
+    state_payload: dict[str, object] | None = None
+    if not user_data_dir:
+        if not state_path.exists():
+            raise FileNotFoundError(f"State file not found: {state_path}")
+        state_payload = _load_storage_state(state_path)
     state_path.parent.mkdir(parents=True, exist_ok=True)
 
     inferred = executable_path or _infer_local_browser_executable()
@@ -483,8 +498,8 @@ async def open_with_state_interactive(
         session_kwargs["channel"] = str(browser_channel)
     if inferred:
         session_kwargs["executable_path"] = inferred
-    if not user_data_dir:
-        session_kwargs["storage_state"] = str(state_path)
+    if not user_data_dir and state_payload is not None:
+        session_kwargs["storage_state"] = state_payload
 
     session = session_cls(**session_kwargs)  # type: ignore[arg-type]
     normalized_interval = max(0.5, float(auto_save_interval_s))
@@ -538,6 +553,7 @@ async def open_with_state_over_cdp(
     state_path = browser_state_path_for_id(state_id)
     if not state_path.exists():
         raise FileNotFoundError(f"State file not found: {state_path}")
+    state_payload = _load_storage_state(state_path)
 
     ws_url = _resolve_cdp_ws_url(endpoint=cdp_url)
     runtime_paths = _browser_use_runtime_paths()
@@ -545,7 +561,7 @@ async def open_with_state_over_cdp(
     session = session_cls(  # type: ignore[call-arg]
         headless=False,
         cdp_url=ws_url,
-        storage_state=str(state_path),
+        storage_state=state_payload,
         is_local=True,
         downloads_path=runtime_paths.downloads_path,
     )
