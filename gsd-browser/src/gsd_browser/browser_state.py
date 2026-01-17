@@ -127,18 +127,6 @@ def _resolve_cdp_ws_url(*, endpoint: str, timeout_s: float = 3.0) -> str:
     return urlunparse(fixed)
 
 
-def _load_storage_state(path: Path) -> dict[str, object]:
-    try:
-        data = json.loads(path.read_text(encoding="utf-8"))
-    except OSError as exc:
-        raise FileNotFoundError(f"State file not found: {path}") from exc
-    except json.JSONDecodeError as exc:
-        raise ValueError(f"Invalid JSON in state file: {path}") from exc
-    if not isinstance(data, dict):
-        raise ValueError(f"Invalid storage_state payload (expected object): {path}")
-    return data
-
-
 def _load_browser_use_session_class() -> type[object]:
     try:
         from browser_use import BrowserSession  # type: ignore[import-not-found]
@@ -177,6 +165,31 @@ async def _browser_use_connect(session: object) -> None:
         return
 
     raise AttributeError("BrowserSession has no connect/start/get_or_create_cdp_session")
+
+
+async def _disable_browser_use_storage_watchdog_autosave(session: object) -> None:
+    """Stop browser-use's StorageStateWatchdog background monitoring.
+
+    browser-use enables StorageStateWatchdog whenever a ``user_data_dir`` is present. Even
+    when we are not asking it to save state, its background auto-save loop can wake up
+    during shutdown and log noisy errors if the final tab has already closed.
+    """
+
+    watchdog = getattr(session, "_storage_state_watchdog", None)
+    if watchdog is None:
+        return
+
+    stop = getattr(watchdog, "_stop_monitoring", None)
+    if callable(stop):
+        result = stop()
+        if inspect.isawaitable(result):
+            await result
+
+    try:
+        watchdog.save_on_change = False
+        watchdog.auto_save_interval = 10**9
+    except Exception:
+        return
 
 
 async def _browser_use_stop(session: object) -> None:
@@ -326,6 +339,7 @@ async def capture_state_interactive(
     try:
         try:
             await _browser_use_connect(session)
+            await _disable_browser_use_storage_watchdog_autosave(session)
         except Exception as exc:
             detail = f"{type(exc).__name__}: {exc}".strip()
             raise RuntimeError(
@@ -414,6 +428,7 @@ async def capture_state_over_cdp(
 
     try:
         await _browser_use_connect(session)
+        await _disable_browser_use_storage_watchdog_autosave(session)
         if url:
             try:
                 await _browser_use_navigate(session, url)
@@ -477,11 +492,8 @@ async def open_with_state_interactive(
     """Launch a visible browser with a saved storage_state loaded for manual verification."""
 
     state_path = browser_state_path_for_id(state_id)
-    state_payload: dict[str, object] | None = None
-    if not user_data_dir:
-        if not state_path.exists():
-            raise FileNotFoundError(f"State file not found: {state_path}")
-        state_payload = _load_storage_state(state_path)
+    if not user_data_dir and not state_path.exists():
+        raise FileNotFoundError(f"State file not found: {state_path}")
     state_path.parent.mkdir(parents=True, exist_ok=True)
 
     inferred = executable_path or _infer_local_browser_executable()
@@ -498,14 +510,15 @@ async def open_with_state_interactive(
         session_kwargs["channel"] = str(browser_channel)
     if inferred:
         session_kwargs["executable_path"] = inferred
-    if not user_data_dir and state_payload is not None:
-        session_kwargs["storage_state"] = state_payload
+    if not user_data_dir:
+        session_kwargs["storage_state"] = str(state_path)
 
     session = session_cls(**session_kwargs)  # type: ignore[arg-type]
     normalized_interval = max(0.5, float(auto_save_interval_s))
 
     try:
         await _browser_use_connect(session)
+        await _disable_browser_use_storage_watchdog_autosave(session)
         if url:
             try:
                 await _browser_use_navigate(session, url)
@@ -553,7 +566,6 @@ async def open_with_state_over_cdp(
     state_path = browser_state_path_for_id(state_id)
     if not state_path.exists():
         raise FileNotFoundError(f"State file not found: {state_path}")
-    state_payload = _load_storage_state(state_path)
 
     ws_url = _resolve_cdp_ws_url(endpoint=cdp_url)
     runtime_paths = _browser_use_runtime_paths()
@@ -561,7 +573,7 @@ async def open_with_state_over_cdp(
     session = session_cls(  # type: ignore[call-arg]
         headless=False,
         cdp_url=ws_url,
-        storage_state=state_payload,
+        storage_state=str(state_path),
         is_local=True,
         downloads_path=runtime_paths.downloads_path,
     )
@@ -569,6 +581,7 @@ async def open_with_state_over_cdp(
     normalized_interval = max(0.5, float(auto_save_interval_s))
     try:
         await _browser_use_connect(session)
+        await _disable_browser_use_storage_watchdog_autosave(session)
         if url:
             try:
                 await _browser_use_navigate(session, url)
