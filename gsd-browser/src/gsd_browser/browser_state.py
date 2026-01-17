@@ -192,6 +192,39 @@ async def _disable_browser_use_storage_watchdog_autosave(session: object) -> Non
         return
 
 
+async def _browser_use_assert_connected(session: object) -> None:
+    """Best-effort check that the CDP connection is usable.
+
+    On some environments (notably WSL without proper GUI/browser deps), browser-use can
+    return from `start()` but the browser process immediately exits. This helper detects
+    that early so the CLI doesn't misleadingly print success.
+    """
+
+    get_or_create = getattr(session, "get_or_create_cdp_session", None)
+    if not callable(get_or_create):
+        return
+
+    cdp_session = get_or_create()
+    if inspect.isawaitable(cdp_session):
+        cdp_session = await cdp_session
+
+    cdp_client = getattr(cdp_session, "cdp_client", None)
+    cdp_session_id = getattr(cdp_session, "session_id", None)
+    send_obj = getattr(cdp_client, "send", None) if cdp_client is not None else None
+    if not callable(send_obj):
+        return
+
+    try:
+        result = send_obj("Browser.getVersion", session_id=cdp_session_id)
+    except TypeError:
+        try:
+            result = send_obj("Browser.getVersion")
+        except TypeError:
+            result = send_obj("Browser.getVersion", None)
+    if inspect.isawaitable(result):
+        await result
+
+
 async def _browser_use_stop(session: object) -> None:
     stop = getattr(session, "stop", None)
     if not callable(stop):
@@ -340,6 +373,7 @@ async def capture_state_interactive(
         try:
             await _browser_use_connect(session)
             await _disable_browser_use_storage_watchdog_autosave(session)
+            await _browser_use_assert_connected(session)
         except Exception as exc:
             detail = f"{type(exc).__name__}: {exc}".strip()
             raise RuntimeError(
@@ -429,6 +463,7 @@ async def capture_state_over_cdp(
     try:
         await _browser_use_connect(session)
         await _disable_browser_use_storage_watchdog_autosave(session)
+        await _browser_use_assert_connected(session)
         if url:
             try:
                 await _browser_use_navigate(session, url)
@@ -519,6 +554,7 @@ async def open_with_state_interactive(
     try:
         await _browser_use_connect(session)
         await _disable_browser_use_storage_watchdog_autosave(session)
+        await _browser_use_assert_connected(session)
         if url:
             try:
                 await _browser_use_navigate(session, url)
@@ -582,6 +618,7 @@ async def open_with_state_over_cdp(
     try:
         await _browser_use_connect(session)
         await _disable_browser_use_storage_watchdog_autosave(session)
+        await _browser_use_assert_connected(session)
         if url:
             try:
                 await _browser_use_navigate(session, url)
