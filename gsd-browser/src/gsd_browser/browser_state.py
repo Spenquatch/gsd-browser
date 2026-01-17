@@ -269,24 +269,37 @@ async def capture_state_interactive(
 ) -> Path:
     """Launch a visible browser (via browser-use) and persist storage_state on close."""
 
-    del browser_channel  # legacy; browser-use selects the binary by executable_path/detection.
-
     state_path = browser_state_path_for_id(state_id)
     state_path.parent.mkdir(parents=True, exist_ok=True)
 
     inferred = executable_path or _infer_local_browser_executable()
     session_cls = _load_browser_use_session_class()
-    session = session_cls(  # type: ignore[call-arg]
-        headless=False,
-        executable_path=inferred,
-        user_data_dir=user_data_dir,
-        profile_directory=profile_directory,
-    )
+    session_kwargs: dict[str, object] = {
+        "is_local": True,
+        "headless": False,
+        "user_data_dir": user_data_dir,
+        "profile_directory": profile_directory,
+    }
+    if browser_channel:
+        # Back-compat: `--browser-channel chrome` maps to browser-use's `channel` option.
+        session_kwargs["channel"] = str(browser_channel)
+    if inferred:
+        session_kwargs["executable_path"] = inferred
+
+    session = session_cls(**session_kwargs)  # type: ignore[arg-type]
 
     normalized_interval = max(0.5, float(auto_save_interval_s))
 
     try:
-        await _browser_use_connect(session)
+        try:
+            await _browser_use_connect(session)
+        except Exception as exc:
+            raise RuntimeError(
+                "Failed to launch a local browser for state capture. "
+                "If you already have Chrome running with remote debugging, pass "
+                "--cdp-url http://127.0.0.1:9222. Otherwise, install Chrome/Edge and/or set "
+                "GSD_BROWSER_EXECUTABLE_PATH (or pass --executable-path)."
+            ) from exc
         if url:
             try:
                 await _browser_use_navigate(session, url)
@@ -359,6 +372,7 @@ async def capture_state_over_cdp(
     session = session_cls(  # type: ignore[call-arg]
         headless=False,
         cdp_url=ws_url,
+        is_local=True,
     )
 
     try:
@@ -430,16 +444,18 @@ async def open_with_state_interactive(
         raise FileNotFoundError(f"State file not found: {state_path}")
     state_path.parent.mkdir(parents=True, exist_ok=True)
 
-    del browser_channel  # legacy; browser-use selects the binary by executable_path/detection.
-
     inferred = executable_path or _infer_local_browser_executable()
     session_cls = _load_browser_use_session_class()
     session_kwargs: dict[str, object] = {
+        "is_local": True,
         "headless": False,
-        "executable_path": inferred,
         "user_data_dir": user_data_dir,
         "profile_directory": profile_directory,
     }
+    if browser_channel:
+        session_kwargs["channel"] = str(browser_channel)
+    if inferred:
+        session_kwargs["executable_path"] = inferred
     if not user_data_dir:
         session_kwargs["storage_state"] = str(state_path)
 
@@ -502,6 +518,7 @@ async def open_with_state_over_cdp(
         headless=False,
         cdp_url=ws_url,
         storage_state=str(state_path),
+        is_local=True,
     )
 
     normalized_interval = max(0.5, float(auto_save_interval_s))
