@@ -34,6 +34,16 @@ collection and retrieval must be designed for distributed execution now.
 - Store indices/metadata in Redis (or another shared store) to support queries like “last N screenshots
   for session X” without scanning the entire object store.
 
+5) Artifact delivery mode (phased):
+- Phase 1 (default): return artifacts inline in MCP payloads for compatibility, but always include
+  stable artifact references (`artifact_key` / `artifact_id`) and “presigned-url-ready” fields in the
+  API schema (for example `url: null` initially).
+- Phase 1 storage: still write artifacts to S3-compatible storage from day 1 (and index in Redis),
+  so distributed execution works immediately even if retrieval is inline.
+- Phase 2 (later): switch large/binary artifact delivery to pre-signed URLs without breaking
+  clients (they already understand the URL fields).
+- Control via env/config (example): `GSD_ARTIFACT_DELIVERY_MODE=inline|presigned|both`.
+
 ## Consequences
 ### Positive
 - No “later refactor” to support separate workers or multiple replicas.
