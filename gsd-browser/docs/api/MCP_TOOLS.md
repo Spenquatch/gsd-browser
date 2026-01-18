@@ -6,6 +6,7 @@ This document is the source of truth for the `gsd` MCP tool surface.
 - Every structured tool response **must** include a `version` string (for example
   `gsd.web_eval_agent.v1`) inside a single JSON payload encoded in a `TextContent`.
 - Backward-compatible additions are allowed within a `vN` payload.
+- Clients **must ignore unknown keys** anywhere in the payload (forward compatibility).
 - Any breaking change (renames, type changes, removing fields, changing semantics) requires a new
   `version` value and (if needed) dual-reading support in clients.
 
@@ -47,7 +48,18 @@ The “tool result payload” schemas below describe the **task result** payload
   - Additional keys (present on success and most failures; treat as stable):
     - `page`: `{ url: string|null, title: string|null }`
     - `errors_top`: array of ranked failures:
-      - each item: `{ type: "console"|"network", summary: string, step: number|null, url: string|null }`
+      - each item:
+        `{ type, code?, summary, step?, url? }`
+      - `type` taxonomy (stable):
+        - `"console"`: browser console error (JS/runtime)
+        - `"network"`: HTTP/network failure (4xx/5xx/timeout)
+        - `"agent"`: agent loop failure (planning/step execution)
+        - `"provider"`: LLM/provider error (rate limit, auth, invalid response)
+        - `"validation"`: invalid inputs / contract violations detected server-side
+        - `"timeout"`: time budget exceeded (tool or step)
+        - `"cancelled"`: task cancelled by client/operator
+      - `code` is a short machine-readable string (recommended) that remains stable across
+        wording changes in `summary` (examples: `"NETWORK_HTTP_5XX"`, `"TASK_CANCELLED"`).
     - `timeouts`:
       - `{ budget_s: number|null, step_timeout_s: number|null, max_steps: number|null, timed_out: boolean }`
     - `warnings`: string[] (bounded)
@@ -101,12 +113,23 @@ stable IDs/metadata suitable for switching delivery mode.
   - `filters`: object (echo of applied filters)
   - `screenshots`: array of screenshot metadata objects, each with:
     - `id`, `timestamp`, `type`, `session_id`, `has_error`, `mime_type`, `url`, `step`, `metadata`
-    - `artifact`: `{ key: string|null, url: string|null }` (url may be null in Phase 1)
+    - `url` is the **page URL** that the screenshot was captured from (not an artifact URL).
+    - `artifact` (presigned-url-ready):
+      - `key`: string|null (stable artifact key/id)
+      - `url`: string|null (artifact URL; typically null in Phase 1, pre-signed in Phase 2)
+      - `content_type`: string|null
+      - `size_bytes`: integer|null
+      - `created_at`: number|null (epoch seconds)
+      - `url_expires_at`: number|null (epoch seconds)
   - `stats`: object
   - `error`: string|null
 - When `include_images=true`, the response may include `ImageContent` items after the JSON header for
   screenshots that have image bytes. These are compatibility-only; the canonical metadata lives in
   the JSON header.
+
+**Mapping JSON headers → inline `ImageContent`**
+- Inline images appear in the same order as `screenshots[]`, skipping any screenshot that has no
+  inline image bytes available on the server.
 
 **Delivery mode**
 - Phase 1 default: inline `ImageContent` items plus JSON header metadata.

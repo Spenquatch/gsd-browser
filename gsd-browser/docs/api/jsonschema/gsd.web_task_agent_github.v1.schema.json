@@ -1,7 +1,7 @@
 {
   "$defs": {
     "ArtifactsCountV1": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "properties": {
         "run_events": {
           "title": "Run Events",
@@ -25,7 +25,7 @@
       "type": "object"
     },
     "DevExcerptsV1": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "properties": {
         "console_errors": {
           "items": {
@@ -61,7 +61,7 @@
       "type": "object"
     },
     "PageInfoV1": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "properties": {
         "title": {
           "anyOf": [
@@ -94,8 +94,21 @@
       "type": "object"
     },
     "RankedFailureV1": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "properties": {
+        "code": {
+          "anyOf": [
+            {
+              "maxLength": 120,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Code"
+        },
         "step": {
           "anyOf": [
             {
@@ -115,7 +128,12 @@
         "type": {
           "enum": [
             "console",
-            "network"
+            "network",
+            "agent",
+            "provider",
+            "validation",
+            "timeout",
+            "cancelled"
           ],
           "title": "Type",
           "type": "string"
@@ -142,7 +160,7 @@
       "type": "object"
     },
     "TimeoutsV1": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "properties": {
         "budget_s": {
           "anyOf": [
@@ -192,7 +210,7 @@
       "type": "object"
     }
   },
-  "additionalProperties": false,
+  "additionalProperties": true,
   "properties": {
     "artifacts": {
       "$ref": "#/$defs/ArtifactsCountV1"

@@ -1,7 +1,7 @@
 {
   "$defs": {
     "RunEventStatsCountsV1": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "properties": {
         "agent": {
           "title": "Agent",
@@ -30,7 +30,7 @@
       "type": "object"
     },
     "RunEventStatsV1": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "properties": {
         "counts": {
           "$ref": "#/$defs/RunEventStatsCountsV1"
@@ -67,7 +67,7 @@
       "type": "object"
     }
   },
-  "additionalProperties": false,
+  "additionalProperties": true,
   "properties": {
     "error": {
       "anyOf": [

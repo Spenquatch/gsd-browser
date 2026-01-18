@@ -93,6 +93,29 @@ collection and retrieval must be designed for distributed execution now.
   - bucket/prefix, endpoint, region, auth mechanism
   - retention/cleanup policy aligned with task TTL
 
+## Identity + authorization invariants (artifacts)
+
+### Object keys and index records
+- All object keys must be tenant-prefixed:
+  - `tenants/{tenant_id}/sessions/{session_id}/...`
+- The artifact index (Redis) must include enough metadata to enforce authorization without fetching
+  the object body, at minimum:
+  - `tenant_id`, `subject_id`, `session_id`, `artifact_key`, `artifact_kind`, `created_at`
+
+### Authorization rules
+- Listing and retrieval (`get_screenshots`, `get_run_events`) must enforce:
+  - caller `tenant_id` matches index record `tenant_id`
+  - caller `subject_id` matches index record `subject_id`
+- Session IDs and artifact keys are not authorization boundaries.
+
+### Presigned URL policy (Phase 2)
+- Presigned URLs are generated only after an authorization check succeeds.
+- URLs are GET-only and scoped to the tenant-prefixed object key.
+- Default expiration: 15 minutes (configurable; max 60 minutes).
+- Returned metadata includes:
+  - `url_expires_at` (epoch seconds)
+  - `content_type` and `size_bytes` when known
+
 ## Open Questions
 Resolved (concrete decisions):
 - Artifact delivery (phased):

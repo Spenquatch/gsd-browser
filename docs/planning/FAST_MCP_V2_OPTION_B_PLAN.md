@@ -107,6 +107,15 @@ Goal: define operational behavior so clients have a stable UX.
   - Document in `gsd-browser/docs/api/MCP_TASKS.md`.
   - Add conformance test plan (see below).
 
+## S0–S5 resolution pointers (this branch)
+- S0 (migration boundary): `gsd-browser/docs/api/STATUS.md`
+- S1 (schema evolution policy): `gsd-browser/docs/api/MCP_TOOLS.md` (Versioning policy)
+- S2 (diagnostics taxonomy): `gsd-browser/docs/api/MCP_TOOLS.md` (`errors_top`) + `gsd-browser/src/gsd_browser/contracts/v1.py`
+- S3 (identity/tenant invariants): `docs/adr/ADR-0008-fastmcp-v2-redis-backed-long-running-tasks.md` and `docs/adr/ADR-0009-distributed-artifact-storage-for-scaled-tasks.md`
+- S4 (artifact metadata for Phase 2): `gsd-browser/docs/api/MCP_TOOLS.md` (`get_screenshots`) + `gsd-browser/src/gsd_browser/contracts/v1.py`
+- S5 (task semantics): `gsd-browser/docs/api/MCP_TASKS.md`
+
+
 ## Implementation phases (once S0–S5 are complete)
 ### I1: Framework migration
 - Swap server implementation from `mcp.server.fastmcp` to `jlowin/fastmcp` v2.
@@ -140,4 +149,3 @@ Third-party review raised (summarized):
 - Error taxonomy too narrow for stated ADR goals
 - Multi-tenant binding points underspecified
 - Artifact metadata insufficient for a safe presigned flip
-

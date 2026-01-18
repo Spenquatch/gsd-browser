@@ -37,9 +37,17 @@ Migrate `gsd` MCP server to:
 4) Specify identity binding + presigned URL constraints in concrete invariants.
 5) Expand artifact metadata to make Phase 2 safe without breaking clients.
 
+Tracked resolutions (Option B checklist):
+- S0 (boundary): `gsd-browser/docs/api/STATUS.md`
+- S1 (schema evolution): `gsd-browser/docs/api/MCP_TOOLS.md` (Versioning policy)
+- S2 (diagnostics taxonomy): `gsd-browser/docs/api/MCP_TOOLS.md` + contract schemas
+- S3 (identity/tenant invariants): ADR-0008/ADR-0009 invariants sections
+- S4 (artifact metadata): `gsd-browser/docs/api/MCP_TOOLS.md` + contract schemas
+- S5 (task semantics): `gsd-browser/docs/api/MCP_TASKS.md`
+
+
 ## Next document to follow
 - `docs/planning/FAST_MCP_V2_OPTION_B_PLAN.md`
 
 ## Recent commits (branch-only summary)
 Run: `git log --oneline main..HEAD`
-

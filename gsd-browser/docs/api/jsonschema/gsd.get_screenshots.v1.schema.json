@@ -1,8 +1,32 @@
 {
   "$defs": {
     "ArtifactRefV1": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "properties": {
+        "content_type": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Content Type"
+        },
+        "created_at": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Created At"
+        },
         "key": {
           "anyOf": [
             {
@@ -14,6 +38,18 @@
           ],
           "title": "Key"
         },
+        "size_bytes": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Size Bytes"
+        },
         "url": {
           "anyOf": [
             {
@@ -24,6 +60,18 @@
             }
           ],
           "title": "Url"
+        },
+        "url_expires_at": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Url Expires At"
         }
       },
       "required": [
@@ -34,7 +82,7 @@
       "type": "object"
     },
     "ScreenshotFiltersV1": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "properties": {
         "from_timestamp": {
           "anyOf": [
@@ -87,7 +135,7 @@
       "type": "object"
     },
     "ScreenshotHeaderV1": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "properties": {
         "artifact": {
           "$ref": "#/$defs/ArtifactRefV1"
@@ -206,7 +254,7 @@
       "type": "object"
     },
     "ScreenshotStatsV1": {
-      "additionalProperties": false,
+      "additionalProperties": true,
       "properties": {
         "sampling_rate": {
           "title": "Sampling Rate",
@@ -225,7 +273,7 @@
       "type": "object"
     }
   },
-  "additionalProperties": false,
+  "additionalProperties": true,
   "properties": {
     "error": {
       "anyOf": [

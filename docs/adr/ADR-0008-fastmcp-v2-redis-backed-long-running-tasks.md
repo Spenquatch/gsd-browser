@@ -66,6 +66,35 @@ execution modes.
   - Keep task results compact; store large artifacts (screenshots, run events) in shared artifact
     storage so any replica can serve retrieval requests (see ADR-0009).
 
+## Identity + authorization invariants (tasks)
+These are concrete invariants required for the Option B deployment model (multi-worker, multi-replica).
+
+### Identity sources (planned)
+- `stdio` transport: treat as single-tenant local trust boundary.
+  - `tenant_id="local"`
+  - `subject_id="local"`
+- HTTP transport: require authenticated identity (Bearer JWT/OIDC/OAuth).
+  - Required claims (names are logical; mapping is an implementation detail):
+    - `subject_id` derived from `sub`
+    - `tenant_id` derived from `tenant_id` (or `tid`)
+
+### Task ownership (persisted)
+Each task record must include (at minimum):
+- `tenant_id` (string)
+- `subject_id` (string)
+- `tool_name` (string)
+- `created_at` (timestamp)
+- `expires_at` (timestamp; derived from TTL)
+- `session_id` (optional; when tool produces a session-scoped artifact set)
+
+### Authorization rules
+- `taskId` is **not** an authorization boundary.
+- `tasks/get`, `tasks/result`, and `tasks/cancel` must enforce:
+  - caller `tenant_id` matches task `tenant_id`
+  - caller `subject_id` matches task `subject_id`
+- On authorization failure, prefer non-enumerable behavior (treat as “not found”) unless a
+  deployment explicitly opts into a `403` policy for observability.
+
 ## Open Questions
 Resolved (concrete decisions):
 - Tool modes:
