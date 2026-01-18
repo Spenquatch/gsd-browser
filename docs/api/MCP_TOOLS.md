@@ -44,12 +44,15 @@ The “tool result payload” schemas below describe the **task result** payload
     - `summary`: string (<= 2048 chars)
     - `artifacts`: object (counts)
     - `next_actions`: string[]
-  - Optional keys:
+  - Additional keys (present on success and most failures; treat as stable):
     - `page`: `{ url: string|null, title: string|null }`
-    - `errors_top`: object[]
-    - `timeouts`: object
-    - `warnings`: string[]
-    - `dev_excerpts`: object (only when `mode="dev"`)
+    - `errors_top`: array of ranked failures:
+      - each item: `{ type: "console"|"network", summary: string, step: number|null, url: string|null }`
+    - `timeouts`:
+      - `{ budget_s: number|null, step_timeout_s: number|null, max_steps: number|null, timed_out: boolean }`
+    - `warnings`: string[] (bounded)
+  - `dev_excerpts` (only when `mode="dev"`):
+    - `{ console_errors: object[], network_errors: object[], errors_top: object[] }`
 
 ### `web_task_agent` (task required)
 Same input shape and output schema as `web_eval_agent`, but with:
@@ -104,6 +107,12 @@ stable IDs/metadata suitable for switching delivery mode.
   screenshots that have image bytes. These are compatibility-only; the canonical metadata lives in
   the JSON header.
 
+**Delivery mode**
+- Phase 1 default: inline `ImageContent` items plus JSON header metadata.
+- Phase 2 later: return `artifact.url` (pre-signed URL) for blobs and stop emitting inline images for
+  large payloads.
+- Controlled by env/config (example): `GSD_ARTIFACT_DELIVERY_MODE=inline|presigned|both`.
+
 ### `setup_browser_state` (sync)
 **Input**
 - `url` (string|null, optional)
@@ -118,4 +127,3 @@ stable IDs/metadata suitable for switching delivery mode.
   - `path`: string|null
   - `summary`: string
   - `next_actions`: string[]
-

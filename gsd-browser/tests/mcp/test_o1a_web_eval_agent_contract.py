@@ -116,6 +116,10 @@ def test_o1a_web_eval_agent_json_shape_and_final_result_mapping(
         "status",
         "result",
         "summary",
+        "page",
+        "errors_top",
+        "timeouts",
+        "warnings",
         "artifacts",
         "next_actions",
     }
@@ -133,6 +137,11 @@ def test_o1a_web_eval_agent_json_shape_and_final_result_mapping(
     assert payload["result"] == expected_result_value
     assert isinstance(payload["summary"], str)
     assert len(payload["summary"]) <= 2048
+    assert isinstance(payload["page"], dict)
+    assert set(payload["page"].keys()) == {"url", "title"}
+    assert isinstance(payload["errors_top"], list)
+    assert isinstance(payload["timeouts"], dict)
+    assert isinstance(payload["warnings"], list)
     assert isinstance(payload["artifacts"], dict)
     assert isinstance(payload["next_actions"], list)
     assert all(isinstance(item, str) for item in payload["next_actions"])
