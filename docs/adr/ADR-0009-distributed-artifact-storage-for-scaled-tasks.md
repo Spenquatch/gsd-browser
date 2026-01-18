@@ -56,6 +56,15 @@ collection and retrieval must be designed for distributed execution now.
 - Self-hosted S3 comparison (SeaweedFS vs RustFS):
   - We must only depend on “common S3” behavior (PUT/GET/LIST, multipart uploads, auth, presigned
     URLs if used) so switching S3 providers remains an ops decision, not an app refactor.
+  - Quick comparison (initial; validate before committing to prod):
+
+    | Area | SeaweedFS | RustFS | Notes |
+    | --- | --- | --- | --- |
+    | Architecture | distributed (master/volume; optional filer + S3 gateway) | S3 object store service (advertises distributed + erasure-coded storage) | choose based on ops fit |
+    | Ops footprint | more moving parts if using filer + gateway | potentially simpler service surface | validate HA story either way |
+    | Metadata/index | filer can use pluggable metadata stores | unknown for our needs (validate listing semantics + metadata behavior) | we still keep our own Redis index |
+    | Maturity/compat | needs validation against our required S3 behaviors | needs validation against our required S3 behaviors | run the same smoke matrix |
+
   - Evaluation criteria:
     - Deployment mode: single-node dev, multi-node cluster, upgrades/rollbacks
     - Data protection: replication vs erasure coding, failure domains, rebuild behavior
