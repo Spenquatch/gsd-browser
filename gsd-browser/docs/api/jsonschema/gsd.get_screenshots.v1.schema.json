@@ -1,0 +1,281 @@
+{
+  "$defs": {
+    "ArtifactRefV1": {
+      "additionalProperties": false,
+      "properties": {
+        "key": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Key"
+        },
+        "url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Url"
+        }
+      },
+      "required": [
+        "key",
+        "url"
+      ],
+      "title": "ArtifactRefV1",
+      "type": "object"
+    },
+    "ScreenshotFiltersV1": {
+      "additionalProperties": false,
+      "properties": {
+        "from_timestamp": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "From Timestamp"
+        },
+        "has_error": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Has Error"
+        },
+        "include_images": {
+          "title": "Include Images",
+          "type": "boolean"
+        },
+        "last_n": {
+          "title": "Last N",
+          "type": "integer"
+        },
+        "screenshot_type": {
+          "enum": [
+            "agent_step",
+            "stream_sample",
+            "all"
+          ],
+          "title": "Screenshot Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "last_n",
+        "screenshot_type",
+        "from_timestamp",
+        "has_error",
+        "include_images"
+      ],
+      "title": "ScreenshotFiltersV1",
+      "type": "object"
+    },
+    "ScreenshotHeaderV1": {
+      "additionalProperties": false,
+      "properties": {
+        "artifact": {
+          "$ref": "#/$defs/ArtifactRefV1"
+        },
+        "has_error": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Has Error"
+        },
+        "id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Id"
+        },
+        "metadata": {
+          "additionalProperties": true,
+          "title": "Metadata",
+          "type": "object"
+        },
+        "mime_type": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Mime Type"
+        },
+        "session_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Session Id"
+        },
+        "step": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Step"
+        },
+        "timestamp": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Timestamp"
+        },
+        "type": {
+          "anyOf": [
+            {
+              "enum": [
+                "agent_step",
+                "stream_sample"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Type"
+        },
+        "url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Url"
+        }
+      },
+      "required": [
+        "id",
+        "timestamp",
+        "type",
+        "session_id",
+        "has_error",
+        "mime_type",
+        "url",
+        "step",
+        "metadata",
+        "artifact"
+      ],
+      "title": "ScreenshotHeaderV1",
+      "type": "object"
+    },
+    "ScreenshotStatsV1": {
+      "additionalProperties": false,
+      "properties": {
+        "sampling_rate": {
+          "title": "Sampling Rate",
+          "type": "integer"
+        },
+        "total_screenshots": {
+          "title": "Total Screenshots",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "total_screenshots",
+        "sampling_rate"
+      ],
+      "title": "ScreenshotStatsV1",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "error": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Error"
+    },
+    "filters": {
+      "$ref": "#/$defs/ScreenshotFiltersV1"
+    },
+    "screenshots": {
+      "items": {
+        "$ref": "#/$defs/ScreenshotHeaderV1"
+      },
+      "title": "Screenshots",
+      "type": "array"
+    },
+    "session_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Session Id"
+    },
+    "stats": {
+      "$ref": "#/$defs/ScreenshotStatsV1"
+    },
+    "version": {
+      "const": "gsd.get_screenshots.v1",
+      "title": "Version",
+      "type": "string"
+    }
+  },
+  "required": [
+    "version",
+    "session_id",
+    "filters",
+    "screenshots",
+    "stats",
+    "error"
+  ],
+  "title": "GetScreenshotsPayloadV1",
+  "type": "object"
+}

@@ -61,6 +61,17 @@ gsd mcp serve --json-logs
 ```
 Use CLI flags (`--log-level`, `--json-logs`, `--text-logs`) or env vars to tweak logging without editing code.
 
+## API Schema Export
+The MCP tool API is enforced via Pydantic models and exported JSON Schema files.
+
+```bash
+cd gsd-browser/gsd-browser
+./.venv/bin/python tools/export_contract_schemas.py
+```
+
+Schemas are committed under `docs/api/jsonschema/`. Tests fail if the exported JSON Schema files drift
+from the Pydantic contract models.
+
 ## Docker Rebuild
 ```bash
 docker build -t gsd:dev -f docker/Dockerfile .

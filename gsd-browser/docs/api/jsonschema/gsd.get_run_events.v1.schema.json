@@ -1,0 +1,120 @@
+{
+  "$defs": {
+    "RunEventStatsCountsV1": {
+      "additionalProperties": false,
+      "properties": {
+        "agent": {
+          "title": "Agent",
+          "type": "integer"
+        },
+        "console": {
+          "title": "Console",
+          "type": "integer"
+        },
+        "network": {
+          "title": "Network",
+          "type": "integer"
+        },
+        "total": {
+          "title": "Total",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "agent",
+        "console",
+        "network",
+        "total"
+      ],
+      "title": "RunEventStatsCountsV1",
+      "type": "object"
+    },
+    "RunEventStatsV1": {
+      "additionalProperties": false,
+      "properties": {
+        "counts": {
+          "$ref": "#/$defs/RunEventStatsCountsV1"
+        },
+        "newest_timestamp": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Newest Timestamp"
+        },
+        "oldest_timestamp": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Oldest Timestamp"
+        }
+      },
+      "required": [
+        "counts",
+        "oldest_timestamp",
+        "newest_timestamp"
+      ],
+      "title": "RunEventStatsV1",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "error": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Error"
+    },
+    "events": {
+      "items": {
+        "additionalProperties": true,
+        "type": "object"
+      },
+      "title": "Events",
+      "type": "array"
+    },
+    "session_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Session Id"
+    },
+    "stats": {
+      "$ref": "#/$defs/RunEventStatsV1"
+    },
+    "version": {
+      "const": "gsd.get_run_events.v1",
+      "title": "Version",
+      "type": "string"
+    }
+  },
+  "required": [
+    "version",
+    "session_id",
+    "events",
+    "stats",
+    "error"
+  ],
+  "title": "GetRunEventsPayloadV1",
+  "type": "object"
+}
