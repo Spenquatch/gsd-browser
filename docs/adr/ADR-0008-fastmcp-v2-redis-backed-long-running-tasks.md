@@ -63,6 +63,8 @@ execution modes.
   - Ensure browser contexts/pages are closed and any per-session state is finalized.
 - Operational defaults:
   - Define default task TTL and poll intervals (server-suggested) appropriate for “browser work”.
+  - Keep task results compact; store large artifacts (screenshots, run events) in shared artifact
+    storage so any replica can serve retrieval requests (see ADR-0009).
 
 ## Open Questions
 - Which tools (if any) should be `required` task execution vs `optional`?
@@ -72,4 +74,4 @@ execution modes.
 ## References
 - MCP long-running tasks protocol (SEP-1686): `tasks/get`, `tasks/result`, `tasks/cancel`
 - FastMCP v2 background tasks + Docket integration (jlowin/fastmcp)
-
+- ADR-0009: Distributed artifact storage for scaled task execution

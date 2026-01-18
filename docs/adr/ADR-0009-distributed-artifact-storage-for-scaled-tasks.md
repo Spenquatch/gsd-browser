@@ -20,7 +20,9 @@ collection and retrieval must be designed for distributed execution now.
 1) Introduce an explicit artifact storage layer with a stable addressing scheme.
 
 2) Store artifacts in shared storage that works across processes and machines:
-- Primary: S3-compatible object storage (works in cloud + on-prem via MinIO).
+- Primary: S3-compatible object storage.
+  - Cloud: AWS S3 (or equivalent managed S3-compatible service).
+  - Self-host: compare SeaweedFS vs RustFS (below) and pick a reference deployment.
 - Development fallback: local filesystem artifact store (single-node convenience).
 
 3) Make tool results reference artifacts by stable IDs/keys, not by in-memory objects:
@@ -51,6 +53,22 @@ collection and retrieval must be designed for distributed execution now.
 - Keep binary payloads (images) out of Redis; store references + metadata only.
 - Make the operator dashboard read from the same artifact store/index so it remains accurate under
   distributed execution.
+- Self-hosted S3 comparison (SeaweedFS vs RustFS):
+  - We must only depend on “common S3” behavior (PUT/GET/LIST, multipart uploads, auth, presigned
+    URLs if used) so switching S3 providers remains an ops decision, not an app refactor.
+  - Evaluation criteria:
+    - Deployment mode: single-node dev, multi-node cluster, upgrades/rollbacks
+    - Data protection: replication vs erasure coding, failure domains, rebuild behavior
+    - S3 API surface: multipart, ranged GET, ETags, listing semantics, bucket policies (if needed)
+    - AuthN/AuthZ: access keys, policies, TLS termination options
+    - Observability: metrics/logging, admin tooling, operational docs
+    - Maturity signals: CI/compat testing, release cadence, upgrade notes, community adoption
+  - SeaweedFS notes:
+    - S3 API is provided via an S3 gateway, often paired with the optional “Filer” component.
+    - Architecture is explicitly distributed (master/volume/filer); metadata backends are pluggable.
+  - RustFS notes:
+    - S3 server implemented in Rust; advertises distributed mode and erasure-coded storage.
+    - Treat as “needs validation” for our exact required S3 semantics and ops maturity.
 - Add configuration in `Settings` for:
   - backend selection (`fs` vs `s3`)
   - bucket/prefix, endpoint, region, auth mechanism
@@ -60,9 +78,10 @@ collection and retrieval must be designed for distributed execution now.
 - Should artifact retrieval use pre-signed URLs (for large blobs) vs MCP tool payloads?
 - What is the right default retention policy in development vs production?
 - Do we need per-tenant namespace separation and encryption-at-rest requirements?
+- Which self-hosted S3 provider is the initial reference deployment (SeaweedFS or RustFS), and what
+  is the minimal “smoke matrix” to validate compatibility?
 
 ## References
 - ADR-0003: CDP-first browser-use integration (artifact expectations)
 - ADR-0005: Browser-use contract alignment + artifact reliability
 - ADR-0008: FastMCP v2 + Redis-backed MCP long-running tasks (SEP-1686)
-
