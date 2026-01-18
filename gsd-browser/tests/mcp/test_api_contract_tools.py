@@ -8,6 +8,7 @@ from typing import Any
 import pytest
 
 from gsd_browser import mcp_server as mcp_server_mod
+from gsd_browser.contracts.v1 import GetScreenshotsPayloadV1, SetupBrowserStatePayloadV1
 
 
 def _run(value: Any) -> Any:
@@ -38,6 +39,7 @@ def test_setup_browser_state_returns_versioned_json(monkeypatch: pytest.MonkeyPa
     assert getattr(result[0], "type", None) == "text"
 
     payload = json.loads(getattr(result[0], "text", ""))
+    SetupBrowserStatePayloadV1.model_validate(payload)
     assert payload["version"] == "gsd.setup_browser_state.v1"
     assert payload["status"] == "success"
     assert payload["state_id"] == "github"
@@ -78,6 +80,7 @@ def test_get_screenshots_emits_versioned_json_header(monkeypatch: pytest.MonkeyP
     assert getattr(result[0], "type", None) == "text"
 
     payload = json.loads(getattr(result[0], "text", ""))
+    GetScreenshotsPayloadV1.model_validate(payload)
     assert payload["version"] == "gsd.get_screenshots.v1"
     assert isinstance(payload["screenshots"], list)
     assert payload["screenshots"][0]["artifact"] == {"key": None, "url": None}

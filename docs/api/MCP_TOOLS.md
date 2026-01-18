@@ -51,6 +51,7 @@ The “tool result payload” schemas below describe the **task result** payload
     - `timeouts`:
       - `{ budget_s: number|null, step_timeout_s: number|null, max_steps: number|null, timed_out: boolean }`
     - `warnings`: string[] (bounded)
+    - `requested_mode`: string|null (echo of user-provided `mode` when `mode` is `null`)
   - `dev_excerpts` (only when `mode="dev"`):
     - `{ console_errors: object[], network_errors: object[], errors_top: object[] }`
 

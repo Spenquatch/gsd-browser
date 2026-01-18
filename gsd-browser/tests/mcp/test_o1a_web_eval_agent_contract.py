@@ -9,6 +9,7 @@ from typing import Any
 import pytest
 
 from gsd_browser import mcp_server as mcp_server_mod
+from gsd_browser.contracts.v1 import WebEvalAgentPayloadV1
 
 
 def _run(value: Any) -> Any:
@@ -105,6 +106,7 @@ def test_o1a_web_eval_agent_json_shape_and_final_result_mapping(
 
     json_text = getattr(response[0], "text", "")
     payload = json.loads(json_text)
+    WebEvalAgentPayloadV1.model_validate(payload)
 
     required_keys = {
         "version",
@@ -113,6 +115,7 @@ def test_o1a_web_eval_agent_json_shape_and_final_result_mapping(
         "url",
         "task",
         "mode",
+        "requested_mode",
         "status",
         "result",
         "summary",
@@ -133,6 +136,7 @@ def test_o1a_web_eval_agent_json_shape_and_final_result_mapping(
     assert payload["task"] == "return a short answer"
 
     assert payload["mode"] in ("compact", "dev")
+    assert payload["requested_mode"] in (None, "compact", "dev")
     assert payload["status"] in ("success", "failed", "partial")
     assert payload["result"] == expected_result_value
     assert isinstance(payload["summary"], str)

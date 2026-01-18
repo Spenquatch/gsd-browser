@@ -8,6 +8,7 @@ from typing import Any
 import pytest
 
 from gsd_browser import mcp_server as mcp_server_mod
+from gsd_browser.contracts.v1 import GetRunEventsPayloadV1, WebEvalAgentPayloadV1
 from gsd_browser.run_event_store import RunEventStore
 
 
@@ -120,6 +121,7 @@ def test_o2b_get_run_events_enforces_limits_and_filters(monkeypatch: pytest.Monk
     monkeypatch.setattr(mcp_server_mod, "get_runtime", lambda: _DummyRuntime(run_events=store))
 
     payload = _parse_single_text_payload(_run(get_run_events(session_id=session_id)))
+    GetRunEventsPayloadV1.model_validate(payload)
     assert payload["version"] == "gsd.get_run_events.v1"
     assert payload["session_id"] == session_id
     assert isinstance(payload.get("events"), list)
@@ -185,6 +187,7 @@ def test_o2b_web_eval_agent_mode_defaults_based_on_host(
             )
         )
     )
+    WebEvalAgentPayloadV1.model_validate(payload)
     assert payload["mode"] == expected
 
 
@@ -207,6 +210,7 @@ def test_o2b_web_eval_agent_mode_explicit_override(monkeypatch: pytest.MonkeyPat
             )
         )
     )
+    WebEvalAgentPayloadV1.model_validate(payload)
     assert payload["mode"] == "compact"
 
     payload = _parse_single_text_payload(
@@ -220,4 +224,5 @@ def test_o2b_web_eval_agent_mode_explicit_override(monkeypatch: pytest.MonkeyPat
             )
         )
     )
+    WebEvalAgentPayloadV1.model_validate(payload)
     assert payload["mode"] == "dev"
