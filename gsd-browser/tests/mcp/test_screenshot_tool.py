@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import inspect
-import re
+import json
 from typing import Any
 
 import pytest
@@ -120,13 +120,14 @@ def test_mcp_get_screenshots_enforces_last_n_max_20_and_metadata_only_mode(
     assert isinstance(result, list)
     assert all(getattr(item, "type", None) != "image" for item in result)
 
-    summary_text = next(
+    json_text = next(
         (getattr(item, "text", "") for item in result if getattr(item, "type", None) == "text"),
         "",
     )
-    match = re.search(r"Retrieved (\d+) screenshots", summary_text)
-    assert match, f"Expected summary line with count; got: {summary_text!r}"
-    assert int(match.group(1)) == 20
+    payload = json.loads(json_text)
+    assert payload["version"] == "gsd.get_screenshots.v1"
+    assert isinstance(payload["screenshots"], list)
+    assert len(payload["screenshots"]) == 20
 
 
 def test_cli_diagnostics_smoke_messages() -> None:

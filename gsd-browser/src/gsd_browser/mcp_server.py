@@ -2158,26 +2158,36 @@ async def setup_browser_state(
     try:
         state_path = await capture_state_interactive(url=normalized_url, state_id=state_id)
 
-        return [
-            TextContent(
-                type="text",
-                text=(
-                    "Saved browser state.\n"
-                    f"- state_id: {state_id or 'default'}\n"
-                    f"- path: {state_path}\n"
+        payload = {
+            "version": "gsd.setup_browser_state.v1",
+            "status": "success",
+            "state_id": state_id,
+            "url": normalized_url,
+            "path": str(state_path),
+            "summary": "Saved browser state.",
+            "next_actions": [
+                (
                     "Use setup_browser_state(url=..., state_id=...) to refresh it if the session "
                     "expires."
                 ),
-            ),
-        ]
+            ],
+        }
+        return [TextContent(type="text", text=json.dumps(payload, ensure_ascii=False))]
     except Exception as exc:  # noqa: BLE001
         tb = traceback.format_exc()
-        return [
-            TextContent(
-                type="text",
-                text=f"Error executing setup_browser_state: {exc}\n\nTraceback:\n{tb}",
-            )
-        ]
+        payload = {
+            "version": "gsd.setup_browser_state.v1",
+            "status": "failed",
+            "state_id": state_id,
+            "url": normalized_url,
+            "path": None,
+            "summary": _truncate(f"Error executing setup_browser_state: {exc}", max_len=2000),
+            "traceback": tb,
+            "next_actions": [
+                "Retry setup_browser_state(url=..., state_id=...) in an interactive environment.",
+            ],
+        }
+        return [TextContent(type="text", text=json.dumps(payload, ensure_ascii=False))]
 
 
 @mcp.tool(name="get_screenshots")
@@ -2222,14 +2232,48 @@ async def get_screenshots(
     )
     stats = runtime.screenshots.get_stats()
 
-    response: list[TextContent | ImageContent] = [
-        TextContent(
-            type="text",
-            text=(
-                f"Retrieved {len(screenshots)} screenshots from storage "
-                f"(Total stored: {stats['total_screenshots']}, Sampling: {stats['sampling_rate']})"
-            ),
+    normalized_type = str(screenshot_type).strip().lower()
+    if normalized_type not in {"agent_step", "stream_sample", "all"}:
+        normalized_type = "agent_step"
+
+    header_screenshots: list[dict[str, Any]] = []
+    for shot in screenshots:
+        header_screenshots.append(
+            {
+                "id": shot.get("id"),
+                "timestamp": shot.get("timestamp"),
+                "type": shot.get("type"),
+                "session_id": shot.get("session_id"),
+                "has_error": shot.get("has_error"),
+                "mime_type": shot.get("mime_type"),
+                "url": shot.get("url"),
+                "step": shot.get("step"),
+                "metadata": shot.get("metadata") or {},
+                "artifact": {
+                    # These are “presigned-url-ready” placeholders until the ArtifactStore lands.
+                    "key": None,
+                    "url": None,
+                },
+            }
         )
+
+    payload = {
+        "version": "gsd.get_screenshots.v1",
+        "session_id": session_id,
+        "filters": {
+            "last_n": last_n,
+            "screenshot_type": normalized_type,
+            "from_timestamp": from_timestamp,
+            "has_error": has_error,
+            "include_images": include_images,
+        },
+        "screenshots": header_screenshots,
+        "stats": stats,
+        "error": None,
+    }
+
+    response: list[TextContent | ImageContent] = [
+        TextContent(type="text", text=json.dumps(payload, ensure_ascii=False))
     ]
 
     if include_images:
@@ -2244,25 +2288,6 @@ async def get_screenshots(
                     mimeType=str(shot.get("mime_type") or "image/png"),
                 )
             )
-        return response
-
-    if screenshots:
-        lines: list[str] = []
-        for shot in screenshots:
-            prefix = f"[{shot.get('type', 'unknown')}] "
-            step = shot.get("step")
-            if step is not None:
-                prefix += f"Step {step} | "
-            url_value = str(shot.get("url") or "N/A")
-            ts = shot.get("timestamp")
-            time_value = "N/A"
-            if isinstance(ts, (int, float)):
-                time_value = datetime.fromtimestamp(ts, UTC).isoformat()
-            err = " | ERROR" if shot.get("has_error") else ""
-            lines.append(f"{prefix}URL: {url_value} | Time: {time_value}{err}")
-
-        response.append(TextContent(type="text", text="\n".join(lines)))
-
     return response
 
 
