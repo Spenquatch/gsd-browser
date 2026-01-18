@@ -94,11 +94,33 @@ collection and retrieval must be designed for distributed execution now.
   - retention/cleanup policy aligned with task TTL
 
 ## Open Questions
-- Should artifact retrieval use pre-signed URLs (for large blobs) vs MCP tool payloads?
-- What is the right default retention policy in development vs production?
-- Do we need per-tenant namespace separation and encryption-at-rest requirements?
-- Which self-hosted S3 provider is the initial reference deployment (SeaweedFS or RustFS), and what
-  is the minimal “smoke matrix” to validate compatibility?
+Resolved (concrete decisions):
+- Artifact delivery (phased):
+  - Phase 1 default: inline artifact delivery via MCP payloads for compatibility.
+  - Phase 1 API shape: include stable artifact references and presigned-url-ready fields (URLs may be
+    `null` initially).
+  - Phase 1 storage: still write artifacts to S3-compatible storage from day 1 (and index in Redis).
+  - Phase 2 later: switch large/binary artifacts to pre-signed URLs via config without breaking
+    clients.
+- Retention defaults:
+  - Development: ~24h retention for tasks + artifacts (overrideable).
+  - Production: ~7d retention by default (overrideable).
+- Multi-tenant boundaries:
+  - Object keys are tenant-prefixed (for example `tenants/{tenant_id}/sessions/{session_id}/...`).
+  - Require TLS in transit and server-side encryption at rest (SSE) on the object store.
+- Self-hosted S3 reference:
+  - SeaweedFS is the initial reference deployment for self-hosted S3-compatible storage.
+  - RustFS remains an alternative option, provided we stick to “common S3” behaviors.
+- Minimal compatibility smoke matrix (run against AWS S3 + SeaweedFS + RustFS):
+  1) Object basics: PUT/GET/HEAD, LIST with prefix, DELETE
+  2) Multipart: initiate/upload/complete, abort, list parts
+  3) Ranged GET: partial reads
+  4) Presigned URL: GET (and PUT if we plan to use it)
+  5) Encryption: SSE-S3 baseline; SSE-KMS if required; avoid SSE-C unless needed
+  6) Policy: deny cross-tenant access via bucket/IAM policy
+  7) Concurrency: parallel reads/writes (multi-worker simulation)
+
+Remaining open questions: none (for this ADR).
 
 ## References
 - ADR-0003: CDP-first browser-use integration (artifact expectations)

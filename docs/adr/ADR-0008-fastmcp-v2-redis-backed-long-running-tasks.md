@@ -67,9 +67,19 @@ execution modes.
     storage so any replica can serve retrieval requests (see ADR-0009).
 
 ## Open Questions
-- Which tools (if any) should be `required` task execution vs `optional`?
-- What task TTLs should be set by default, and should clients be able to override them?
-- How should authorization apply to `tasks/get` and `tasks/result` for multi-tenant deployments?
+Resolved (concrete decisions):
+- Tool modes:
+  - `web_eval_agent`, `web_task_agent`, `web_task_agent_github`: `taskSupport="required"` (always run as tasks).
+  - `get_run_events`, `get_screenshots`, `setup_browser_state`: remain non-task by default unless proven necessary.
+- Task TTL policy:
+  - Server defines per-tool default TTLs appropriate for browser work (override FastMCP defaults).
+  - Client `TaskMetadata.ttl` overrides are allowed only when enabled via a server env toggle, and must
+    be within server-configured min/max bounds (reject out-of-range).
+- Authorization:
+  - Task status/result access is authorized by authenticated identity/tenant (not by session only).
+  - Session scoping may remain an additional guard, but is not the primary authorization boundary.
+
+Remaining open questions: none (for this ADR).
 
 ## References
 - MCP long-running tasks protocol (SEP-1686): `tasks/get`, `tasks/result`, `tasks/cancel`
