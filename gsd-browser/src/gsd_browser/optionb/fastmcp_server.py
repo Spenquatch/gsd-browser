@@ -117,8 +117,24 @@ class GsdFastMCP(FastMCP[Any]):
     async def _require_task_owner(self, task_id: str) -> None:
         identity = self._resolve_identity_for_current_request()
         store = task_ownership.get_task_ownership_store()
-        record = await store.require_owner(task_id, identity)
+        record = await store.get(task_id)
         if record is None:
+            _raise_not_found(task_id)
+        if record.tenant_id != identity.tenant_id or record.subject_id != identity.subject_id:
+            logger.warning(
+                "audit.task_access_denied",
+                extra={
+                    "task_id": task_id,
+                    "caller_tenant_id": identity.tenant_id,
+                    "caller_subject_id": identity.subject_id,
+                    "caller_transport": identity.transport,
+                    "owner_tenant_id": record.tenant_id,
+                    "owner_subject_id": record.subject_id,
+                    "owner_transport": record.transport,
+                    "tool_name": record.tool_name,
+                    "session_id": record.session_id,
+                },
+            )
             _raise_not_found(task_id)
 
     def _setup_task_protocol_handlers(self) -> None:  # noqa: D401
@@ -265,4 +281,3 @@ class GsdFastMCP(FastMCP[Any]):
                     raise NotFoundError(f"Unknown tool: {key}") from exc
                 except NotFoundError as exc:
                     raise NotFoundError(f"Unknown tool: {key}") from exc
-

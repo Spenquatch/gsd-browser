@@ -293,6 +293,22 @@ async def get_run_events(
     include_details: bool = False,
     ctx: Context | None = None,
 ) -> list[TextContent]:
+    identity = _resolve_identity_for_current_call()
+    logger.info(
+        "audit.artifact_list_query",
+        extra={
+            "artifact_kind": "run_events",
+            "tenant_id": identity.tenant_id,
+            "subject_id": identity.subject_id,
+            "transport": identity.transport,
+            "session_id": session_id,
+            "last_n": int(last_n),
+            "event_types": list(event_types) if event_types else None,
+            "from_timestamp": from_timestamp,
+            "has_error": has_error,
+            "include_details": bool(include_details),
+        },
+    )
     return await _call_with_identity(
         sdk_server.get_run_events,
         session_id=session_id,
@@ -329,6 +345,22 @@ async def get_screenshots(
     include_images: bool = True,
     ctx: Context | None = None,
 ) -> list[TextContent | ImageContent]:
+    identity = _resolve_identity_for_current_call()
+    logger.info(
+        "audit.artifact_list_query",
+        extra={
+            "artifact_kind": "screenshots",
+            "tenant_id": identity.tenant_id,
+            "subject_id": identity.subject_id,
+            "transport": identity.transport,
+            "session_id": session_id,
+            "last_n": int(last_n),
+            "screenshot_type": str(screenshot_type),
+            "from_timestamp": from_timestamp,
+            "has_error": has_error,
+            "include_images": bool(include_images),
+        },
+    )
     return await _call_with_identity(
         sdk_server.get_screenshots,
         last_n=last_n,
