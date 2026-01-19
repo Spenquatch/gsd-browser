@@ -7,12 +7,13 @@ FastMCP v2 (Option B) migration on `feat/fastmcp-v2-tasks`.
 
 ### Implemented today (current runtime)
 - MCP tools are served by the official Python SDK (`mcp.server.fastmcp`).
+- A FastMCP v2 stdio entrypoint (`fastmcp`) is implemented behind `GSD_USE_FASTMCP_V2=true`.
 - Tool responses follow the JSON payload schemas documented in `gsd-browser/docs/api/MCP_TOOLS.md`.
 - `get_screenshots` includes “presigned-url-ready” placeholders under `screenshots[].artifact`
   (`key=<screenshot id>`, `url=null`) but does not yet use a distributed artifact store.
 
 ### Planned (not yet implemented in runtime)
-- Framework migration to `fastmcp` v2 (`jlowin/fastmcp`).
+- Switch stdio runtime default to `fastmcp` v2 (`jlowin/fastmcp`).
 - SEP-1686 long-running tasks for long tools (`taskSupport="required"`), including:
   `tasks/get`, `tasks/result`, `tasks/cancel`, and progress notifications.
 - Redis/Valkey-backed task queue via Docket (FastMCP background tasks).

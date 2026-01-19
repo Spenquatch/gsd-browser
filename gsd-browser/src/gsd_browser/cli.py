@@ -150,7 +150,15 @@ def serve(
         f"log_level={desired_level}, json_logs={desired_json}",
         err=True,
     )
-    from .mcp_server import apply_configured_tool_policy, run_stdio
+    use_fastmcp_v2 = str(os.environ.get("GSD_USE_FASTMCP_V2", "")).strip().lower() in {
+        "1",
+        "true",
+        "yes",
+    }
+    if use_fastmcp_v2:
+        from .fastmcp_v2_stdio import apply_configured_tool_policy, run_stdio
+    else:
+        from .mcp_server import apply_configured_tool_policy, run_stdio
 
     apply_configured_tool_policy(settings=settings)
     run_stdio()

@@ -21,7 +21,6 @@ venv/
 
 # Tooling
 .poetry/
-uv.lock
 
 # Runtime logs
 security.log
