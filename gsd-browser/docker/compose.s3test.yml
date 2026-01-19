@@ -1,0 +1,21 @@
+services:
+  seaweedfs:
+    image: chrislusf/seaweedfs:3.71
+    command:
+      [
+        "server",
+        "-ip=seaweedfs",
+        "-ip.bind=0.0.0.0",
+        "-dir=/data",
+        "-filer",
+        "-s3",
+        "-s3.port=8333"
+      ]
+    ports:
+      - "8333:8333"
+    volumes:
+      - seaweedfs-data:/data
+
+volumes:
+  seaweedfs-data: {}
+
