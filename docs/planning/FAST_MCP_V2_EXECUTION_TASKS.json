@@ -670,7 +670,7 @@
         {
           "id": "I3.1",
           "title": "Implement S3 client wrapper + presign (SeaweedFS/AWS S3 compatible)",
-          "status": "todo",
+          "status": "done",
           "risk": "high",
           "deliverables": [
             "gsd-browser/src/gsd_browser (S3 client wrapper: upload/delete/presign)",
