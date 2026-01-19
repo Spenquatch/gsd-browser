@@ -5,6 +5,13 @@ Use this file to resume work in a new session without losing context.
 ## Branch
 - `feat/fastmcp-v2-tasks`
 
+## Local Redis/Valkey harness (do this)
+Some integration tests are skipped unless Redis is running at `redis://localhost:6379/0`.
+
+- Start: `cd gsd-browser && make redistest-up`
+- Stop: `cd gsd-browser && make redistest-down`
+- Logs: `cd gsd-browser && make redistest-logs`
+
 ## High-level goal
 Migrate `gsd` MCP server to:
 - FastMCP v2 (jlowin/fastmcp)

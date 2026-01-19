@@ -50,4 +50,8 @@ print(f"[optionb-bootstrap] pydantic={m.version('pydantic')}")
 print(f"[optionb-bootstrap] pytest={m.version('pytest')}")
 PY
 
+echo "[optionb-bootstrap] NOTE: some integration tests require local Redis/Valkey."
+echo "[optionb-bootstrap] Start it with: docker compose -f docker/compose.redistest.yml up -d"
+echo "[optionb-bootstrap] (or: cd gsd-browser && make redistest-up)"
+
 echo "[optionb-bootstrap] OK"

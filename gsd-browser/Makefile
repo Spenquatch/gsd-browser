@@ -1,4 +1,4 @@
-.PHONY: help dev bootstrap check lint test smoke diagnose sanity-real prompt-compare docker-build docker-run
+.PHONY: help dev bootstrap check lint test smoke diagnose sanity-real prompt-compare docker-build docker-run redistest-up redistest-down redistest-logs
 
 UV ?= uv
 SANITY_REAL_CONFIRM ?=
@@ -13,6 +13,9 @@ help:
 	@echo "  make check         Bootstrap + lint + test"
 	@echo "  make lint          Run Ruff lint (runs bootstrap first)"
 	@echo "  make test          Run Pytest (runs bootstrap first)"
+	@echo "  make redistest-up  Start local Redis/Valkey harness (for non-skipped integration tests)"
+	@echo "  make redistest-down Stop local Redis/Valkey harness"
+	@echo "  make redistest-logs Tail Redis/Valkey harness logs"
 	@echo "  make smoke         Run smoke test script"
 	@echo "  make sanity-real   Run real-world sanity harness (manual; requires credentials + internet)"
 	@echo "  make prompt-compare Compare extended vs override-enhanced prompts (manual; requires credentials)"
@@ -93,3 +96,12 @@ docker-build:
 
 docker-run:
 	docker run --rm -e ANTHROPIC_API_KEY=$${ANTHROPIC_API_KEY} gsd:dev
+
+redistest-up:
+	docker compose -f docker/compose.redistest.yml up -d
+
+redistest-down:
+	docker compose -f docker/compose.redistest.yml down -v
+
+redistest-logs:
+	docker compose -f docker/compose.redistest.yml logs -f --tail=200
