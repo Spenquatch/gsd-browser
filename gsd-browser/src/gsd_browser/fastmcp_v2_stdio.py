@@ -162,4 +162,7 @@ async def get_screenshots(
 
 
 def run_stdio() -> None:
+    from .optionb.task_backend import require_docket_redis_url
+
+    _ = require_docket_redis_url()
     mcp.run(transport="stdio")

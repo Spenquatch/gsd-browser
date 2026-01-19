@@ -48,6 +48,9 @@ def build_http_app() -> StarletteWithLifespan:
     if transport != "http":
         raise RuntimeError("HTTP entrypoint is only valid when GSD_TRANSPORT=http")
 
+    from .optionb.task_backend import require_docket_redis_url
+
+    _ = require_docket_redis_url()
     for name in _REQUIRED_JWT_ENV_VARS:
         _require_env(name)
 
@@ -56,4 +59,3 @@ def build_http_app() -> StarletteWithLifespan:
 
 
 app: StarletteWithLifespan | None = build_http_app() if _transport() == "http" else None
-

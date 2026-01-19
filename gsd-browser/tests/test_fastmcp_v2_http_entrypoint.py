@@ -20,6 +20,7 @@ def test_http_entrypoint_refuses_to_start_without_jwt_config(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setenv("GSD_TRANSPORT", "http")
+    monkeypatch.setenv("FASTMCP_DOCKET_URL", "redis://localhost:6379/0")
     monkeypatch.delenv("GSD_JWT_JWKS_URL", raising=False)
     monkeypatch.delenv("GSD_JWT_ISSUER", raising=False)
     monkeypatch.delenv("GSD_JWT_AUDIENCE", raising=False)
@@ -32,6 +33,7 @@ def test_http_entrypoint_starts_and_exposes_expected_tools(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setenv("GSD_TRANSPORT", "http")
+    monkeypatch.setenv("FASTMCP_DOCKET_URL", "redis://localhost:6379/0")
     monkeypatch.setenv("GSD_JWT_JWKS_URL", "https://example.com/jwks.json")
     monkeypatch.setenv("GSD_JWT_ISSUER", "https://issuer.example.com")
     monkeypatch.setenv("GSD_JWT_AUDIENCE", "gsd")
@@ -41,4 +43,3 @@ def test_http_entrypoint_starts_and_exposes_expected_tools(
 
     tools = asyncio.run(v2_mcp._list_tools_mcp())  # noqa: SLF001
     assert {tool.name for tool in tools} == _tool_names_from_docs()
-
