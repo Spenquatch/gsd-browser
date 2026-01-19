@@ -2,8 +2,8 @@
 
 This is gated by `GSD_TRANSPORT=http`. In stdio mode, this module does not create an ASGI app.
 
-JWT verification and identity mapping are implemented in later tasks; this entrypoint only
-enforces fail-fast configuration presence for HTTP mode.
+JWT verification (JWKS + issuer + audience + exp) is required for HTTP mode and is enforced
+via FastMCP's auth middleware.
 """
 
 from __future__ import annotations
@@ -13,12 +13,6 @@ import os
 from fastmcp.server.server import StarletteWithLifespan
 
 from .fastmcp_v2_stdio import mcp
-
-_REQUIRED_JWT_ENV_VARS: tuple[str, ...] = (
-    "GSD_JWT_JWKS_URL",
-    "GSD_JWT_ISSUER",
-    "GSD_JWT_AUDIENCE",
-)
 
 
 def _env(name: str) -> str:
@@ -51,8 +45,24 @@ def build_http_app() -> StarletteWithLifespan:
     from .optionb.task_backend import require_docket_redis_url
 
     _ = require_docket_redis_url()
-    for name in _REQUIRED_JWT_ENV_VARS:
-        _require_env(name)
+
+    jwks_url = _require_env("GSD_JWT_JWKS_URL")
+    issuer = _require_env("GSD_JWT_ISSUER")
+    audience = _require_env("GSD_JWT_AUDIENCE")
+
+    from .optionb.identity import (
+        GsdJwtVerifier,
+        get_jwt_subject_id_claim_name,
+        get_jwt_tenant_id_claim_name,
+    )
+
+    mcp.auth = GsdJwtVerifier(
+        jwks_uri=jwks_url,
+        issuer=issuer,
+        audience=audience,
+        tenant_id_claim=get_jwt_tenant_id_claim_name(),
+        subject_id_claim=get_jwt_subject_id_claim_name(),
+    )
 
     # Use FastMCP's "streamable-http" transport (FastMCP v2).
     return mcp.http_app(transport="streamable-http")

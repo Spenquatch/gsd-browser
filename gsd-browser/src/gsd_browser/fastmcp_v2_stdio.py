@@ -7,6 +7,8 @@ semantics. Task support, Redis/Docket, and multi-tenant auth are implemented in 
 from __future__ import annotations
 
 import logging
+from collections.abc import Awaitable, Callable
+from typing import TYPE_CHECKING, TypeVar
 
 from fastmcp import Context, FastMCP
 from mcp.types import ImageContent, TextContent
@@ -17,6 +19,44 @@ from .config import Settings
 logger = logging.getLogger("gsd_browser.fastmcp_v2")
 
 mcp = FastMCP("gsd")
+
+T = TypeVar("T")
+
+if TYPE_CHECKING:
+    from .optionb.identity import Identity
+
+
+def _resolve_identity_for_current_call() -> Identity:
+    from fastmcp.server.dependencies import get_access_token
+
+    from .optionb.identity import (
+        STDIO_IDENTITY,
+        get_jwt_subject_id_claim_name,
+        get_jwt_tenant_id_claim_name,
+        identity_from_claims,
+    )
+
+    access_token = get_access_token()
+    if access_token is None:
+        return STDIO_IDENTITY
+
+    return identity_from_claims(
+        access_token.claims,
+        tenant_id_claim=get_jwt_tenant_id_claim_name(),
+        subject_id_claim=get_jwt_subject_id_claim_name(),
+    )
+
+
+async def _call_with_identity(
+    fn: Callable[..., Awaitable[T]],
+    /,
+    **kwargs: object,
+) -> T:
+    from .optionb.request_context import identity_scope
+
+    identity = _resolve_identity_for_current_call()
+    with identity_scope(identity):
+        return await fn(**kwargs)
 
 
 def apply_configured_tool_policy(*, settings: Settings) -> None:
@@ -52,7 +92,8 @@ async def web_eval_agent(
     max_steps: int | None = None,
     step_timeout_s: float | None = None,
 ) -> list[TextContent]:
-    return await sdk_server.web_eval_agent(
+    return await _call_with_identity(
+        sdk_server.web_eval_agent,
         url=url,
         task=task,
         ctx=ctx,  # type: ignore[arg-type]
@@ -75,7 +116,8 @@ async def web_task_agent(
     max_steps: int | None = None,
     step_timeout_s: float | None = None,
 ) -> list[TextContent]:
-    return await sdk_server.web_task_agent(
+    return await _call_with_identity(
+        sdk_server.web_task_agent,
         url=url,
         task=task,
         ctx=ctx,  # type: ignore[arg-type]
@@ -98,7 +140,8 @@ async def web_task_agent_github(
     max_steps: int | None = None,
     step_timeout_s: float | None = None,
 ) -> list[TextContent]:
-    return await sdk_server.web_task_agent_github(
+    return await _call_with_identity(
+        sdk_server.web_task_agent_github,
         url=url,
         task=task,
         ctx=ctx,  # type: ignore[arg-type]
@@ -120,7 +163,8 @@ async def get_run_events(
     include_details: bool = False,
     ctx: Context | None = None,
 ) -> list[TextContent]:
-    return await sdk_server.get_run_events(
+    return await _call_with_identity(
+        sdk_server.get_run_events,
         session_id=session_id,
         last_n=last_n,
         event_types=event_types,
@@ -137,7 +181,12 @@ async def setup_browser_state(
     state_id: str | None = None,
     ctx: Context | None = None,
 ) -> list[TextContent]:
-    return await sdk_server.setup_browser_state(url=url, state_id=state_id, ctx=ctx)  # type: ignore[arg-type]
+    return await _call_with_identity(
+        sdk_server.setup_browser_state,
+        url=url,
+        state_id=state_id,
+        ctx=ctx,  # type: ignore[arg-type]
+    )
 
 
 @mcp.tool(name="get_screenshots")
@@ -150,7 +199,8 @@ async def get_screenshots(
     include_images: bool = True,
     ctx: Context | None = None,
 ) -> list[TextContent | ImageContent]:
-    return await sdk_server.get_screenshots(
+    return await _call_with_identity(
+        sdk_server.get_screenshots,
         last_n=last_n,
         screenshot_type=screenshot_type,
         session_id=session_id,
