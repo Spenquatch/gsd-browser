@@ -9,7 +9,7 @@ FastMCP v2 (Option B) migration on `feat/fastmcp-v2-tasks`.
 - MCP tools are served by the official Python SDK (`mcp.server.fastmcp`).
 - Tool responses follow the JSON payload schemas documented in `gsd-browser/docs/api/MCP_TOOLS.md`.
 - `get_screenshots` includes “presigned-url-ready” placeholders under `screenshots[].artifact`
-  (`key=null`, `url=null`) but does not yet use a distributed artifact store.
+  (`key=<screenshot id>`, `url=null`) but does not yet use a distributed artifact store.
 
 ### Planned (not yet implemented in runtime)
 - Framework migration to `fastmcp` v2 (`jlowin/fastmcp`).

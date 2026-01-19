@@ -285,6 +285,10 @@ Clients refresh behavior:
 
 ## 5) Tool listing semantics (authoritative)
 
+Timestamp units (tool payloads):
+- All timestamps in JSON tool payloads are epoch seconds (float).
+- Internal indices and object keys may use milliseconds (e.g., zset scores and S3 key prefixes).
+
 ### 5.1 `get_screenshots` ordering and pairing
 Ordering:
 - Results are ordered newest → oldest.
@@ -303,6 +307,15 @@ Non-enumerability (list semantics):
   `(tenant_id, subject_id)`), the server MUST return:
   - `screenshots=[]`
   - `error=null`
+  - `session_id` MUST echo the filter value (UUID), since this response shape is indistinguishable
+    from a valid-but-empty session.
+
+Invalid input:
+- If `session_id` is missing or invalid, the server MUST return:
+  - `session_id=null`
+  - `screenshots=[]`
+  - `error` as a non-null validation message string
+  - no inline `ImageContent` items
 
 Identity and stable IDs:
 - `screenshots[].id` MUST be a UUIDv4 string and is the stable artifact identifier for that screenshot.
@@ -359,11 +372,14 @@ Non-enumerability (list semantics):
   `(tenant_id, subject_id)`), the server MUST return:
   - `events=[]`
   - `error=null`
+  - `session_id` MUST echo the filter value (UUID), since this response shape is indistinguishable
+    from a valid-but-empty session.
 
 Invalid input handling:
 - If any provided filter is invalid (including `event_types` outside the allowed subset or an invalid
   `from_timestamp`), the server MUST return:
   - `events=[]`
+  - `session_id=null`
   - `error` as a non-null validation message string
 
 ## 6) Progress reporting conventions

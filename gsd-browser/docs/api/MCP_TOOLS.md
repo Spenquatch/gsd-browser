@@ -51,7 +51,8 @@ The “tool result payload” schemas below describe the **task result** payload
     - `page`: `{ url: string|null, title: string|null }`
     - `errors_top`: array of ranked failures:
       - each item:
-        `{ type, code?, summary, step?, url? }`
+        `{ type, code?: string|null, summary, step: number|null, url: string|null }`
+      - `step` and `url` keys are always present (may be `null`).
       - `type` taxonomy (stable):
         - `"console"`: browser console error (JS/runtime)
         - `"network"`: HTTP/network failure (4xx/5xx/timeout)
@@ -92,10 +93,15 @@ Same input shape and output schema as `web_eval_agent`, but with:
 **Output** (`TextContent[]`, exactly 1 item)
 - JSON payload schema `gsd.get_run_events.v1`:
   - `version`: `"gsd.get_run_events.v1"`
-  - `session_id`: UUID string (echo of filter)
+  - `session_id`: UUID string|null (echo of filter; null on validation errors)
   - `events`: object[]
-  - `stats`: `{ counts: {agent:number, console:number, network:number, total:number}, oldest_timestamp:number|null, newest_timestamp:number|null }`
+  - `stats`: `{ counts: {agent:number, console:number, network:number, total:number}, oldest_timestamp:number|null, newest_timestamp:number|null }` (timestamps are epoch seconds)
   - `error`: string|null
+Non-enumerability:
+- If the session has no visible events to the caller (nonexistent or owned by a different tenant/subject),
+  return `events=[]` and `error=null`.
+Invalid input:
+- If any filter is invalid (including invalid `from_timestamp`), return `events=[]` and a non-null `error`.
 
 ### `get_screenshots` (sync; phased delivery)
 This tool supports phased delivery (inline now, pre-signed URLs later). The response always includes
@@ -112,10 +118,11 @@ stable IDs/metadata suitable for switching delivery mode.
 **Output** (`(TextContent|ImageContent)[]`, 1+ items)
 - First item is a `TextContent` JSON payload schema `gsd.get_screenshots.v1`:
   - `version`: `"gsd.get_screenshots.v1"`
-  - `session_id`: UUID string (echo of filter)
+  - `session_id`: UUID string|null (echo of filter; null on validation errors)
   - `filters`: object (echo of applied filters)
   - `screenshots`: array of screenshot metadata objects, each with:
     - `id`, `timestamp`, `type`, `session_id`, `has_error`, `mime_type`, `url`, `step`, `metadata`
+    - `timestamp` is epoch seconds (float)
     - `inline_included`: boolean (required; never null). When `true`, an inline `ImageContent` item is included.
     - `url` is the **page URL** that the screenshot was captured from (not an artifact URL).
     - `artifact` (presigned-url-ready):
@@ -130,6 +137,11 @@ stable IDs/metadata suitable for switching delivery mode.
 - When `include_images=true`, the response may include `ImageContent` items after the JSON header for
   screenshots that have image bytes. These are compatibility-only; the canonical metadata lives in
   the JSON header.
+Non-enumerability:
+- If the session has no visible screenshots to the caller (nonexistent or owned by a different tenant/subject),
+  return `screenshots=[]` and `error=null`.
+Invalid input:
+- If `session_id` is missing/invalid, return `screenshots=[]` and a non-null `error`.
 
 **Mapping JSON headers → inline `ImageContent`**
 - Each screenshot header includes `inline_included` (boolean, required). When `true`, an inline

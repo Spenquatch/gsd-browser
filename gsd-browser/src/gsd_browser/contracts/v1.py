@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from typing import Any, Literal
+from typing import Any, Literal, Self
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class ContractModel(BaseModel):
@@ -101,7 +101,7 @@ class RunEventStatsV1(ContractModel):
 class GetRunEventsPayloadV1(ContractModel):
     version: Literal["gsd.get_run_events.v1"]
     session_id: UUID | None
-    events: list[dict[str, Any]]
+    events: list[dict[str, Any]] = Field(max_length=200)
     stats: RunEventStatsV1
     error: str | None
 
@@ -127,6 +127,12 @@ class ScreenshotHeaderV1(ContractModel):
     inline_included: bool
     metadata: dict[str, Any]
     artifact: ArtifactRefV1
+
+    @model_validator(mode="after")
+    def _artifact_key_matches_id(self) -> Self:
+        if self.artifact.key != self.id:
+            raise ValueError("artifact.key must equal id")
+        return self
 
 
 class ScreenshotFiltersV1(ContractModel):
