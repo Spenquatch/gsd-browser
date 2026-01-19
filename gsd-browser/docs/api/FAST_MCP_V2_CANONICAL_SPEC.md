@@ -1,0 +1,350 @@
+# FastMCP v2 “Option B” — Canonical Spec (no open questions)
+
+This document is the canonical, implementation-level specification for the FastMCP v2 (“Option B”)
+migration. It defines identity/authZ behavior, task persistence/keying, artifact storage + index
+layout, progress conventions, diagnostic codes, and configuration.
+
+Status/migration boundary: `gsd-browser/docs/api/STATUS.md`.
+
+## 1) Identity model (authoritative)
+
+All authorization decisions are made using a normalized identity:
+
+```text
+tenant_id: string
+subject_id: string
+transport: "stdio" | "http"
+```
+
+### 1.1 `stdio` transport identity (always)
+- `tenant_id = "local"`
+- `subject_id = "local"`
+- `transport = "stdio"`
+
+This is a single-tenant local trust boundary. No external authentication is performed.
+
+### 1.2 `http` transport identity (required)
+HTTP transport is only supported when JWT auth is configured. The server MUST refuse to start in
+HTTP mode if the required auth config is missing.
+
+The caller MUST send:
+- `Authorization: Bearer <JWT>`
+
+JWT verification requirements:
+- Signature verification via JWKS (`GSD_JWT_JWKS_URL`)
+- `iss` MUST equal `GSD_JWT_ISSUER`
+- `aud` MUST contain `GSD_JWT_AUDIENCE`
+- `exp` MUST be valid (no expired tokens)
+
+Claim → identity mapping (no alternates):
+- `subject_id = <JWT.sub>`
+- `tenant_id = <JWT.tenant_id>`
+
+Constraints:
+- `tenant_id` and `subject_id` MUST be non-empty strings (after trimming).
+- `tenant_id` and `subject_id` MUST match regex: `^[a-zA-Z0-9][a-zA-Z0-9:_-]{0,63}$`
+- If any requirement fails, the request is unauthorized.
+
+## 2) Authorization rules (authoritative)
+
+### 2.1 Non-enumerability
+For task and artifact access, authorization failures MUST be non-enumerable:
+- Return “not found” semantics (equivalent to a 404) when the resource exists but caller is not
+  authorized.
+
+Server MUST still log an internal audit event for denied access attempts (see §2.3).
+
+### 2.2 Tasks
+`taskId` is NOT an authorization boundary.
+
+For any `tasks/get`, `tasks/result`, `tasks/cancel` request:
+- The server MUST load the TaskOwnershipRecord (see §3.2) for `task_id`.
+- If no record exists, return not found.
+- If record exists and `(tenant_id, subject_id)` do not match the caller, return not found.
+- If record exists and matches, allow access.
+
+### 2.3 Artifacts
+`session_id` and artifact keys are NOT authorization boundaries.
+
+For any artifact listing/retrieval (e.g., `get_screenshots`, `get_run_events`):
+- The server MUST authorize using the ArtifactIndexRecord’s `(tenant_id, subject_id)` (see §4.3).
+- If caller does not match, return not found.
+
+### 2.4 Audit logging (required)
+The server MUST emit structured logs for:
+- Task access denied (includes `task_id`, caller identity, and stored owner identity)
+- Artifact access denied (includes `artifact_id` or `session_id` + filter summary, caller identity)
+- Presigned URL issuance (includes `artifact_id`, expiry, caller identity)
+
+## 3) Task semantics + persistence
+
+### 3.1 Task execution mode (long tools)
+These tools are task-required:
+- `web_eval_agent`
+- `web_task_agent`
+- `web_task_agent_github`
+
+### 3.2 Task ownership record (Redis; required)
+In addition to Docket’s internal task storage, `gsd` MUST persist an ownership record for every task.
+
+Redis key format (string keys, no spaces):
+- `gsd:v1:tasks:{task_id}:owner`
+
+Value format:
+- UTF-8 JSON object (TaskOwnershipRecord), stored as a single JSON string value.
+
+TaskOwnershipRecord schema:
+```json
+{
+  "version": "gsd.task_ownership.v1",
+  "task_id": "<uuid>",
+  "tenant_id": "<tenant_id>",
+  "subject_id": "<subject_id>",
+  "transport": "stdio|http",
+  "tool_name": "web_eval_agent|web_task_agent|web_task_agent_github",
+  "created_at_ms": 1730000000000,
+  "expires_at_ms": 1730000900000,
+  "session_id": "<uuid|null>"
+}
+```
+
+TTL behavior:
+- The Redis key TTL MUST be set to expire at `expires_at_ms`.
+- On task completion, the TTL remains unchanged (ownership remains valid until expiry).
+
+### 3.3 TTL policy (server-controlled)
+Server-side defaults and bounds are fixed:
+- `web_eval_agent`: 900 seconds
+- `web_task_agent`: 1800 seconds
+- `web_task_agent_github`: 1800 seconds
+- Minimum TTL: 60 seconds
+- Maximum TTL: 7200 seconds
+
+Client-provided TTL override:
+- Allowed ONLY when `GSD_TASK_ALLOW_CLIENT_TTL_OVERRIDE=true`
+- Override MUST be clamped by rejection (not clamping):
+  - if requested TTL < min or > max → reject the call
+
+MCP protocol unit conversion:
+- MCP `task.ttl` and `Task.pollInterval` are **milliseconds**.
+- All environment/config values in `gsd` are **seconds** and MUST be converted to milliseconds at
+  the protocol boundary.
+
+### 3.4 Poll interval
+Server MUST set `Task.pollInterval = 2000` (milliseconds) for these task-required tools.
+
+### 3.5 Cancellation (cooperative; required)
+Cancellation is cooperative and MUST be enforced by the tool implementation:
+- On `tasks/cancel`, the task MUST transition to cancelled status promptly.
+- The running tool MUST check for cancellation between agent steps and must stop work when cancelled.
+- The tool MUST release resources in `finally` blocks (close pages/contexts; stop streaming).
+
+## 4) Artifact storage + index
+
+### 4.1 Artifact kinds
+`gsd` persists two artifact families for session-scoped tools:
+- screenshots (binary images)
+- run events (JSONL or JSON)
+
+### 4.2 S3 object key scheme (required)
+All object keys MUST be tenant-prefixed and subject-scoped:
+- `tenants/{tenant_id}/subjects/{subject_id}/sessions/{session_id}/...`
+
+Screenshot object key format:
+- `tenants/{tenant_id}/subjects/{subject_id}/sessions/{session_id}/screenshots/{timestamp_ms}_{screenshot_id}.png`
+
+Run events object key format:
+- `tenants/{tenant_id}/subjects/{subject_id}/sessions/{session_id}/run-events/{timestamp_ms}_{chunk_id}.jsonl`
+
+Encryption:
+- All PUTs MUST set SSE-S3: `x-amz-server-side-encryption: AES256`
+
+### 4.3 Redis index (required)
+Redis is the authoritative index for listing/filtering. S3 is treated as blob storage.
+
+Artifact ID format:
+- UUID string (v4)
+
+Metadata key:
+- `gsd:v1:artifacts:{artifact_id}:meta` → JSON (ArtifactIndexRecord)
+
+Session listing keys:
+- screenshots: `gsd:v1:sessions:{session_id}:screenshots:z`
+- run events: `gsd:v1:sessions:{session_id}:run_events:z`
+
+Sorted set members and scores:
+- member: `artifact_id`
+- score: `timestamp_ms` (integer)
+
+ArtifactIndexRecord schema:
+```json
+{
+  "version": "gsd.artifact_index.v1",
+  "artifact_id": "<uuid>",
+  "artifact_kind": "screenshot|run_event_chunk",
+  "tenant_id": "<tenant_id>",
+  "subject_id": "<subject_id>",
+  "session_id": "<uuid>",
+  "created_at_ms": 1730000000000,
+  "content_type": "image/png",
+  "size_bytes": 12345,
+  "has_error": false,
+  "screenshot_type": "agent_step|stream_sample|null",
+  "step": 12,
+  "page_url": "https://example.com",
+  "s3_bucket": "<bucket>",
+  "s3_key": "tenants/.../screenshots/...",
+  "sha256_hex": "<hex|null>"
+}
+```
+
+Index TTL/retention:
+- Default retention is environment-driven and MUST be applied consistently to:
+  - S3 objects (deletion)
+  - Redis metadata keys
+  - Redis sorted set members
+- Retention defaults:
+  - `dev`: 86400 seconds (24h)
+  - `prod`: 604800 seconds (7d)
+
+The server MUST implement periodic cleanup (interval: 300 seconds) that deletes expired artifacts
+from S3 and removes corresponding Redis keys/members.
+
+### 4.4 Presigned URL policy (Phase 2 contract; required)
+Presigned URLs MUST be generated only after authorization succeeds.
+
+Constraints:
+- Method: GET only
+- Expiration:
+  - default: 900 seconds
+  - maximum: 3600 seconds (server MUST reject larger values)
+- Returned fields:
+  - `artifact.url` is the presigned URL
+  - `artifact.url_expires_at` is epoch seconds (float)
+
+Caching policy for presigned artifacts:
+- Response headers MUST set `Cache-Control: private, max-age=<expires_in>` (no shared caching).
+
+Clients refresh behavior:
+- Clients MUST re-call retrieval tools to obtain fresh URLs after expiration.
+
+## 5) Tool listing semantics (authoritative)
+
+### 5.1 `get_screenshots` ordering and pairing
+Ordering:
+- Results are ordered newest → oldest.
+
+Pagination:
+- `last_n` is a hard maximum of 20.
+
+Filtering:
+- `session_id` restricts listing to that session (required for multi-tenant deployments).
+- `from_timestamp` is epoch seconds; server converts to `timestamp_ms` and filters by score.
+- `has_error` filters based on ArtifactIndexRecord.has_error.
+- `screenshot_type` filters based on ArtifactIndexRecord.screenshot_type.
+
+Inline image pairing (deterministic):
+- Each screenshot header includes `inline_included`:
+  - `true` when inline image bytes are included in the response as an `ImageContent`
+  - `false` when no inline image is included for that screenshot
+- Clients MUST iterate `screenshots[]` and consume one `ImageContent` item only when
+  `inline_included=true`.
+
+### 5.2 `get_run_events` ordering and chunking
+Ordering:
+- Run event chunks are ordered newest → oldest.
+
+Chunk format:
+- Each run-event artifact is a JSON Lines payload (`.jsonl`) where each line is one event object.
+
+Filtering:
+- `event_types` and `has_error` filtering occurs server-side after loading events from chunks.
+- `last_n` applies after filtering (hard maximum 200).
+
+## 6) Progress reporting conventions
+
+Progress notifications MUST be emitted:
+- once at task start
+- at least once per agent step
+- once on completion/cancellation/failure
+
+Progress unit rules:
+- If `max_steps` is known: use step-based progress
+  - `progress = steps_completed`
+  - `total = max_steps`
+- If `max_steps` is unknown:
+  - `progress = 0`
+  - `total = 0`
+  - message MUST still describe phase
+
+Message format (string; stable prefix keys):
+```text
+phase=<init|navigate|agent_step|finalize|done|cancelled|failed> step=<n|null> note=<free text>
+```
+
+## 7) Diagnostic `code` vocabulary (stable)
+
+`errors_top[].code` values MUST come from this table.
+
+| `type` | `code` | Meaning |
+| --- | --- | --- |
+| `network` | `NETWORK_HTTP_4XX` | HTTP response status 4xx |
+| `network` | `NETWORK_HTTP_5XX` | HTTP response status 5xx |
+| `network` | `NETWORK_TIMEOUT` | Network request timed out |
+| `network` | `NETWORK_DNS` | DNS resolution failure |
+| `provider` | `PROVIDER_RATE_LIMIT` | LLM provider rate limiting |
+| `provider` | `PROVIDER_AUTH` | LLM provider auth/permission failure |
+| `provider` | `PROVIDER_BAD_RESPONSE` | Provider returned invalid/unparseable response |
+| `agent` | `AGENT_STEP_FAILED` | Agent step failed (tool/action execution) |
+| `agent` | `AGENT_PLAN_FAILED` | Agent planning failed |
+| `validation` | `VALIDATION_INPUT` | Invalid tool input parameters |
+| `validation` | `VALIDATION_OUTPUT` | Output could not be validated / contract violation |
+| `timeout` | `TIMEOUT_BUDGET` | Overall tool budget exceeded |
+| `timeout` | `TIMEOUT_STEP` | Step timeout exceeded |
+| `cancelled` | `TASK_CANCELLED` | Task was cancelled by caller |
+| `console` | `CONSOLE_ERROR` | Browser console error logged |
+
+## 8) Configuration (single source of truth)
+
+All configuration is via environment variables.
+
+### 8.1 Deployment mode
+- `GSD_DEPLOYMENT_ENV` (string): MUST be `dev` or `prod` (default: `dev`)
+
+### 8.2 Transport
+- `GSD_TRANSPORT` (string): MUST be `stdio` or `http`
+  - if `stdio`: server starts stdio transport only
+  - if `http`: server starts HTTP transport only and requires JWT auth config
+
+### 8.3 JWT auth (required for `GSD_TRANSPORT=http`)
+- `GSD_JWT_JWKS_URL` (string; required)
+- `GSD_JWT_ISSUER` (string; required)
+- `GSD_JWT_AUDIENCE` (string; required)
+
+### 8.4 Tasks (required for Option B)
+- `FASTMCP_DOCKET_URL` (string; required): MUST be `redis://...` (no `memory://`)
+- `GSD_REDIS_URL` (string; required): Redis/Valkey URL for task ownership + artifact index
+- `GSD_TASK_ALLOW_CLIENT_TTL_OVERRIDE` (bool; default: `false`)
+- `GSD_TASK_TTL_MIN_S` (int; default: `60`)
+- `GSD_TASK_TTL_MAX_S` (int; default: `7200`)
+- `GSD_TASK_TTL_WEB_EVAL_AGENT_S` (int; default: `900`)
+- `GSD_TASK_TTL_WEB_TASK_AGENT_S` (int; default: `1800`)
+- `GSD_TASK_TTL_WEB_TASK_AGENT_GITHUB_S` (int; default: `1800`)
+- `GSD_TASK_POLL_INTERVAL_MS` (int; default: `2000`)
+
+### 8.5 Artifact delivery
+- `GSD_ARTIFACT_DELIVERY_MODE` (string): MUST be `inline` or `presigned` or `both` (default: `inline`)
+- `GSD_PRESIGNED_URL_TTL_S` (int; default: `900`, max: `3600`)
+
+### 8.6 S3 artifact store (required for Option B)
+- `GSD_S3_ENDPOINT_URL` (string; required)
+- `GSD_S3_BUCKET` (string; required)
+- `GSD_S3_REGION` (string; required)
+- `GSD_S3_ACCESS_KEY_ID` (string; required)
+- `GSD_S3_SECRET_ACCESS_KEY` (string; required)
+
+### 8.7 Retention/cleanup
+- `GSD_RETENTION_SECONDS_DEV` (int; default: `86400`)
+- `GSD_RETENTION_SECONDS_PROD` (int; default: `604800`)
+- `GSD_CLEANUP_INTERVAL_S` (int; default: `300`)
+

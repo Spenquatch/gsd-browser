@@ -2,6 +2,8 @@
 
 This document is the source of truth for the `gsd` MCP tool surface.
 
+Canonical spec (tasks/artifacts/authZ/progress/codes/config): `gsd-browser/docs/api/FAST_MCP_V2_CANONICAL_SPEC.md`.
+
 ## Versioning policy
 - Every structured tool response **must** include a `version` string (for example
   `gsd.web_eval_agent.v1`) inside a single JSON payload encoded in a `TextContent`.
@@ -60,6 +62,7 @@ The “tool result payload” schemas below describe the **task result** payload
         - `"cancelled"`: task cancelled by client/operator
       - `code` is a short machine-readable string (recommended) that remains stable across
         wording changes in `summary` (examples: `"NETWORK_HTTP_5XX"`, `"TASK_CANCELLED"`).
+      - Canonical code vocabulary is in `gsd-browser/docs/api/FAST_MCP_V2_CANONICAL_SPEC.md` (§7).
     - `timeouts`:
       - `{ budget_s: number|null, step_timeout_s: number|null, max_steps: number|null, timed_out: boolean }`
     - `warnings`: string[] (bounded)

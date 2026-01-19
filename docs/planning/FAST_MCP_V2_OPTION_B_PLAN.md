@@ -114,6 +114,7 @@ Goal: define operational behavior so clients have a stable UX.
 - S3 (identity/tenant invariants): `docs/adr/ADR-0008-fastmcp-v2-redis-backed-long-running-tasks.md` and `docs/adr/ADR-0009-distributed-artifact-storage-for-scaled-tasks.md`
 - S4 (artifact metadata for Phase 2): `gsd-browser/docs/api/MCP_TOOLS.md` (`get_screenshots`) + `gsd-browser/src/gsd_browser/contracts/v1.py`
 - S5 (task semantics): `gsd-browser/docs/api/MCP_TASKS.md`
+- Canonical implementation spec (no open questions): `gsd-browser/docs/api/FAST_MCP_V2_CANONICAL_SPEC.md`
 
 
 ## Implementation phases (once S0–S5 are complete)

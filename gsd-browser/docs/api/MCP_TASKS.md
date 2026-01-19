@@ -6,6 +6,8 @@ This document describes how `gsd` uses MCP long-running tasks (SEP-1686) for bro
 This document describes the **target** task semantics for the FastMCP v2 migration on
 `feat/fastmcp-v2-tasks`. See `gsd-browser/docs/api/STATUS.md` for what is implemented today.
 
+Canonical spec: `gsd-browser/docs/api/FAST_MCP_V2_CANONICAL_SPEC.md`.
+
 ## Scope
 Tools that are long-running are configured as `taskSupport="required"` and must be invoked in task
 mode. The task result payload returned by `tasks/result` is the same JSON schema described in
@@ -25,6 +27,8 @@ Progress updates are sent via MCP progress notifications.
   are bounded by server-configured min/max; out-of-range TTL is rejected.
 - MCP protocol fields use **milliseconds** (`task.ttl`, `Task.pollInterval`); server config/env uses
   **seconds** and is converted.
+
+This section is fully specified in `gsd-browser/docs/api/FAST_MCP_V2_CANONICAL_SPEC.md` (§3.3–§3.4).
 
 ### Concrete defaults (planned)
 Defaults (server-chosen):
@@ -51,6 +55,8 @@ Config knobs (names are part of the contract):
 - Progress is “best effort”:
   - if `max_steps` is known, progress should be step-based (completed steps out of `max_steps`)
   - otherwise, progress messages are informational with no stable percent semantics
+
+This section is fully specified in `gsd-browser/docs/api/FAST_MCP_V2_CANONICAL_SPEC.md` (§6).
 
 ## Session vs identity
 - Session IDs exist at the transport layer and may be used as an additional guard.
