@@ -260,6 +260,13 @@ class RunEventStore:
             details=details or None,
             has_error=bool(has_error),
         )
+        if step is not None:
+            try:
+                from .optionb.progress import schedule_agent_step
+
+                schedule_agent_step(step=int(step), note=summary)
+            except Exception:  # noqa: BLE001
+                pass
 
     def record_console_event(
         self,

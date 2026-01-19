@@ -6,25 +6,62 @@ semantics. Task support, Redis/Docket, and multi-tenant auth are implemented in 
 
 from __future__ import annotations
 
+import asyncio
+import json
 import logging
 from collections.abc import Awaitable, Callable
 from typing import TYPE_CHECKING, TypeVar
 
 from fastmcp import Context
+from fastmcp.dependencies import Depends, Progress
+from fastmcp.server.tasks import TaskConfig
 from mcp.types import ImageContent, TextContent
 
 from . import mcp_server as sdk_server
 from .config import Settings
 from .optionb.fastmcp_server import GsdFastMCP
+from .optionb.progress import (
+    drain_pending_agent_steps,
+    emit_last_agent_step_snapshot,
+    task_progress_scope,
+)
+from .optionb.progress import (
+    emit as emit_task_progress,
+)
 
 logger = logging.getLogger("gsd_browser.fastmcp_v2")
 
 mcp = GsdFastMCP("gsd")
 
+_PROGRESS_DEPENDENCY = Depends(Progress)
+_TASK_PROGRESS_INIT_DELAY_S = 0.10
+_TASK_PROGRESS_STEP_DRAIN_S = 0.10
+_TASK_PROGRESS_DRAIN_TERMINAL_S = 0.20
+
 T = TypeVar("T")
 
 if TYPE_CHECKING:
     from .optionb.identity import Identity
+
+
+def _terminal_phase_from_result(result: list[TextContent]) -> tuple[str, str]:
+    status: str | None = None
+    if result:
+        first = result[0]
+        try:
+            payload = json.loads(getattr(first, "text", "") or "")
+        except Exception:  # noqa: BLE001
+            payload = None
+        if isinstance(payload, dict):
+            raw = payload.get("status")
+            if isinstance(raw, str):
+                status = raw
+
+    if status == "failed":
+        return "failed", "status=failed"
+    if status in {"success", "partial"}:
+        return "done", f"status={status}"
+    return "done", f"status={status or 'unknown'}"
 
 
 def _resolve_identity_for_current_call() -> Identity:
@@ -82,76 +119,136 @@ def apply_configured_tool_policy(*, settings: Settings) -> None:
     apply_tool_exposure_policy(mcp=mcp, policy=policy)
 
 
-@mcp.tool(name="web_eval_agent")
+@mcp.tool(name="web_eval_agent", task=TaskConfig(mode="required"))
 async def web_eval_agent(
     url: str,
     task: str,
-    ctx: Context,
+    ctx: Context | None = None,
     headless_browser: bool = False,
     mode: str | None = None,
     budget_s: float | None = None,
     max_steps: int | None = None,
     step_timeout_s: float | None = None,
+    progress: Progress = _PROGRESS_DEPENDENCY,
 ) -> list[TextContent]:
-    return await _call_with_identity(
-        sdk_server.web_eval_agent,
-        url=url,
-        task=task,
-        ctx=ctx,  # type: ignore[arg-type]
-        headless_browser=headless_browser,
-        mode=mode,
-        budget_s=budget_s,
-        max_steps=max_steps,
-        step_timeout_s=step_timeout_s,
-    )
+    max_steps_value = int(max_steps) if max_steps is not None and int(max_steps) > 0 else None
+    with task_progress_scope(progress=progress, max_steps=max_steps_value):
+        await asyncio.sleep(_TASK_PROGRESS_INIT_DELAY_S)
+        await emit_task_progress(phase="init", step=None, note="starting")
+        try:
+            result = await _call_with_identity(
+                sdk_server.web_eval_agent,
+                url=url,
+                task=task,
+                ctx=ctx,  # type: ignore[arg-type]
+                headless_browser=headless_browser,
+                mode=mode,
+                budget_s=budget_s,
+                max_steps=max_steps,
+                step_timeout_s=step_timeout_s,
+            )
+            await asyncio.sleep(0)
+        except Exception as exc:  # noqa: BLE001
+            await drain_pending_agent_steps(timeout_s=_TASK_PROGRESS_DRAIN_TERMINAL_S)
+            await emit_task_progress(phase="failed", step=None, note=str(exc))
+            await asyncio.sleep(_TASK_PROGRESS_DRAIN_TERMINAL_S)
+            raise
+
+        await drain_pending_agent_steps(timeout_s=_TASK_PROGRESS_DRAIN_TERMINAL_S)
+        await emit_last_agent_step_snapshot()
+        await asyncio.sleep(_TASK_PROGRESS_STEP_DRAIN_S)
+        phase, note = _terminal_phase_from_result(result)
+        await emit_task_progress(phase=phase, step=None, note=note)
+        await asyncio.sleep(_TASK_PROGRESS_DRAIN_TERMINAL_S)
+        return result
 
 
-@mcp.tool(name="web_task_agent")
+@mcp.tool(name="web_task_agent", task=TaskConfig(mode="required"))
 async def web_task_agent(
     url: str,
     task: str,
-    ctx: Context,
+    ctx: Context | None = None,
     headless_browser: bool = False,
     mode: str | None = None,
     budget_s: float | None = None,
     max_steps: int | None = None,
     step_timeout_s: float | None = None,
+    progress: Progress = _PROGRESS_DEPENDENCY,
 ) -> list[TextContent]:
-    return await _call_with_identity(
-        sdk_server.web_task_agent,
-        url=url,
-        task=task,
-        ctx=ctx,  # type: ignore[arg-type]
-        headless_browser=headless_browser,
-        mode=mode,
-        budget_s=budget_s,
-        max_steps=max_steps,
-        step_timeout_s=step_timeout_s,
-    )
+    max_steps_value = int(max_steps) if max_steps is not None and int(max_steps) > 0 else None
+    with task_progress_scope(progress=progress, max_steps=max_steps_value):
+        await asyncio.sleep(_TASK_PROGRESS_INIT_DELAY_S)
+        await emit_task_progress(phase="init", step=None, note="starting")
+        try:
+            result = await _call_with_identity(
+                sdk_server.web_task_agent,
+                url=url,
+                task=task,
+                ctx=ctx,  # type: ignore[arg-type]
+                headless_browser=headless_browser,
+                mode=mode,
+                budget_s=budget_s,
+                max_steps=max_steps,
+                step_timeout_s=step_timeout_s,
+            )
+            await asyncio.sleep(0)
+        except Exception as exc:  # noqa: BLE001
+            await drain_pending_agent_steps(timeout_s=_TASK_PROGRESS_DRAIN_TERMINAL_S)
+            await emit_task_progress(phase="failed", step=None, note=str(exc))
+            await asyncio.sleep(_TASK_PROGRESS_DRAIN_TERMINAL_S)
+            raise
+
+        await drain_pending_agent_steps(timeout_s=_TASK_PROGRESS_DRAIN_TERMINAL_S)
+        await emit_last_agent_step_snapshot()
+        await asyncio.sleep(_TASK_PROGRESS_STEP_DRAIN_S)
+        phase, note = _terminal_phase_from_result(result)
+        await emit_task_progress(phase=phase, step=None, note=note)
+        await asyncio.sleep(_TASK_PROGRESS_DRAIN_TERMINAL_S)
+        return result
 
 
-@mcp.tool(name="web_task_agent_github")
+@mcp.tool(name="web_task_agent_github", task=TaskConfig(mode="required"))
 async def web_task_agent_github(
     url: str,
     task: str,
-    ctx: Context,
+    ctx: Context | None = None,
     headless_browser: bool = False,
     mode: str | None = None,
     budget_s: float | None = None,
     max_steps: int | None = None,
     step_timeout_s: float | None = None,
+    progress: Progress = _PROGRESS_DEPENDENCY,
 ) -> list[TextContent]:
-    return await _call_with_identity(
-        sdk_server.web_task_agent_github,
-        url=url,
-        task=task,
-        ctx=ctx,  # type: ignore[arg-type]
-        headless_browser=headless_browser,
-        mode=mode,
-        budget_s=budget_s,
-        max_steps=max_steps,
-        step_timeout_s=step_timeout_s,
-    )
+    max_steps_value = int(max_steps) if max_steps is not None and int(max_steps) > 0 else None
+    with task_progress_scope(progress=progress, max_steps=max_steps_value):
+        await asyncio.sleep(_TASK_PROGRESS_INIT_DELAY_S)
+        await emit_task_progress(phase="init", step=None, note="starting")
+        try:
+            result = await _call_with_identity(
+                sdk_server.web_task_agent_github,
+                url=url,
+                task=task,
+                ctx=ctx,  # type: ignore[arg-type]
+                headless_browser=headless_browser,
+                mode=mode,
+                budget_s=budget_s,
+                max_steps=max_steps,
+                step_timeout_s=step_timeout_s,
+            )
+            await asyncio.sleep(0)
+        except Exception as exc:  # noqa: BLE001
+            await drain_pending_agent_steps(timeout_s=_TASK_PROGRESS_DRAIN_TERMINAL_S)
+            await emit_task_progress(phase="failed", step=None, note=str(exc))
+            await asyncio.sleep(_TASK_PROGRESS_DRAIN_TERMINAL_S)
+            raise
+
+        await drain_pending_agent_steps(timeout_s=_TASK_PROGRESS_DRAIN_TERMINAL_S)
+        await emit_last_agent_step_snapshot()
+        await asyncio.sleep(_TASK_PROGRESS_STEP_DRAIN_S)
+        phase, note = _terminal_phase_from_result(result)
+        await emit_task_progress(phase=phase, step=None, note=note)
+        await asyncio.sleep(_TASK_PROGRESS_DRAIN_TERMINAL_S)
+        return result
 
 
 @mcp.tool(name="get_run_events")

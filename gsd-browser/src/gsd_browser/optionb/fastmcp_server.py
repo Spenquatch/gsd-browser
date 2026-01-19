@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import os
 from typing import Any
 
 import fastmcp
@@ -16,6 +17,17 @@ from .identity import Identity
 from .request_context import identity_scope
 
 logger = logging.getLogger("gsd_browser.optionb.fastmcp_server")
+
+
+def _task_poll_interval_ms() -> int:
+    raw = str(os.environ.get("GSD_TASK_POLL_INTERVAL_MS", "")).strip()
+    if not raw:
+        return 2000
+    try:
+        value = int(raw)
+    except ValueError:
+        return 2000
+    return value if value > 0 else 2000
 
 
 def _require_task_id(params: object | None) -> str:
@@ -131,7 +143,8 @@ class GsdFastMCP(FastMCP[Any]):
                 await self._require_task_owner(task_id)
                 params = req.params.model_dump(by_alias=True, exclude_none=True)
                 result = await tasks_get_handler(self, params)
-                return ServerResult(result)
+                updated = result.model_copy(update={"pollInterval": _task_poll_interval_ms()})
+                return ServerResult(updated)
 
         async def handle_get_task_result(req: GetTaskPayloadRequest) -> ServerResult:
             with identity_scope(self._resolve_identity_for_current_request()):
@@ -142,9 +155,7 @@ class GsdFastMCP(FastMCP[Any]):
                 return ServerResult(result)
 
         async def handle_list_tasks(req: ListTasksRequest) -> ServerResult:
-            params = (
-                req.params.model_dump(by_alias=True, exclude_none=True) if req.params else {}
-            )
+            params = req.params.model_dump(by_alias=True, exclude_none=True) if req.params else {}
             result = await tasks_list_handler(self, params)
             return ServerResult(result)
 
@@ -154,7 +165,8 @@ class GsdFastMCP(FastMCP[Any]):
                 await self._require_task_owner(task_id)
                 params = req.params.model_dump(by_alias=True, exclude_none=True)
                 result = await tasks_cancel_handler(self, params)
-                return ServerResult(result)
+                updated = result.model_copy(update={"pollInterval": _task_poll_interval_ms()})
+                return ServerResult(updated)
 
         self._mcp_server.request_handlers[GetTaskRequest] = handle_get_task
         self._mcp_server.request_handlers[GetTaskPayloadRequest] = handle_get_task_result
@@ -212,9 +224,8 @@ class GsdFastMCP(FastMCP[Any]):
                                     self, key, arguments, task_meta_dict
                                 )
 
-                                task_payload = (result.meta or {}).get(
-                                    "modelcontextprotocol.io/task"
-                                ) or {}
+                                meta = dict(result.meta or {})
+                                task_payload = dict(meta.get("modelcontextprotocol.io/task") or {})
                                 task_id = task_payload.get("taskId")
                                 if isinstance(task_id, str) and task_id.strip():
                                     await self._write_task_owner_or_fail(
@@ -223,6 +234,9 @@ class GsdFastMCP(FastMCP[Any]):
                                         ttl_ms=ttl_ms,
                                         session_id=session_id,
                                     )
+                                    task_payload["pollInterval"] = _task_poll_interval_ms()
+                                    meta["modelcontextprotocol.io/task"] = task_payload
+                                    result.meta = meta
 
                                 return result
 
@@ -251,3 +265,4 @@ class GsdFastMCP(FastMCP[Any]):
                     raise NotFoundError(f"Unknown tool: {key}") from exc
                 except NotFoundError as exc:
                     raise NotFoundError(f"Unknown tool: {key}") from exc
+
