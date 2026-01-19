@@ -1,4 +1,4 @@
-.PHONY: help dev lint test smoke diagnose sanity-real prompt-compare docker-build docker-run
+.PHONY: help dev bootstrap check lint test smoke diagnose sanity-real prompt-compare docker-build docker-run
 
 UV ?= uv
 SANITY_REAL_CONFIRM ?=
@@ -9,6 +9,8 @@ help:
 	@echo ""
 	@echo "gsd (Python) targets:"
 	@echo "  make dev           Create .venv and install deps"
+	@echo "  make bootstrap     Deterministic Option B bootstrap (uv sync --frozen --extra dev)"
+	@echo "  make check         Bootstrap + lint + test"
 	@echo "  make lint          Run Ruff lint (requires dev)"
 	@echo "  make test          Run Pytest (requires dev)"
 	@echo "  make smoke         Run smoke test script"
@@ -26,6 +28,11 @@ dev:
 		python3 -m venv .venv; \
 		. .venv/bin/activate && python -m ensurepip --upgrade && pip install --upgrade pip && pip install -e ".[dev]"; \
 	fi
+
+bootstrap:
+	./scripts/optionb_bootstrap.sh
+
+check: bootstrap lint test
 
 lint:
 	@if [ -x .venv/bin/ruff ]; then \

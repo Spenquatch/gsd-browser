@@ -18,6 +18,26 @@
         "name": { "type": "string" },
         "branch": { "type": "string" },
         "goal": { "type": "string" },
+        "prerequisites": {
+          "type": "array",
+          "minItems": 0,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id", "description", "required", "check_commands"],
+            "properties": {
+              "id": { "type": "string" },
+              "description": { "type": "string" },
+              "required": { "type": "boolean" },
+              "check_commands": {
+                "type": "array",
+                "minItems": 1,
+                "items": { "type": "string" }
+              },
+              "notes": { "type": "string" }
+            }
+          }
+        },
         "single_source_of_truth": {
           "type": "array",
           "minItems": 1,

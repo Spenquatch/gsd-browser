@@ -4,6 +4,29 @@
     "name": "gsd-browser",
     "branch": "feat/fastmcp-v2-tasks",
     "goal": "Migrate gsd MCP server to FastMCP v2 Option B with SEP-1686 tasks, Docket/Redis task queue, distributed artifacts (S3-compatible + Redis index), and tenant/subject authorization boundaries.",
+    "prerequisites": [
+      {
+        "id": "P1",
+        "description": "Toolchain prerequisites for local execution (required for all phases).",
+        "required": true,
+        "check_commands": [
+          "cd gsd-browser && uv --version",
+          "cd gsd-browser && python3 --version",
+          "cd gsd-browser && make bootstrap"
+        ],
+        "notes": "The `make bootstrap` target performs a deterministic dependency sync using `uv sync --frozen --extra dev` and ensures `.venv` exists."
+      },
+      {
+        "id": "P2",
+        "description": "Docker prerequisites for integration harness tasks (required for I0.2 and later integration tests).",
+        "required": false,
+        "check_commands": [
+          "docker --version",
+          "docker compose version"
+        ],
+        "notes": "If Docker is not available, skip integration harness tasks locally; CI must run them."
+      }
+    ],
     "single_source_of_truth": [
       {
         "path": "gsd-browser/docs/api/FAST_MCP_V2_CANONICAL_SPEC.md",
@@ -25,8 +48,8 @@
     "drift_gate": {
       "description": "Contract schemas are generated from Pydantic and must match committed JSON Schemas.",
       "source_model": "gsd-browser/src/gsd_browser/contracts/v1.py",
-      "export_command": "cd gsd-browser && uv sync --frozen --extra dev && PYTHONPATH=./src uv run python tools/export_contract_schemas.py",
-      "enforcement_test": "cd gsd-browser && uv sync --frozen --extra dev && PYTHONPATH=./src uv run python -m pytest -q tests/test_exported_jsonschema_in_sync.py"
+      "export_command": "cd gsd-browser && make bootstrap && PYTHONPATH=./src ./.venv/bin/python tools/export_contract_schemas.py",
+      "enforcement_test": "cd gsd-browser && make bootstrap && PYTHONPATH=./src ./.venv/bin/python -m pytest -q tests/test_exported_jsonschema_in_sync.py"
     }
   },
   "deepwiki": {
@@ -46,6 +69,7 @@
   "global_rules": {
     "no_spec_drift": "Implementation MUST follow `gsd-browser/docs/api/FAST_MCP_V2_CANONICAL_SPEC.md`. If changes are required, update canonical spec + MCP_TOOLS + contracts + exported JSON schemas in the same PR/commit series.",
     "validation_before_done": [
+      "make -C gsd-browser check",
       "make -C gsd-browser lint",
       "make -C gsd-browser test"
     ],
@@ -59,11 +83,51 @@
       "goal": "Ensure schema generation and tests are deterministic across environments.",
       "tasks": [
         {
+          "id": "I0.0",
+          "title": "Environment bootstrap (Option B) and friction-free validation harness",
+          "status": "todo",
+          "risk": "high",
+          "deliverables": [
+            "gsd-browser/scripts/optionb_bootstrap.sh",
+            "gsd-browser/Makefile (bootstrap + check targets)"
+          ],
+          "depends_on": [],
+          "references": [
+            {
+              "path": "docs/planning/FAST_MCP_V2_EXECUTION_TASKS.json",
+              "purpose": "This file; prerequisites and drift-gate rely on `make bootstrap`."
+            },
+            {
+              "path": "gsd-browser/Makefile",
+              "purpose": "Defines `make bootstrap` and `make check`."
+            }
+          ],
+          "kickoff_prompt": "You are executing task I0.0.\n\nObjective: ensure a fresh environment can begin execution with minimal friction.\n\nRequired harness:\n- `cd gsd-browser && make bootstrap` (creates `.venv` with Python 3.11 via uv and installs dev deps deterministically)\n- `cd gsd-browser && make check` (bootstrap + lint + test)\n\nValidation:\n- `cd gsd-browser && make bootstrap`\n- `cd gsd-browser && make check`\n\nIf Docker is available, confirm `docker compose version` works (needed for later integration harness tasks).",
+          "acceptance_criteria": [
+            {
+              "id": "I0.0.A",
+              "statement": "`make -C gsd-browser bootstrap` succeeds on a clean checkout and creates/updates `.venv` deterministically.",
+              "validation": {
+                "commands": ["make -C gsd-browser bootstrap"],
+                "expect_exit_code": 0
+              }
+            },
+            {
+              "id": "I0.0.B",
+              "statement": "`make -C gsd-browser check` runs bootstrap + lint + tests successfully (single command for execution agents).",
+              "validation": {
+                "commands": ["make -C gsd-browser check"],
+                "expect_exit_code": 0
+              }
+            }
+          ]
+        },
+        {
           "id": "I0.1",
           "title": "Pin schema generation environment",
           "status": "todo",
           "risk": "medium",
-          "depends_on": [],
+          "depends_on": ["I0.0"],
           "references": [
             {
               "path": "gsd-browser/pyproject.toml",
