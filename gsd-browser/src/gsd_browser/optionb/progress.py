@@ -142,3 +142,21 @@ async def drain_pending_agent_steps(*, timeout_s: float = 0.2) -> None:
         await asyncio.wait(pending, timeout=float(timeout_s))
     except Exception:  # noqa: BLE001
         return
+
+
+async def cancel_pending_agent_steps(*, timeout_s: float = 0.2) -> None:
+    state = _state.get()
+    if state is None:
+        return
+
+    pending = [task for task in tuple(state.pending_tasks) if not task.done()]
+    if not pending:
+        return
+
+    for task in pending:
+        task.cancel()
+
+    try:
+        await asyncio.wait(pending, timeout=float(timeout_s))
+    except Exception:  # noqa: BLE001
+        return

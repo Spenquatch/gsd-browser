@@ -19,8 +19,10 @@ from mcp.types import ImageContent, TextContent
 
 from . import mcp_server as sdk_server
 from .config import Settings
+from .optionb.cancellation import propagate_cancelled_error
 from .optionb.fastmcp_server import GsdFastMCP
 from .optionb.progress import (
+    cancel_pending_agent_steps,
     drain_pending_agent_steps,
     emit_last_agent_step_snapshot,
     task_progress_scope,
@@ -132,7 +134,10 @@ async def web_eval_agent(
     progress: Progress = _PROGRESS_DEPENDENCY,
 ) -> list[TextContent]:
     max_steps_value = int(max_steps) if max_steps is not None and int(max_steps) > 0 else None
-    with task_progress_scope(progress=progress, max_steps=max_steps_value):
+    with (
+        task_progress_scope(progress=progress, max_steps=max_steps_value),
+        propagate_cancelled_error(),
+    ):
         await asyncio.sleep(_TASK_PROGRESS_INIT_DELAY_S)
         await emit_task_progress(phase="init", step=None, note="starting")
         try:
@@ -148,6 +153,13 @@ async def web_eval_agent(
                 step_timeout_s=step_timeout_s,
             )
             await asyncio.sleep(0)
+        except asyncio.CancelledError:
+            current = asyncio.current_task()
+            if current is not None:
+                current.uncancel()
+            await cancel_pending_agent_steps(timeout_s=_TASK_PROGRESS_DRAIN_TERMINAL_S)
+            await emit_task_progress(phase="cancelled", step=None, note="cancelled")
+            raise
         except Exception as exc:  # noqa: BLE001
             await drain_pending_agent_steps(timeout_s=_TASK_PROGRESS_DRAIN_TERMINAL_S)
             await emit_task_progress(phase="failed", step=None, note=str(exc))
@@ -176,7 +188,10 @@ async def web_task_agent(
     progress: Progress = _PROGRESS_DEPENDENCY,
 ) -> list[TextContent]:
     max_steps_value = int(max_steps) if max_steps is not None and int(max_steps) > 0 else None
-    with task_progress_scope(progress=progress, max_steps=max_steps_value):
+    with (
+        task_progress_scope(progress=progress, max_steps=max_steps_value),
+        propagate_cancelled_error(),
+    ):
         await asyncio.sleep(_TASK_PROGRESS_INIT_DELAY_S)
         await emit_task_progress(phase="init", step=None, note="starting")
         try:
@@ -192,6 +207,13 @@ async def web_task_agent(
                 step_timeout_s=step_timeout_s,
             )
             await asyncio.sleep(0)
+        except asyncio.CancelledError:
+            current = asyncio.current_task()
+            if current is not None:
+                current.uncancel()
+            await cancel_pending_agent_steps(timeout_s=_TASK_PROGRESS_DRAIN_TERMINAL_S)
+            await emit_task_progress(phase="cancelled", step=None, note="cancelled")
+            raise
         except Exception as exc:  # noqa: BLE001
             await drain_pending_agent_steps(timeout_s=_TASK_PROGRESS_DRAIN_TERMINAL_S)
             await emit_task_progress(phase="failed", step=None, note=str(exc))
@@ -220,7 +242,10 @@ async def web_task_agent_github(
     progress: Progress = _PROGRESS_DEPENDENCY,
 ) -> list[TextContent]:
     max_steps_value = int(max_steps) if max_steps is not None and int(max_steps) > 0 else None
-    with task_progress_scope(progress=progress, max_steps=max_steps_value):
+    with (
+        task_progress_scope(progress=progress, max_steps=max_steps_value),
+        propagate_cancelled_error(),
+    ):
         await asyncio.sleep(_TASK_PROGRESS_INIT_DELAY_S)
         await emit_task_progress(phase="init", step=None, note="starting")
         try:
@@ -236,6 +261,13 @@ async def web_task_agent_github(
                 step_timeout_s=step_timeout_s,
             )
             await asyncio.sleep(0)
+        except asyncio.CancelledError:
+            current = asyncio.current_task()
+            if current is not None:
+                current.uncancel()
+            await cancel_pending_agent_steps(timeout_s=_TASK_PROGRESS_DRAIN_TERMINAL_S)
+            await emit_task_progress(phase="cancelled", step=None, note="cancelled")
+            raise
         except Exception as exc:  # noqa: BLE001
             await drain_pending_agent_steps(timeout_s=_TASK_PROGRESS_DRAIN_TERMINAL_S)
             await emit_task_progress(phase="failed", step=None, note=str(exc))

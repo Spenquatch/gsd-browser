@@ -1745,6 +1745,11 @@ async def web_eval_agent(
             },
         )
 
+        from .optionb.cancellation import should_propagate_cancelled_error
+
+        if should_propagate_cancelled_error():
+            raise
+
         payload = {
             "version": "gsd.web_eval_agent.v1",
             "session_id": session_id,
