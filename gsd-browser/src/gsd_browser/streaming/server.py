@@ -64,7 +64,7 @@ class StreamingRuntime:
             "metadata": dict(metadata or {}),
         }
         await self.sio.emit("browser_update", payload, namespace=DEFAULT_STREAM_NAMESPACE)
-        self.screenshots.record_screenshot(
+        shot = self.screenshots.record_screenshot(
             screenshot_type="stream_sample",
             image_bytes=image_bytes,
             mime_type=mime_type,
@@ -72,6 +72,13 @@ class StreamingRuntime:
             captured_at=ts,
             metadata={"streaming_mode": "screenshot", **dict(metadata or {})},
         )
+        try:
+            from ..optionb.screenshot_artifacts import persist_screenshot
+
+            if shot is not None:
+                await persist_screenshot(shot)
+        except Exception:  # noqa: BLE001
+            pass
 
 
 class ControlState:

@@ -965,7 +965,7 @@ async def web_eval_agent(
             record = getattr(screenshots_manager, "record_screenshot", None)
             if not callable(record):
                 return
-            record(
+            shot = record(
                 screenshot_type="agent_step",
                 image_bytes=image_bytes,
                 source=source,
@@ -981,6 +981,13 @@ async def web_eval_agent(
                 url=page_url,
                 step=step_number,
             )
+            try:
+                from .optionb.screenshot_artifacts import persist_screenshot
+
+                if shot is not None:
+                    await persist_screenshot(shot)
+            except Exception:  # noqa: BLE001
+                pass
             step_screenshot_count += 1
             if step_number is not None:
                 recorded_step_numbers.add(step_number)
@@ -1001,7 +1008,7 @@ async def web_eval_agent(
 
             url = last_page_url or page_url
             title = last_page_title or page_title or ""
-            record(
+            shot = record(
                 screenshot_type="agent_step",
                 source="current_page_fallback",
                 image_bytes=image_bytes,
@@ -1018,6 +1025,13 @@ async def web_eval_agent(
                 url=url,
                 step=step,
             )
+            try:
+                from .optionb.screenshot_artifacts import persist_screenshot
+
+                if shot is not None:
+                    await persist_screenshot(shot)
+            except Exception:  # noqa: BLE001
+                pass
             step_screenshot_count += 1
             recorded_step_numbers.add(step)
 
@@ -2248,66 +2262,208 @@ async def get_screenshots(
     _ = ctx
     runtime = get_runtime()
     last_n = min(max(last_n, 0), 20)
-
-    try:
-        uuid.UUID(str(session_id))
-    except (TypeError, ValueError):
-        payload = {
-            "version": "gsd.get_screenshots.v1",
-            "session_id": None,
-            "filters": {
-                "last_n": last_n,
-                "screenshot_type": str(screenshot_type).strip().lower() or "agent_step",
-                "from_timestamp": from_timestamp,
-                "has_error": has_error,
-                "include_images": include_images,
-            },
-            "screenshots": [],
-            "stats": runtime.screenshots.get_stats(),
-            "error": "session_id is required and must be a UUID string.",
-        }
-        return [TextContent(type="text", text=json.dumps(payload, ensure_ascii=False))]
-
-    screenshots = runtime.screenshots.get_screenshots(
-        last_n=last_n,
-        session_id=session_id,
-        screenshot_type=screenshot_type,
-        from_timestamp=from_timestamp,
-        has_error=has_error,
-        include_images=include_images,
-    )
     stats = runtime.screenshots.get_stats()
 
     normalized_type = str(screenshot_type).strip().lower()
     if normalized_type not in {"agent_step", "stream_sample", "all"}:
         normalized_type = "agent_step"
 
+    def _delivery_mode() -> str:
+        raw = str(os.environ.get("GSD_ARTIFACT_DELIVERY_MODE", "inline")).strip().lower()
+        return raw if raw in {"inline", "presigned", "both"} else "inline"
+
+    def _presign_ttl_s() -> int:
+        raw = str(os.environ.get("GSD_PRESIGNED_URL_TTL_S", "")).strip()
+        if not raw:
+            return 900
+        try:
+            value = int(raw)
+        except ValueError:
+            return 900
+        return value
+
+    delivery_mode = _delivery_mode()
+    include_inline = bool(include_images and delivery_mode in {"inline", "both"})
+    include_presigned = delivery_mode in {"presigned", "both"}
+
+    try:
+        parsed_session_id = uuid.UUID(str(session_id))
+        if parsed_session_id.version != 4:
+            raise ValueError("session_id must be UUIDv4")
+    except (TypeError, ValueError):
+        payload = {
+            "version": "gsd.get_screenshots.v1",
+            "session_id": None,
+            "filters": {
+                "last_n": last_n,
+                "screenshot_type": normalized_type,
+                "from_timestamp": from_timestamp,
+                "has_error": has_error,
+                "include_images": include_images,
+            },
+            "screenshots": [],
+            "stats": stats,
+            "error": "session_id is required and must be a UUID string.",
+        }
+        return [TextContent(type="text", text=json.dumps(payload, ensure_ascii=False))]
+
     header_screenshots: list[dict[str, Any]] = []
-    for shot in screenshots:
-        inline_included = bool(include_images and shot.get("image_data"))
-        header_screenshots.append(
-            {
-                "id": shot.get("id"),
-                "timestamp": shot.get("timestamp"),
-                "type": shot.get("type"),
-                "session_id": shot.get("session_id"),
-                "has_error": shot.get("has_error"),
-                "mime_type": shot.get("mime_type"),
-                "url": shot.get("url"),
-                "step": shot.get("step"),
-                "inline_included": inline_included,
-                "metadata": shot.get("metadata") or {},
-                "artifact": {
-                    # These are “presigned-url-ready” placeholders until the ArtifactStore lands.
-                    "key": shot.get("id"),
-                    "url": None,
-                    "content_type": str(shot.get("mime_type") or "") or None,
-                    "size_bytes": None,
-                    "created_at": shot.get("timestamp"),
-                    "url_expires_at": None,
-                },
-            }
+    inline_images: list[ImageContent] = []
+    error: str | None = None
+    used_distributed = False
+
+    if str(os.environ.get("GSD_S3_ENDPOINT_URL", "")).strip():
+        try:
+            from .optionb.artifact_index import get_artifact_index_store
+            from .optionb.identity import STDIO_IDENTITY
+            from .optionb.request_context import get_current_identity
+            from .optionb.s3_client import get_s3_client
+
+            identity = get_current_identity() or STDIO_IDENTITY
+            store = get_artifact_index_store()
+            docket = store.docket_getter()
+            if docket is not None:
+                used_distributed = True
+                s3 = get_s3_client()
+                zset_key = (
+                    f"gsd:v1:tenants:{identity.tenant_id}:subjects:{identity.subject_id}"
+                    f":sessions:{session_id}:screenshots:z"
+                )
+                candidate_limit = min(max(last_n * 10, 50), 200)
+                min_score: int | None = None
+                if from_timestamp is not None:
+                    min_score = int(float(from_timestamp) * 1000)
+                async with docket.redis() as redis:
+                    if min_score is None:
+                        candidates = await redis.zrevrange(zset_key, 0, candidate_limit - 1)
+                    else:
+                        candidates = await redis.zrevrangebyscore(
+                            zset_key, "+inf", min_score, start=0, num=candidate_limit
+                        )
+
+                ttl_s = _presign_ttl_s()
+                for raw in candidates:
+                    artifact_id = raw.decode("utf-8") if isinstance(raw, bytes) else str(raw)
+                    try:
+                        parsed = uuid.UUID(str(artifact_id))
+                        if parsed.version != 4:
+                            continue
+                    except (TypeError, ValueError):
+                        continue
+
+                    record = await store.get_meta(artifact_id)
+                    if record is None or record.state != "ready":
+                        continue
+                    if record.artifact_kind != "screenshot":
+                        continue
+                    if normalized_type != "all" and record.screenshot_type != normalized_type:
+                        continue
+                    if has_error is not None and bool(record.has_error) != bool(has_error):
+                        continue
+
+                    inline_included = False
+                    image_base64: str | None = None
+                    if include_inline:
+                        try:
+                            image_bytes = s3.get_bytes(key=record.s3_key)
+                        except Exception:  # noqa: BLE001
+                            image_bytes = b""
+                        if image_bytes:
+                            inline_included = True
+                            image_base64 = base64.b64encode(image_bytes).decode("ascii")
+
+                    artifact_url: str | None = None
+                    artifact_url_expires_at: float | None = None
+                    if include_presigned:
+                        try:
+                            artifact_url, artifact_url_expires_at = s3.presign_get(
+                                key=record.s3_key, ttl_s=ttl_s
+                            )
+                        except Exception as exc:  # noqa: BLE001
+                            logger.warning(
+                                "audit.presign_failed",
+                                extra={"artifact_id": artifact_id, "session_id": session_id},
+                            )
+                            artifact_url = None
+                            artifact_url_expires_at = None
+                            error = _truncate(
+                                f"One or more artifacts could not be presigned: {exc}",
+                                max_len=2000,
+                            )
+
+                    header_screenshots.append(
+                        {
+                            "id": record.artifact_id,
+                            "timestamp": float(record.created_at_ms) / 1000.0,
+                            "type": record.screenshot_type,
+                            "session_id": record.session_id,
+                            "has_error": record.has_error,
+                            "mime_type": record.content_type,
+                            "url": record.page_url,
+                            "step": record.step,
+                            "inline_included": bool(inline_included),
+                            "metadata": {},
+                            "artifact": {
+                                "key": record.artifact_id,
+                                "url": artifact_url,
+                                "content_type": record.content_type,
+                                "size_bytes": record.size_bytes,
+                                "created_at": float(record.created_at_ms) / 1000.0,
+                                "url_expires_at": artifact_url_expires_at,
+                            },
+                        }
+                    )
+                    if inline_included and image_base64 is not None:
+                        inline_images.append(
+                            ImageContent(
+                                type="image",
+                                data=image_base64,
+                                mimeType=str(record.content_type or "image/png"),
+                            )
+                        )
+
+                    if len(header_screenshots) >= last_n:
+                        break
+        except Exception:  # noqa: BLE001
+            header_screenshots = []
+            inline_images = []
+            error = None
+            used_distributed = False
+
+    legacy_screenshots: list[dict[str, Any]] = []
+    if not used_distributed:
+        legacy_screenshots = runtime.screenshots.get_screenshots(
+            last_n=last_n,
+            session_id=session_id,
+            screenshot_type=screenshot_type,
+            from_timestamp=from_timestamp,
+            has_error=has_error,
+            include_images=include_images,
         )
+        for shot in legacy_screenshots:
+            inline_included = bool(include_images and shot.get("image_data"))
+            header_screenshots.append(
+                {
+                    "id": shot.get("id"),
+                    "timestamp": shot.get("timestamp"),
+                    "type": shot.get("type"),
+                    "session_id": shot.get("session_id"),
+                    "has_error": shot.get("has_error"),
+                    "mime_type": shot.get("mime_type"),
+                    "url": shot.get("url"),
+                    "step": shot.get("step"),
+                    "inline_included": inline_included,
+                    "metadata": shot.get("metadata") or {},
+                    "artifact": {
+                        "key": shot.get("id"),
+                        "url": None,
+                        "content_type": str(shot.get("mime_type") or "") or None,
+                        "size_bytes": None,
+                        "created_at": shot.get("timestamp"),
+                        "url_expires_at": None,
+                    },
+                }
+            )
 
     payload = {
         "version": "gsd.get_screenshots.v1",
@@ -2321,15 +2477,17 @@ async def get_screenshots(
         },
         "screenshots": header_screenshots,
         "stats": stats,
-        "error": None,
+        "error": error,
     }
 
     response: list[TextContent | ImageContent] = [
         TextContent(type="text", text=json.dumps(payload, ensure_ascii=False))
     ]
 
-    if include_images:
-        for shot in screenshots:
+    if inline_images:
+        response.extend(inline_images)
+    elif include_images and legacy_screenshots:
+        for shot in legacy_screenshots:
             image_data = shot.get("image_data")
             if not image_data:
                 continue

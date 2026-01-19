@@ -142,6 +142,13 @@ class S3Client:
     def head(self, *, key: str) -> dict[str, object]:
         return dict(self._client.head_object(Bucket=self._config.bucket, Key=key))
 
+    def get_bytes(self, *, key: str) -> bytes:
+        response = self._client.get_object(Bucket=self._config.bucket, Key=key)
+        body = response.get("Body")
+        if body is None:
+            return b""
+        return body.read()
+
     def delete(self, *, key: str) -> None:
         import botocore.exceptions
 

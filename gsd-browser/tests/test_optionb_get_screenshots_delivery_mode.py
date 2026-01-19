@@ -1,0 +1,238 @@
+from __future__ import annotations
+
+import asyncio
+import json
+import time
+import uuid
+from dataclasses import dataclass
+
+import fastmcp
+import pytest
+from fastmcp import Client
+from mcp.types import ImageContent, TextContent
+
+from gsd_browser import mcp_server as sdk_server
+from gsd_browser.optionb.fastmcp_server import GsdFastMCP
+from gsd_browser.optionb.identity import Identity
+from gsd_browser.optionb.screenshot_artifacts import persist_screenshot
+
+
+def _configure_memory_docket(monkeypatch: pytest.MonkeyPatch, *, label: str) -> None:
+    monkeypatch.setattr(fastmcp.settings.docket, "url", f"memory://{label}")
+    monkeypatch.setattr(fastmcp.settings.docket, "name", f"gsd-{label}")
+
+
+@dataclass(frozen=True, slots=True)
+class _FakeS3:
+    bucket: str
+    _objects: dict[str, bytes]
+
+    def put_bytes(self, *, key: str, body: bytes, content_type: str) -> None:  # noqa: ARG002
+        self._objects[str(key)] = bytes(body)
+
+    def get_bytes(self, *, key: str) -> bytes:
+        return bytes(self._objects.get(str(key), b""))
+
+    def presign_get(self, *, key: str, ttl_s: int) -> tuple[str, float]:
+        return f"https://example.test/{key}", float(time.time() + int(ttl_s))
+
+
+@pytest.mark.parametrize(
+    ("delivery_mode", "include_images", "expect_inline", "expect_presigned"),
+    [
+        ("inline", True, True, False),
+        ("inline", False, False, False),
+        ("presigned", True, False, True),
+        ("presigned", False, False, True),
+        ("both", True, True, True),
+        ("both", False, False, True),
+    ],
+)
+def test_get_screenshots_delivery_mode_matrix(
+    monkeypatch: pytest.MonkeyPatch,
+    delivery_mode: str,
+    include_images: bool,
+    expect_inline: bool,
+    expect_presigned: bool,
+) -> None:
+    _configure_memory_docket(monkeypatch, label="screenshots-delivery-mode")
+    monkeypatch.setenv("GSD_S3_ENDPOINT_URL", "http://example.invalid")
+    monkeypatch.setenv("GSD_ARTIFACT_DELIVERY_MODE", delivery_mode)
+    monkeypatch.setenv("GSD_PRESIGNED_URL_TTL_S", "900")
+
+    from gsd_browser.optionb import s3_client as s3_client_mod
+
+    fake_s3 = _FakeS3(bucket="bucket", _objects={})
+    monkeypatch.setattr(s3_client_mod, "get_s3_client", lambda: fake_s3)
+
+    session_id = str(uuid.uuid4())
+    server = GsdFastMCP("screenshots-test", tasks=True)
+    server._resolve_identity_for_current_request = lambda: Identity(  # type: ignore[method-assign]
+        tenant_id="t1",
+        subject_id="s1",
+        transport="stdio",
+    )
+
+    @server.tool(name="make_screenshot")
+    async def make_screenshot() -> str:
+        runtime = sdk_server.get_runtime()
+        shot = runtime.screenshots.record_screenshot(
+            screenshot_type="agent_step",
+            source="test",
+            image_bytes=b"hello",
+            mime_type="image/png",
+            session_id=session_id,
+            captured_at=time.time(),
+            has_error=False,
+            metadata={"source": "test"},
+            url="https://example.test",
+            step=1,
+        )
+        await persist_screenshot(shot)
+        return shot.id
+
+    @server.tool(name="get_screenshots")
+    async def get_screenshots_tool(
+        last_n: int = 5,
+        screenshot_type: str = "agent_step",
+        session_id: str = "",
+        from_timestamp: float | None = None,
+        has_error: bool | None = None,
+        include_images: bool = True,
+        ctx: object | None = None,
+    ):
+        return await sdk_server.get_screenshots(
+            last_n=last_n,
+            screenshot_type=screenshot_type,
+            session_id=session_id,
+            from_timestamp=from_timestamp,
+            has_error=has_error,
+            include_images=include_images,
+            ctx=ctx,  # type: ignore[arg-type]
+        )
+
+    async def run() -> None:
+        async with Client(server) as client:
+            _ = await client.call_tool("make_screenshot", {})
+            result = await client.call_tool_mcp(
+                name="get_screenshots",
+                arguments={
+                    "session_id": session_id,
+                    "last_n": 5,
+                    "screenshot_type": "agent_step",
+                    "include_images": include_images,
+                },
+            )
+            assert result.isError is False
+            assert result.content
+
+            header = result.content[0]
+            assert isinstance(header, TextContent)
+            payload = json.loads(header.text)
+
+            assert payload["session_id"] == session_id
+            assert payload["error"] is None
+            assert len(payload["screenshots"]) == 1
+
+            shot = payload["screenshots"][0]
+            assert shot["artifact"]["key"] == shot["id"]
+
+            inline_included = bool(shot["inline_included"])
+            artifact_url = shot["artifact"]["url"]
+
+            assert inline_included is expect_inline
+            assert (artifact_url is not None) is expect_presigned
+
+            image_blocks = [
+                entry for entry in result.content[1:] if isinstance(entry, ImageContent)
+            ]
+            assert len(image_blocks) == (1 if expect_inline else 0)
+
+    asyncio.run(run())
+
+
+def test_get_screenshots_is_non_enumerable_across_tenants(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _configure_memory_docket(monkeypatch, label="screenshots-non-enumerable")
+    monkeypatch.setenv("GSD_S3_ENDPOINT_URL", "http://example.invalid")
+    monkeypatch.setenv("GSD_ARTIFACT_DELIVERY_MODE", "inline")
+
+    from gsd_browser.optionb import s3_client as s3_client_mod
+
+    fake_s3 = _FakeS3(bucket="bucket", _objects={})
+    monkeypatch.setattr(s3_client_mod, "get_s3_client", lambda: fake_s3)
+
+    session_id = str(uuid.uuid4())
+    server = GsdFastMCP("screenshots-test", tasks=True)
+
+    @server.tool(name="make_screenshot")
+    async def make_screenshot() -> str:
+        runtime = sdk_server.get_runtime()
+        shot = runtime.screenshots.record_screenshot(
+            screenshot_type="agent_step",
+            source="test",
+            image_bytes=b"hello",
+            mime_type="image/png",
+            session_id=session_id,
+            captured_at=time.time(),
+            has_error=False,
+            metadata={"source": "test"},
+            url="https://example.test",
+            step=1,
+        )
+        await persist_screenshot(shot)
+        return shot.id
+
+    @server.tool(name="get_screenshots")
+    async def get_screenshots_tool(
+        last_n: int = 5,
+        screenshot_type: str = "agent_step",
+        session_id: str = "",
+        from_timestamp: float | None = None,
+        has_error: bool | None = None,
+        include_images: bool = True,
+        ctx: object | None = None,
+    ):
+        return await sdk_server.get_screenshots(
+            last_n=last_n,
+            screenshot_type=screenshot_type,
+            session_id=session_id,
+            from_timestamp=from_timestamp,
+            has_error=has_error,
+            include_images=include_images,
+            ctx=ctx,  # type: ignore[arg-type]
+        )
+
+    async def run() -> None:
+        server._resolve_identity_for_current_request = lambda: Identity(  # type: ignore[method-assign]
+            tenant_id="t1",
+            subject_id="s1",
+            transport="stdio",
+        )
+        async with Client(server) as client:
+            _ = await client.call_tool("make_screenshot", {})
+
+            server._resolve_identity_for_current_request = lambda: Identity(  # type: ignore[method-assign]
+                tenant_id="t2",
+                subject_id="s2",
+                transport="stdio",
+            )
+            result = await client.call_tool_mcp(
+                name="get_screenshots",
+                arguments={
+                    "session_id": session_id,
+                    "last_n": 5,
+                    "screenshot_type": "agent_step",
+                    "include_images": True,
+                },
+            )
+            assert result.isError is False
+            header = result.content[0]
+            assert isinstance(header, TextContent)
+            payload = json.loads(header.text)
+            assert payload["session_id"] == session_id
+            assert payload["error"] is None
+            assert payload["screenshots"] == []
+
+    asyncio.run(run())

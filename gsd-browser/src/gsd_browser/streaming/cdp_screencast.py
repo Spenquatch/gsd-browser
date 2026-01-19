@@ -512,7 +512,7 @@ class CdpScreencastStreamer:
                 except Exception:  # noqa: BLE001
                     logger.exception("Failed to decode sampled frame", extra={"seq": frame.seq})
                 else:
-                    self._screenshot_manager.record_screenshot(
+                    shot = self._screenshot_manager.record_screenshot(
                         screenshot_type="stream_sample",
                         image_bytes=image_bytes,
                         mime_type="image/jpeg",
@@ -524,6 +524,13 @@ class CdpScreencastStreamer:
                             "streaming_mode": "cdp",
                         },
                     )
+                    try:
+                        from ..optionb.screenshot_artifacts import persist_screenshot
+
+                        if shot is not None:
+                            await persist_screenshot(shot)
+                    except Exception:  # noqa: BLE001
+                        pass
                     self._stats.note_sampler_stored()
 
             logger.debug(
