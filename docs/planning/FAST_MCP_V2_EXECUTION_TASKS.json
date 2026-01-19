@@ -105,6 +105,17 @@
                 "commands": ["cd gsd-browser && PYTHONPATH=./src uv run python -m pytest -q tests/test_exported_jsonschema_in_sync.py"],
                 "expect_exit_code": 0
               }
+            },
+            {
+              "id": "I0.1.D",
+              "statement": "The drift-gate test runs in CI by being part of the default test suite (i.e., `make -C gsd-browser test` from a clean checkout).",
+              "validation": {
+                "commands": [
+                  "cd gsd-browser && uv sync --frozen",
+                  "make -C gsd-browser test"
+                ],
+                "expect_exit_code": 0
+              }
             }
           ]
         }
@@ -154,6 +165,11 @@
           "id": "I1.2",
           "title": "Port tool policy + registration to FastMCP v2",
           "status": "todo",
+          "risk": "medium",
+          "deliverables": [
+            "gsd-browser/tests/mcp/test_v2_tools_list_matches_docs.py (new; asserts tool names match MCP_TOOLS.md)",
+            "gsd-browser/docs/api/STATUS.md (update when v2 becomes default)"
+          ],
           "depends_on": ["I1.1"],
           "references": [
             {
@@ -170,6 +186,55 @@
                 "commands": ["make -C gsd-browser test"],
                 "expect_exit_code": 0
               }
+            },
+            {
+              "id": "I1.2.B",
+              "statement": "A programmatic test asserts the FastMCP v2 server's `tools/list` output contains the exact expected tool names (no missing and no extra).",
+              "validation": {
+                "commands": ["make -C gsd-browser test"],
+                "expect_exit_code": 0
+              }
+            }
+          ]
+        },
+        {
+          "id": "I1.3",
+          "title": "Add FastMCP v2 HTTP entrypoint (ASGI) behind a feature flag",
+          "status": "todo",
+          "risk": "high",
+          "risk_notes": "HTTP mode is where multi-tenant authZ matters most; wiring mistakes here create security and drift risk.",
+          "deliverables": [
+            "gsd-browser/src/gsd_browser (new v2 HTTP entrypoint module)",
+            "gsd-browser/tests (new unit tests for auth config/startup behavior)"
+          ],
+          "depends_on": ["I1.2"],
+          "references": [
+            {
+              "path": "gsd-browser/docs/api/FAST_MCP_V2_CANONICAL_SPEC.md",
+              "purpose": "§1.2 HTTP transport identity and JWT requirements; §8.2 transport config."
+            },
+            {
+              "path": "gsd-browser/docs/api/STATUS.md",
+              "purpose": "Must be updated as HTTP support becomes implemented (not planned)."
+            }
+          ],
+          "kickoff_prompt": "You are executing task I1.3.\n\nObjective: add a FastMCP v2 HTTP (ASGI) entrypoint behind a feature flag / env switch, without changing tool semantics.\n\nRead first:\n- `gsd-browser/docs/api/FAST_MCP_V2_CANONICAL_SPEC.md` (§1.2, §8.2)\n\nHard requirements:\n- When `GSD_TRANSPORT=http`, server MUST refuse to start unless JWT config is present.\n- When `GSD_TRANSPORT=stdio`, HTTP entrypoint is not started.\n\nIf FastMCP v2 HTTP mounting details are unclear, consult DeepWiki `jlowin/fastmcp` with a targeted question and record what you learned.\n\nValidation:\n- Add unit tests for startup refusal when JWT config is missing.\n- Run `make -C gsd-browser lint` and `make -C gsd-browser test`.",
+          "acceptance_criteria": [
+            {
+              "id": "I1.3.A",
+              "statement": "With `GSD_TRANSPORT=http` and missing JWT config, the server refuses to start (fail-fast).",
+              "validation": {
+                "commands": ["make -C gsd-browser test"],
+                "expect_exit_code": 0
+              }
+            },
+            {
+              "id": "I1.3.B",
+              "statement": "With `GSD_TRANSPORT=http` and JWT config present, the HTTP entrypoint starts and serves the same tools (tool list matches `MCP_TOOLS.md`).",
+              "validation": {
+                "commands": ["make -C gsd-browser test"],
+                "expect_exit_code": 0
+              }
             }
           ]
         }
@@ -181,10 +246,91 @@
       "goal": "Implement FastMCP v2 background tasks for long tools, with ownership authZ, progress, and cancellation semantics.",
       "tasks": [
         {
+          "id": "I2.0",
+          "title": "Wire Docket + Redis task backend (basic) and validate durable task storage",
+          "status": "todo",
+          "risk": "high",
+          "deliverables": [
+            "gsd-browser/src/gsd_browser (Docket/Redis configuration + startup validation)",
+            "gsd-browser/tests (new tests for durable task behavior under process restart)"
+          ],
+          "depends_on": ["I1.3"],
+          "references": [
+            {
+              "path": "gsd-browser/docs/api/FAST_MCP_V2_CANONICAL_SPEC.md",
+              "purpose": "§8.4 Tasks config; task runtime depends on Redis-backed Docket."
+            },
+            {
+              "path": "docs/planning/FAST_MCP_V2_OPTION_B_PLAN.md",
+              "purpose": "Option B requires Docket/Redis for scale-ready tasks."
+            }
+          ],
+          "kickoff_prompt": "You are executing task I2.0.\n\nObjective: wire the FastMCP v2 background task backend (Docket) to Redis/Valkey and validate the durability expectations of Option B.\n\nRead first:\n- `gsd-browser/docs/api/FAST_MCP_V2_CANONICAL_SPEC.md` (§8.4)\n\nHard requirements:\n- `FASTMCP_DOCKET_URL` MUST be a Redis URL (no memory backend).\n- Misconfiguration must fail fast with clear error.\n\nDurability expectations:\n- A queued/running task must not become permanently inaccessible after a server restart.\n\nIf Docket configuration details are unclear, consult DeepWiki `jlowin/fastmcp` and record what you learned.\n\nValidation:\n- Add tests that exercise task creation and ensure `tasks/get` and `tasks/result` remain functional after process restart (or equivalent durable-store simulation).\n- Run `make -C gsd-browser lint` and `make -C gsd-browser test`.",
+          "acceptance_criteria": [
+            {
+              "id": "I2.0.A",
+              "statement": "The server refuses to start Option B tasks when Docket/Redis is misconfigured (no memory backend).",
+              "validation": {
+                "commands": ["make -C gsd-browser test"],
+                "expect_exit_code": 0
+              }
+            },
+            {
+              "id": "I2.0.B",
+              "statement": "A task remains retrievable (status/result) after simulated restart, demonstrating durable task storage semantics appropriate for Option B.",
+              "validation": {
+                "commands": ["make -C gsd-browser test"],
+                "expect_exit_code": 0
+              }
+            }
+          ]
+        },
+        {
+          "id": "I2.0.1",
+          "title": "Implement identity extraction + request context plumbing (stdio + http)",
+          "status": "todo",
+          "risk": "high",
+          "deliverables": [
+            "gsd-browser/src/gsd_browser (identity normalization helpers and request context plumbing)",
+            "gsd-browser/tests (identity parsing/validation tests for stdio and http)"
+          ],
+          "depends_on": ["I1.3"],
+          "references": [
+            {
+              "path": "gsd-browser/docs/api/FAST_MCP_V2_CANONICAL_SPEC.md",
+              "purpose": "§1 identity model, §1.2 JWT rules, §2 authZ invariants."
+            }
+          ],
+          "kickoff_prompt": "You are executing task I2.0.1.\n\nObjective: implement identity extraction and make it available consistently to the runtime layers that need it (task ownership, artifact index, audit logs).\n\nRead first:\n- `gsd-browser/docs/api/FAST_MCP_V2_CANONICAL_SPEC.md` (§1–§2)\n\nHard requirements:\n- stdio identity is always `tenant_id=local`, `subject_id=local`.\n- http identity is derived from JWT claims specified by `GSD_JWT_TENANT_ID_CLAIM` and `GSD_JWT_SUBJECT_ID_CLAIM`, validated against the regex.\n\nValidation:\n- Add unit tests for invalid/missing claims and for regex failures.\n- Run `make -C gsd-browser lint` and `make -C gsd-browser test`.",
+          "acceptance_criteria": [
+            {
+              "id": "I2.0.1.A",
+              "statement": "stdio identity is always normalized to `tenant_id=local`, `subject_id=local` and made available to downstream layers.",
+              "validation": {
+                "commands": ["make -C gsd-browser test"],
+                "expect_exit_code": 0
+              }
+            },
+            {
+              "id": "I2.0.1.B",
+              "statement": "http identity extraction enforces canonical JWT requirements and rejects tokens with unmapped or invalid claim values.",
+              "validation": {
+                "commands": ["make -C gsd-browser test"],
+                "expect_exit_code": 0
+              }
+            }
+          ]
+        },
+        {
           "id": "I2.1",
           "title": "Implement TaskOwnershipStore (Redis) + enforcement on tasks endpoints",
           "status": "todo",
-          "depends_on": ["I1.2"],
+          "risk": "high",
+          "deliverables": [
+            "gsd-browser/src/gsd_browser (TaskOwnershipStore implementation)",
+            "gsd-browser/tests (cross-tenant and failure-path tests for tasks endpoints)"
+          ],
+          "depends_on": ["I2.0", "I2.0.1"],
           "references": [
             {
               "path": "gsd-browser/docs/api/FAST_MCP_V2_CANONICAL_SPEC.md",
@@ -208,6 +354,22 @@
                 "commands": ["make -C gsd-browser test"],
                 "expect_exit_code": 0
               }
+            },
+            {
+              "id": "I2.1.C",
+              "statement": "If Redis is unavailable at ownership-write time, the tool call fails and the created task is cancelled best-effort (no Task is returned).",
+              "validation": {
+                "commands": ["make -C gsd-browser test"],
+                "expect_exit_code": 0
+              }
+            },
+            {
+              "id": "I2.1.D",
+              "statement": "taskId is not an authorization boundary: a caller with a different tenant/subject cannot access a task by guessing its id (not-found semantics).",
+              "validation": {
+                "commands": ["make -C gsd-browser test"],
+                "expect_exit_code": 0
+              }
             }
           ]
         },
@@ -215,6 +377,11 @@
           "id": "I2.2",
           "title": "Mark long tools as task-required and implement progress notifications",
           "status": "todo",
+          "risk": "high",
+          "deliverables": [
+            "gsd-browser/src/gsd_browser (taskSupport required for long tools)",
+            "gsd-browser/tests (progress + pollInterval behavior tests)"
+          ],
           "depends_on": ["I2.1"],
           "references": [
             {
@@ -243,6 +410,22 @@
                 "commands": ["make -C gsd-browser test"],
                 "expect_exit_code": 0
               }
+            },
+            {
+              "id": "I2.2.C",
+              "statement": "Returned Task objects include `pollInterval` set to `GSD_TASK_POLL_INTERVAL_MS` (default 2000) per canonical spec.",
+              "validation": {
+                "commands": ["make -C gsd-browser test"],
+                "expect_exit_code": 0
+              }
+            },
+            {
+              "id": "I2.2.D",
+              "statement": "Progress is emitted on early-error paths (start → terminal), not only on the happy path.",
+              "validation": {
+                "commands": ["make -C gsd-browser test"],
+                "expect_exit_code": 0
+              }
             }
           ]
         },
@@ -250,6 +433,11 @@
           "id": "I2.3",
           "title": "Implement cooperative cancellation with resource cleanup",
           "status": "todo",
+          "risk": "high",
+          "deliverables": [
+            "gsd-browser/src/gsd_browser (cooperative cancellation checks + cleanup in finally)",
+            "gsd-browser/tests (cancel mid-run + no-post-cancel-progress tests)"
+          ],
           "depends_on": ["I2.2"],
           "references": [
             {
@@ -262,6 +450,22 @@
             {
               "id": "I2.3.A",
               "statement": "Cancelling an in-flight task transitions it to cancelled promptly and stops further work.",
+              "validation": {
+                "commands": ["make -C gsd-browser test"],
+                "expect_exit_code": 0
+              }
+            },
+            {
+              "id": "I2.3.B",
+              "statement": "After cancellation, the server emits no further progress notifications for that task.",
+              "validation": {
+                "commands": ["make -C gsd-browser test"],
+                "expect_exit_code": 0
+              }
+            },
+            {
+              "id": "I2.3.C",
+              "statement": "Cancellation triggers measurable resource cleanup (e.g., browser contexts/pages closed; background processes stopped).",
               "validation": {
                 "commands": ["make -C gsd-browser test"],
                 "expect_exit_code": 0
@@ -280,6 +484,12 @@
           "id": "I3.1",
           "title": "Implement S3 client wrapper + presign (SeaweedFS/AWS S3 compatible)",
           "status": "todo",
+          "risk": "high",
+          "deliverables": [
+            "gsd-browser/src/gsd_browser (S3 client wrapper: upload/delete/presign)",
+            "gsd-browser/docker/compose.s3test.yml (new; SeaweedFS S3 gateway for integration tests)",
+            "gsd-browser/tests/integration/test_s3_compat_smoke.py (new; integration smoke against S3-compatible store)"
+          ],
           "depends_on": ["I2.3"],
           "references": [
             {
@@ -300,6 +510,19 @@
                 "commands": ["make -C gsd-browser test"],
                 "expect_exit_code": 0
               }
+            },
+            {
+              "id": "I3.1.B",
+              "statement": "An integration test runs against the self-hosted reference store (SeaweedFS S3 gateway) and validates the minimal S3 behaviors needed by Option B (upload, head, delete, presign GET).",
+              "validation": {
+                "commands": [
+                  "cd gsd-browser && docker compose -f docker/compose.yml -f docker/compose.s3test.yml up -d",
+                  "cd gsd-browser && uv sync --frozen",
+                  "cd gsd-browser && PYTHONPATH=./src uv run python -m pytest -q tests/integration/test_s3_compat_smoke.py",
+                  "cd gsd-browser && docker compose -f docker/compose.yml -f docker/compose.s3test.yml down -v"
+                ],
+                "expect_exit_code": 0
+              }
             }
           ]
         },
@@ -307,6 +530,11 @@
           "id": "I3.2",
           "title": "Implement Redis artifact index + cleanup lock",
           "status": "todo",
+          "risk": "high",
+          "deliverables": [
+            "gsd-browser/src/gsd_browser (ArtifactIndexStore + cleanup runner with TTL-only lock release)",
+            "gsd-browser/tests (atomicity, idempotency, and cleanup lock concurrency tests)"
+          ],
           "depends_on": ["I3.1"],
           "references": [
             {
@@ -323,6 +551,22 @@
                 "commands": ["make -C gsd-browser test"],
                 "expect_exit_code": 0
               }
+            },
+            {
+              "id": "I3.2.B",
+              "statement": "Cleanup leadership is enforced: with two concurrent cleanup runners, only one performs deletions per interval (lock semantics verified).",
+              "validation": {
+                "commands": ["make -C gsd-browser test"],
+                "expect_exit_code": 0
+              }
+            },
+            {
+              "id": "I3.2.C",
+              "statement": "Pending artifacts older than the orphan threshold are purged, while ready artifacts are preserved until retention expiry.",
+              "validation": {
+                "commands": ["make -C gsd-browser test"],
+                "expect_exit_code": 0
+              }
             }
           ]
         },
@@ -330,6 +574,11 @@
           "id": "I3.3",
           "title": "Wire screenshots to distributed store and implement delivery-mode matrix",
           "status": "todo",
+          "risk": "high",
+          "deliverables": [
+            "gsd-browser/src/gsd_browser (screenshot persistence to S3 + Redis index; get_screenshots reads from index)",
+            "gsd-browser/tests (delivery-mode matrix + multi-tenant non-enumerability tests for get_screenshots)"
+          ],
           "depends_on": ["I3.2"],
           "references": [
             {
@@ -350,6 +599,14 @@
                 "commands": ["make -C gsd-browser test"],
                 "expect_exit_code": 0
               }
+            },
+            {
+              "id": "I3.3.B",
+              "statement": "Multi-tenant non-enumerability is enforced for screenshot listing: tenant B calling `get_screenshots(session_id=<tenant A session>)` receives `screenshots=[]` and `error=null`.",
+              "validation": {
+                "commands": ["make -C gsd-browser test"],
+                "expect_exit_code": 0
+              }
             }
           ]
         },
@@ -357,6 +614,11 @@
           "id": "I3.4",
           "title": "Wire run-events to distributed store and enforce canonical filter semantics",
           "status": "todo",
+          "risk": "high",
+          "deliverables": [
+            "gsd-browser/src/gsd_browser (run-events persistence to S3 + Redis index; get_run_events reads from index)",
+            "gsd-browser/tests (filter semantics + multi-tenant non-enumerability tests for get_run_events)"
+          ],
           "depends_on": ["I3.3"],
           "references": [
             {
@@ -373,6 +635,133 @@
                 "commands": ["make -C gsd-browser test"],
                 "expect_exit_code": 0
               }
+            },
+            {
+              "id": "I3.4.B",
+              "statement": "Multi-tenant non-enumerability is enforced for run-events listing: tenant B calling `get_run_events(session_id=<tenant A session>)` receives `events=[]` and `error=null`.",
+              "validation": {
+                "commands": ["make -C gsd-browser test"],
+                "expect_exit_code": 0
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "I4",
+      "name": "Conformance + Integration Gates (Shippability)",
+      "goal": "Add explicit E2E/conformance tests required to call Option B complete and scale-ready.",
+      "tasks": [
+        {
+          "id": "I4.1",
+          "title": "Task lifecycle E2E gate",
+          "status": "todo",
+          "risk": "high",
+          "deliverables": [
+            "gsd-browser/tests/integration/test_tasks_lifecycle_e2e.py (new)"
+          ],
+          "depends_on": ["I3.4"],
+          "references": [
+            {
+              "path": "docs/planning/FAST_MCP_V2_OPTION_B_PLAN.md",
+              "purpose": "Conformance / test gates section."
+            },
+            {
+              "path": "gsd-browser/docs/api/FAST_MCP_V2_CANONICAL_SPEC.md",
+              "purpose": "Task semantics, pollInterval, and result payload contracts."
+            }
+          ],
+          "kickoff_prompt": "You are executing task I4.1.\n\nObjective: add an E2E test that validates the full SEP-1686 lifecycle for a task-required tool:\n- invoke long tool in task mode → receive Task\n- poll `tasks/get` transitions\n- fetch `tasks/result`\n- validate final payload against committed schema\n\nUse the pinned env (`uv sync --frozen`) and keep the test deterministic.\n\nValidation:\n- `make -C gsd-browser test`",
+          "acceptance_criteria": [
+            {
+              "id": "I4.1.A",
+              "statement": "An E2E test validates Task create → poll → result, and validates the result JSON against the committed schema files.",
+              "validation": {
+                "commands": ["make -C gsd-browser test"],
+                "expect_exit_code": 0
+              }
+            }
+          ]
+        },
+        {
+          "id": "I4.2",
+          "title": "Cancellation E2E gate",
+          "status": "todo",
+          "risk": "high",
+          "deliverables": [
+            "gsd-browser/tests/integration/test_tasks_cancellation_e2e.py (new)"
+          ],
+          "depends_on": ["I4.1"],
+          "references": [
+            {
+              "path": "gsd-browser/docs/api/FAST_MCP_V2_CANONICAL_SPEC.md",
+              "purpose": "§3.5 cancellation + cleanup; progress conventions."
+            }
+          ],
+          "kickoff_prompt": "You are executing task I4.2.\n\nObjective: add an E2E cancellation test:\n- start a long task\n- cancel mid-run\n- verify status transitions promptly to cancelled\n- verify no further progress after cancelled\n- verify cleanup occurred (measurable)\n\nValidation:\n- `make -C gsd-browser test`",
+          "acceptance_criteria": [
+            {
+              "id": "I4.2.A",
+              "statement": "An E2E test verifies cancel mid-run leads to cancelled state, no post-cancel progress, and cleanup.",
+              "validation": {
+                "commands": ["make -C gsd-browser test"],
+                "expect_exit_code": 0
+              }
+            }
+          ]
+        },
+        {
+          "id": "I4.3",
+          "title": "Multi-tenant denial E2E gate (tasks + artifacts)",
+          "status": "todo",
+          "risk": "high",
+          "deliverables": [
+            "gsd-browser/tests/integration/test_multitenant_denial_e2e.py (new)"
+          ],
+          "depends_on": ["I4.1", "I3.4"],
+          "references": [
+            {
+              "path": "gsd-browser/docs/api/FAST_MCP_V2_CANONICAL_SPEC.md",
+              "purpose": "§2 non-enumerability rules for tasks and artifacts; list-tool empty semantics."
+            }
+          ],
+          "kickoff_prompt": "You are executing task I4.3.\n\nObjective: add an E2E test that proves cross-tenant access is blocked:\n- tenant A creates a task and artifacts\n- tenant B attempts `tasks/get|result|cancel` on A's task → not-found semantics\n- tenant B attempts `get_screenshots|get_run_events` with A's session_id → empty list + error=null\n\nValidation:\n- `make -C gsd-browser test`",
+          "acceptance_criteria": [
+            {
+              "id": "I4.3.A",
+              "statement": "An E2E test verifies cross-tenant denial for tasks (not-found) and artifacts (empty list + error=null) per canonical spec.",
+              "validation": {
+                "commands": ["make -C gsd-browser test"],
+                "expect_exit_code": 0
+              }
+            }
+          ]
+        },
+        {
+          "id": "I4.4",
+          "title": "Restart resilience E2E gate",
+          "status": "todo",
+          "risk": "high",
+          "deliverables": [
+            "gsd-browser/tests/integration/test_restart_resilience_e2e.py (new)"
+          ],
+          "depends_on": ["I2.0", "I4.1"],
+          "references": [
+            {
+              "path": "gsd-browser/docs/api/FAST_MCP_V2_CANONICAL_SPEC.md",
+              "purpose": "Docket/Redis durability expectations; ownership enforcement remains valid after restart."
+            }
+          ],
+          "kickoff_prompt": "You are executing task I4.4.\n\nObjective: validate restart resilience under Redis-backed task storage:\n- enqueue long task\n- restart server/worker\n- verify task remains retrievable and reaches a terminal state\n- verify ownership enforcement still applies\n\nValidation:\n- `make -C gsd-browser test`",
+          "acceptance_criteria": [
+            {
+              "id": "I4.4.A",
+              "statement": "An E2E test demonstrates task persistence and correct ownership enforcement across restart boundaries.",
+              "validation": {
+                "commands": ["make -C gsd-browser test"],
+                "expect_exit_code": 0
+              }
             }
           ]
         }
@@ -380,4 +769,3 @@
     }
   ]
 }
-

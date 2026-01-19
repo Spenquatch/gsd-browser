@@ -129,6 +129,12 @@
         "id": { "type": "string" },
         "title": { "type": "string" },
         "status": { "type": "string", "enum": ["todo", "in_progress", "blocked", "done"] },
+        "risk": { "type": "string", "enum": ["low", "medium", "high"] },
+        "risk_notes": { "type": "string" },
+        "deliverables": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
         "depends_on": {
           "type": "array",
           "items": { "type": "string" }
@@ -163,4 +169,3 @@
     }
   }
 }
-
