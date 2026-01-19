@@ -628,7 +628,7 @@
         {
           "id": "I2.5",
           "title": "Audit logging invariants (tasks + artifacts)",
-          "status": "todo",
+          "status": "done",
           "risk": "medium",
           "deliverables": [
             "gsd-browser/tests (new tests capturing structured logs for denied task access and artifact list queries)"
