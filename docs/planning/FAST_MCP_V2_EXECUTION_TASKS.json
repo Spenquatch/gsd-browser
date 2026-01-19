@@ -843,7 +843,7 @@
         {
           "id": "I4.1a",
           "title": "Task lifecycle E2E gate (tasks-only; early)",
-          "status": "todo",
+          "status": "done",
           "risk": "high",
           "deliverables": [
             "gsd-browser/tests/integration/test_tasks_lifecycle_e2e_tasks_only.py (new)"
