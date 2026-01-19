@@ -83,4 +83,8 @@ def test_get_screenshots_emits_versioned_json_header(monkeypatch: pytest.MonkeyP
     GetScreenshotsPayloadV1.model_validate(payload)
     assert payload["version"] == "gsd.get_screenshots.v1"
     assert isinstance(payload["screenshots"], list)
-    assert payload["screenshots"][0]["artifact"] == {"key": None, "url": None}
+    artifact = payload["screenshots"][0]["artifact"]
+    assert artifact["key"] is None
+    assert artifact["url"] is None
+    assert artifact["content_type"] == "image/png"
+    assert artifact["created_at"] == 123.0

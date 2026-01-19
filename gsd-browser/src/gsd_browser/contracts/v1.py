@@ -67,11 +67,11 @@ class WebEvalAgentPayloadV1(ContractModel):
     result: str | None
     summary: str = Field(max_length=2048)
     page: PageInfoV1
-    errors_top: list[RankedFailureV1]
+    errors_top: list[RankedFailureV1] = Field(max_length=8)
     timeouts: TimeoutsV1
-    warnings: list[str]
+    warnings: list[str] = Field(max_length=20)
     artifacts: ArtifactsCountV1
-    next_actions: list[str]
+    next_actions: list[str] = Field(max_length=20)
     dev_excerpts: DevExcerptsV1 | None = None
 
 
@@ -124,6 +124,7 @@ class ScreenshotHeaderV1(ContractModel):
     mime_type: str | None
     url: str | None
     step: int | None
+    inline_included: bool | None = None
     metadata: dict[str, Any]
     artifact: ArtifactRefV1
 
@@ -145,7 +146,7 @@ class GetScreenshotsPayloadV1(ContractModel):
     version: Literal["gsd.get_screenshots.v1"]
     session_id: str | None
     filters: ScreenshotFiltersV1
-    screenshots: list[ScreenshotHeaderV1]
+    screenshots: list[ScreenshotHeaderV1] = Field(max_length=20)
     stats: ScreenshotStatsV1
     error: str | None
 

@@ -162,6 +162,18 @@
           ],
           "title": "Id"
         },
+        "inline_included": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Inline Included"
+        },
         "metadata": {
           "additionalProperties": true,
           "title": "Metadata",
@@ -293,6 +305,7 @@
       "items": {
         "$ref": "#/$defs/ScreenshotHeaderV1"
       },
+      "maxItems": 20,
       "title": "Screenshots",
       "type": "array"
     },

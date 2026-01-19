@@ -113,6 +113,7 @@ stable IDs/metadata suitable for switching delivery mode.
   - `filters`: object (echo of applied filters)
   - `screenshots`: array of screenshot metadata objects, each with:
     - `id`, `timestamp`, `type`, `session_id`, `has_error`, `mime_type`, `url`, `step`, `metadata`
+    - `inline_included`: boolean|null (when `true`, an inline `ImageContent` item is included)
     - `url` is the **page URL** that the screenshot was captured from (not an artifact URL).
     - `artifact` (presigned-url-ready):
       - `key`: string|null (stable artifact key/id)
@@ -128,8 +129,9 @@ stable IDs/metadata suitable for switching delivery mode.
   the JSON header.
 
 **Mapping JSON headers → inline `ImageContent`**
-- Inline images appear in the same order as `screenshots[]`, skipping any screenshot that has no
-  inline image bytes available on the server.
+- Each screenshot header includes `inline_included` (boolean). When present and `true`, an inline
+  `ImageContent` item is included for that screenshot. Clients should iterate `screenshots[]` and
+  consume one image only when `inline_included=true`.
 
 **Delivery mode**
 - Phase 1 default: inline `ImageContent` items plus JSON header metadata.
@@ -150,4 +152,5 @@ stable IDs/metadata suitable for switching delivery mode.
   - `url`: string|null
   - `path`: string|null
   - `summary`: string
+  - `traceback`: string|null (optional; present on failures when available)
   - `next_actions`: string[]

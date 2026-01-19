@@ -21,8 +21,7 @@ FastMCP v2 (Option B) migration on `feat/fastmcp-v2-tasks`.
 
 ## Minimum supported versions (for the planned Option B runtime)
 - Python: `>=3.11` (this repo’s baseline)
-- `fastmcp`: `>=2.14.0,<3.0`
+- `fastmcp`: `>=2.14.3,<3.0`
 - `mcp` (protocol types; transitive via `fastmcp`): `>=1.24.0,<2.0`
 - Docket backend (transitive via `fastmcp`): `pydocket>=0.16.6`
 - Redis/Valkey: `>=7.0` (Docket backend)
-

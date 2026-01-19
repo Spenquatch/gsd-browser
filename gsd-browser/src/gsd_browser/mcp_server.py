@@ -2244,6 +2244,7 @@ async def get_screenshots(
 
     header_screenshots: list[dict[str, Any]] = []
     for shot in screenshots:
+        inline_included = bool(include_images and shot.get("image_data"))
         header_screenshots.append(
             {
                 "id": shot.get("id"),
@@ -2254,11 +2255,16 @@ async def get_screenshots(
                 "mime_type": shot.get("mime_type"),
                 "url": shot.get("url"),
                 "step": shot.get("step"),
+                "inline_included": inline_included,
                 "metadata": shot.get("metadata") or {},
                 "artifact": {
                     # These are “presigned-url-ready” placeholders until the ArtifactStore lands.
                     "key": None,
                     "url": None,
+                    "content_type": str(shot.get("mime_type") or "") or None,
+                    "size_bytes": None,
+                    "created_at": shot.get("timestamp"),
+                    "url_expires_at": None,
                 },
             }
         )

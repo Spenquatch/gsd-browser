@@ -23,6 +23,8 @@ Progress updates are sent via MCP progress notifications.
 - Server sets per-tool default TTLs appropriate for browser work (minutes, not seconds).
 - Client TTL overrides are allowed only when explicitly enabled via a server env/config toggle and
   are bounded by server-configured min/max; out-of-range TTL is rejected.
+- MCP protocol fields use **milliseconds** (`task.ttl`, `Task.pollInterval`); server config/env uses
+  **seconds** and is converted.
 
 ### Concrete defaults (planned)
 Defaults (server-chosen):
@@ -43,7 +45,8 @@ Config knobs (names are part of the contract):
 - `GSD_TASK_TTL_WEB_TASK_AGENT_GITHUB_S` (int, default 1800)
 
 ## Polling + progress (planned)
-- Server sets `Task.pollInterval` to a suggested value appropriate for browser work (default: 2s).
+- Server sets `Task.pollInterval` to a suggested value appropriate for browser work (default: 2s /
+  2000ms).
 - Progress notifications are emitted at least once per “agent step” and on key phase transitions.
 - Progress is “best effort”:
   - if `max_steps` is known, progress should be step-based (completed steps out of `max_steps`)

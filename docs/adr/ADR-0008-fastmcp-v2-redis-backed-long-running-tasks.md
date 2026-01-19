@@ -25,7 +25,7 @@ execution modes.
 1) Adopt `jlowin/fastmcp` v2 as the MCP server framework for `gsd`.
 
 2) Implement MCP long-running task support using FastMCP v2 background tasks:
-- Mark long-running tools as task-capable (`TaskConfig(mode="optional", …)` by default).
+- Mark long-running tools as task-required (`TaskConfig(mode="required", …)`).
 - Use `ctx.report_progress(...)` (and/or the FastMCP `Progress` dependency) to provide user-visible
   progress for agent loops and browser steps.
 - Make cancellation a first-class behavior; long-running tools must be cancellation-safe.
@@ -54,8 +54,7 @@ execution modes.
   - Add `fastmcp` (jlowin) v2 to `gsd-browser/pyproject.toml`.
   - Keep the MCP types dependency as required by FastMCP’s underlying protocol models.
 - Tool execution modes:
-  - Start with `optional` task support for `web_eval_agent`, `web_task_agent`, and
-    `web_task_agent_github`.
+  - Configure `web_eval_agent`, `web_task_agent`, and `web_task_agent_github` as task-required.
   - Keep short, pure-query tools (`get_run_events`, `get_screenshots`) synchronous unless a concrete
     need emerges.
 - Cancellation:

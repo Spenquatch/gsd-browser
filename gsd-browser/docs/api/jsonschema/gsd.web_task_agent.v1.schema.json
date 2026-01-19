@@ -230,6 +230,7 @@
       "items": {
         "$ref": "#/$defs/RankedFailureV1"
       },
+      "maxItems": 8,
       "title": "Errors Top",
       "type": "array"
     },
@@ -252,6 +253,7 @@
       "items": {
         "type": "string"
       },
+      "maxItems": 20,
       "title": "Next Actions",
       "type": "array"
     },
@@ -333,6 +335,7 @@
       "items": {
         "type": "string"
       },
+      "maxItems": 20,
       "title": "Warnings",
       "type": "array"
     }
