@@ -163,16 +163,8 @@
           "title": "Id"
         },
         "inline_included": {
-          "anyOf": [
-            {
-              "type": "boolean"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Inline Included"
+          "title": "Inline Included",
+          "type": "boolean"
         },
         "metadata": {
           "additionalProperties": true,
@@ -259,6 +251,7 @@
         "mime_type",
         "url",
         "step",
+        "inline_included",
         "metadata",
         "artifact"
       ],

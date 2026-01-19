@@ -124,7 +124,7 @@ class ScreenshotHeaderV1(ContractModel):
     mime_type: str | None
     url: str | None
     step: int | None
-    inline_included: bool | None = None
+    inline_included: bool
     metadata: dict[str, Any]
     artifact: ArtifactRefV1
 

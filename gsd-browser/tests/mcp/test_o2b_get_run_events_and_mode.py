@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import inspect
 import json
+import uuid
 from typing import Any
 
 import pytest
@@ -96,7 +97,7 @@ def test_o2b_get_run_events_enforces_limits_and_filters(monkeypatch: pytest.Monk
         pytest.skip("O2b get_run_events tool not available as a callable")
 
     store = RunEventStore()
-    session_id = "s-1"
+    session_id = str(uuid.uuid4())
     store.ensure_session(session_id, created_at=0.0)
 
     for idx in range(300):

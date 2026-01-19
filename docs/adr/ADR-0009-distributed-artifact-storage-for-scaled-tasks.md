@@ -96,8 +96,8 @@ collection and retrieval must be designed for distributed execution now.
 ## Identity + authorization invariants (artifacts)
 
 ### Object keys and index records
-- All object keys must be tenant-prefixed:
-  - `tenants/{tenant_id}/sessions/{session_id}/...`
+- All object keys must be tenant-prefixed and subject-scoped:
+  - `tenants/{tenant_id}/subjects/{subject_id}/sessions/{session_id}/...`
 - The artifact index (Redis) must include enough metadata to enforce authorization without fetching
   the object body, at minimum:
   - `tenant_id`, `subject_id`, `session_id`, `artifact_key`, `artifact_kind`, `created_at`
@@ -129,7 +129,8 @@ Resolved (concrete decisions):
   - Development: ~24h retention for tasks + artifacts (overrideable).
   - Production: ~7d retention by default (overrideable).
 - Multi-tenant boundaries:
-  - Object keys are tenant-prefixed (for example `tenants/{tenant_id}/sessions/{session_id}/...`).
+  - Object keys are tenant-prefixed (for example
+    `tenants/{tenant_id}/subjects/{subject_id}/sessions/{session_id}/...`).
   - Require TLS in transit and server-side encryption at rest (SSE) on the object store.
 - Self-hosted S3 reference:
   - SeaweedFS is the initial reference deployment for self-hosted S3-compatible storage.

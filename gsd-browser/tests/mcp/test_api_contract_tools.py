@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import inspect
 import json
+import uuid
 from typing import Any
 
 import pytest
@@ -48,6 +49,8 @@ def test_setup_browser_state_returns_versioned_json(monkeypatch: pytest.MonkeyPa
 
 
 def test_get_screenshots_emits_versioned_json_header(monkeypatch: pytest.MonkeyPatch) -> None:
+    session_id = str(uuid.uuid4())
+
     class _DummyScreenshots:
         def get_screenshots(self, *args: Any, **kwargs: Any) -> list[dict[str, Any]]:
             return [
@@ -55,7 +58,7 @@ def test_get_screenshots_emits_versioned_json_header(monkeypatch: pytest.MonkeyP
                     "id": "shot-1",
                     "timestamp": 123.0,
                     "type": "agent_step",
-                    "session_id": "sess",
+                    "session_id": kwargs.get("session_id"),
                     "has_error": False,
                     "mime_type": "image/png",
                     "url": "https://example.com",
@@ -74,7 +77,9 @@ def test_get_screenshots_emits_versioned_json_header(monkeypatch: pytest.MonkeyP
         lambda: _DummyRuntime(screenshots=_DummyScreenshots()),
     )
 
-    result = _run(mcp_server_mod.get_screenshots(last_n=5, include_images=False))
+    result = _run(
+        mcp_server_mod.get_screenshots(session_id=session_id, last_n=5, include_images=False)
+    )
     assert isinstance(result, list)
     assert len(result) == 1
     assert getattr(result[0], "type", None) == "text"

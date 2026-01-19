@@ -43,6 +43,7 @@ Claim → identity mapping:
 Constraints:
 - `tenant_id` and `subject_id` MUST be non-empty strings (after trimming).
 - `tenant_id` and `subject_id` MUST match regex: `^[a-zA-Z0-9][a-zA-Z0-9:_-]{0,63}$`
+- Operators MUST choose claim mappings whose values satisfy the regex; otherwise tokens are rejected.
 - If any requirement fails, the request is unauthorized.
 
 ## 2) Authorization rules (authoritative)
@@ -104,7 +105,7 @@ TaskOwnershipRecord schema:
   "tool_name": "web_eval_agent|web_task_agent|web_task_agent_github",
   "created_at_ms": 1730000000000,
   "expires_at_ms": 1730000900000,
-  "session_id": "<uuid|null>"
+  "session_id": "<uuid>"
 }
 ```
 
@@ -120,7 +121,7 @@ Task ownership record atomicity:
   - the server MUST emit an audit log entry with the failure cause and the intended owner identity
 
 ### 3.3 TTL policy (server-controlled)
-Server-side defaults and bounds are fixed:
+Server-side defaults and bounds are server-controlled and configurable via env:
 - `web_eval_agent`: 900 seconds
 - `web_task_agent`: 1800 seconds
 - `web_task_agent_github`: 1800 seconds
@@ -134,8 +135,9 @@ Client-provided TTL override:
 
 MCP protocol unit conversion:
 - MCP `task.ttl` and `Task.pollInterval` are **milliseconds**.
-- All environment/config values in `gsd` are **seconds** and MUST be converted to milliseconds at
-  the protocol boundary.
+- All `_S` environment/config values in `gsd` are **seconds** and MUST be converted to milliseconds
+  at the MCP protocol boundary.
+- `GSD_TASK_POLL_INTERVAL_MS` is already milliseconds and MUST be passed through as-is.
 
 ### 3.4 Poll interval
 Server MUST set `Task.pollInterval = GSD_TASK_POLL_INTERVAL_MS` (milliseconds; default 2000) for
@@ -237,6 +239,7 @@ Cleanup rules (required):
   - lock key: `gsd:v1:maintenance:cleanup:lock`
   - acquisition: `SET <key> <uuid> NX PX <lease_ms>`
   - lease: `lease_ms = GSD_CLEANUP_INTERVAL_S * 1000 - 5000` (minimum 10000ms)
+  - release: the lock holder MUST NOT delete the lock key; it MUST rely on TTL expiry (no `DEL`)
   - only the lock holder performs cleanup for that interval
 - Idempotency and partial failure handling:
   - If S3 delete returns 404/NoSuchKey, treat as success and remove Redis entries.
@@ -282,7 +285,7 @@ Pagination:
 - `last_n` is a hard maximum of 20.
 
 Filtering:
-- `session_id` restricts listing to that session (required for multi-tenant deployments).
+- `session_id` MUST be provided and restricts listing to that session.
 - `from_timestamp` is epoch seconds; server converts to `timestamp_ms` and filters by score.
 - `has_error` filters based on ArtifactIndexRecord.has_error.
 - `screenshot_type` filters based on ArtifactIndexRecord.screenshot_type.
@@ -305,6 +308,7 @@ Chunk format:
 - Each run-event artifact is a JSON Lines payload (`.jsonl`) where each line is one event object.
 
 Filtering:
+- `session_id` MUST be provided and restricts listing to that session.
 - `event_types` and `has_error` filtering occurs server-side after loading events from chunks.
 - `last_n` applies after filtering (hard maximum 200).
 

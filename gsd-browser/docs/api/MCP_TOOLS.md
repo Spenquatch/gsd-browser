@@ -82,7 +82,7 @@ Same input shape and output schema as `web_eval_agent`, but with:
 
 ### `get_run_events` (sync)
 **Input**
-- `session_id` (string|null, optional)
+- `session_id` (UUID string, required)
 - `last_n` (integer, optional, default 50, max 200)
 - `event_types` (string[]|null, optional; subset of `["agent","console","network"]`)
 - `from_timestamp` (number|string|null, optional; epoch seconds or ISO-8601)
@@ -92,7 +92,7 @@ Same input shape and output schema as `web_eval_agent`, but with:
 **Output** (`TextContent[]`, exactly 1 item)
 - JSON payload schema `gsd.get_run_events.v1`:
   - `version`: `"gsd.get_run_events.v1"`
-  - `session_id`: string|null
+  - `session_id`: UUID string (echo of filter)
   - `events`: object[]
   - `stats`: `{ counts: {agent:number, console:number, network:number, total:number}, oldest_timestamp:number|null, newest_timestamp:number|null }`
   - `error`: string|null
@@ -104,7 +104,7 @@ stable IDs/metadata suitable for switching delivery mode.
 **Input**
 - `last_n` (integer, optional, default 5, max 20)
 - `screenshot_type` (`"agent_step" | "stream_sample" | "all"`, optional, default `"agent_step"`)
-- `session_id` (string|null, optional)
+- `session_id` (UUID string, required)
 - `from_timestamp` (number|null, optional; epoch seconds)
 - `has_error` (bool|null, optional)
 - `include_images` (bool, optional, default true)
@@ -112,11 +112,11 @@ stable IDs/metadata suitable for switching delivery mode.
 **Output** (`(TextContent|ImageContent)[]`, 1+ items)
 - First item is a `TextContent` JSON payload schema `gsd.get_screenshots.v1`:
   - `version`: `"gsd.get_screenshots.v1"`
-  - `session_id`: string|null (echo of filter)
+  - `session_id`: UUID string (echo of filter)
   - `filters`: object (echo of applied filters)
   - `screenshots`: array of screenshot metadata objects, each with:
     - `id`, `timestamp`, `type`, `session_id`, `has_error`, `mime_type`, `url`, `step`, `metadata`
-    - `inline_included`: boolean|null (when `true`, an inline `ImageContent` item is included)
+    - `inline_included`: boolean (required; never null). When `true`, an inline `ImageContent` item is included.
     - `url` is the **page URL** that the screenshot was captured from (not an artifact URL).
     - `artifact` (presigned-url-ready):
       - `key`: string|null (stable artifact key/id)
@@ -132,7 +132,7 @@ stable IDs/metadata suitable for switching delivery mode.
   the JSON header.
 
 **Mapping JSON headers → inline `ImageContent`**
-- Each screenshot header includes `inline_included` (boolean). When present and `true`, an inline
+- Each screenshot header includes `inline_included` (boolean, required). When `true`, an inline
   `ImageContent` item is included for that screenshot. Clients should iterate `screenshots[]` and
   consume one image only when `inline_included=true`.
 - After the JSON header `TextContent`, the response contains only `ImageContent` items (no other

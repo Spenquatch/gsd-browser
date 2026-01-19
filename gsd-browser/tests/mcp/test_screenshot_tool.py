@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import inspect
 import json
+import uuid
 from typing import Any
 
 import pytest
@@ -100,12 +101,13 @@ def test_screenshot_manager_get_screenshots_include_images_false_is_metadata_onl
 def test_mcp_get_screenshots_enforces_last_n_max_20_and_metadata_only_mode(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    session_id = str(uuid.uuid4())
     manager = ScreenshotManager()
     for i in range(30):
         _add(
             manager,
             screenshot_type="agent_step",
-            session_id="a",
+            session_id=session_id,
             timestamp=float(100 + i),
             image_bytes=b"img",
         )
@@ -116,7 +118,7 @@ def test_mcp_get_screenshots_enforces_last_n_max_20_and_metadata_only_mode(
 
     monkeypatch.setattr(mcp_server_mod, "get_runtime", lambda: DummyRuntime(manager))
 
-    result = _run(mcp_get_screenshots(last_n=25, include_images=False))
+    result = _run(mcp_get_screenshots(session_id=session_id, last_n=25, include_images=False))
     assert isinstance(result, list)
     assert all(getattr(item, "type", None) != "image" for item in result)
 

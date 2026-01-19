@@ -2011,7 +2011,7 @@ async def web_task_agent_github(
 
 @mcp.tool(name="get_run_events")
 async def get_run_events(
-    session_id: str | None = None,
+    session_id: str = "",
     last_n: int = 50,
     event_types: list[str] | None = None,
     from_timestamp: Any | None = None,
@@ -2025,7 +2025,7 @@ async def get_run_events(
     clients to fetch detailed console/network/agent events on demand.
 
     Args:
-        session_id: Filter to a single session_id (optional).
+        session_id: Filter to a single session_id (required; UUID string).
         last_n: Max number of events to return (default 50, max 200).
         event_types: Optional list of event types ("agent", "console", "network").
         from_timestamp: Only include events after this timestamp (epoch seconds or ISO-8601).
@@ -2038,6 +2038,22 @@ async def get_run_events(
     _ = ctx
     runtime = get_runtime()
     run_events = getattr(runtime, "run_events", None)
+
+    try:
+        uuid.UUID(str(session_id))
+    except (TypeError, ValueError):
+        payload = {
+            "version": "gsd.get_run_events.v1",
+            "session_id": None,
+            "events": [],
+            "stats": {
+                "counts": {"agent": 0, "console": 0, "network": 0, "total": 0},
+                "oldest_timestamp": None,
+                "newest_timestamp": None,
+            },
+            "error": "session_id is required and must be a UUID string.",
+        }
+        return [TextContent(type="text", text=json.dumps(payload, ensure_ascii=False))]
 
     last_n_value = min(max(int(last_n), 0), 200)
 
@@ -2200,7 +2216,7 @@ async def setup_browser_state(
 async def get_screenshots(
     last_n: int = 5,
     screenshot_type: str = "agent_step",
-    session_id: str | None = None,
+    session_id: str = "",
     from_timestamp: float | None = None,
     has_error: bool | None = None,
     include_images: bool = True,
@@ -2216,7 +2232,7 @@ async def get_screenshots(
     Args:
         last_n: Number of most recent screenshots (default: 5, max: 20)
         screenshot_type: Filter by type - "agent_step", "stream_sample", or "all"
-        session_id: Filter by specific session
+        session_id: Filter by specific session (required; UUID string)
         from_timestamp: Only get screenshots after this time
         has_error: Filter for error screenshots only
         include_images: If False, return metadata only
@@ -2227,6 +2243,25 @@ async def get_screenshots(
     _ = ctx
     runtime = get_runtime()
     last_n = min(max(last_n, 0), 20)
+
+    try:
+        uuid.UUID(str(session_id))
+    except (TypeError, ValueError):
+        payload = {
+            "version": "gsd.get_screenshots.v1",
+            "session_id": None,
+            "filters": {
+                "last_n": last_n,
+                "screenshot_type": str(screenshot_type).strip().lower() or "agent_step",
+                "from_timestamp": from_timestamp,
+                "has_error": has_error,
+                "include_images": include_images,
+            },
+            "screenshots": [],
+            "stats": runtime.screenshots.get_stats(),
+            "error": "session_id is required and must be a UUID string.",
+        }
+        return [TextContent(type="text", text=json.dumps(payload, ensure_ascii=False))]
 
     screenshots = runtime.screenshots.get_screenshots(
         last_n=last_n,
