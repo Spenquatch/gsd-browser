@@ -25,8 +25,8 @@
     "drift_gate": {
       "description": "Contract schemas are generated from Pydantic and must match committed JSON Schemas.",
       "source_model": "gsd-browser/src/gsd_browser/contracts/v1.py",
-      "export_command": "cd gsd-browser && uv sync --frozen && PYTHONPATH=./src uv run python tools/export_contract_schemas.py",
-      "enforcement_test": "cd gsd-browser && uv sync --frozen && PYTHONPATH=./src uv run python -m pytest -q tests/test_exported_jsonschema_in_sync.py"
+      "export_command": "cd gsd-browser && uv sync --frozen --extra dev && PYTHONPATH=./src uv run python tools/export_contract_schemas.py",
+      "enforcement_test": "cd gsd-browser && uv sync --frozen --extra dev && PYTHONPATH=./src uv run python -m pytest -q tests/test_exported_jsonschema_in_sync.py"
     }
   },
   "deepwiki": {
@@ -62,6 +62,7 @@
           "id": "I0.1",
           "title": "Pin schema generation environment",
           "status": "todo",
+          "risk": "medium",
           "depends_on": [],
           "references": [
             {
@@ -92,6 +93,7 @@
               "statement": "Schema export drift gate passes in the pinned environment.",
               "validation": {
                 "commands": [
+                  "cd gsd-browser && uv sync --frozen --extra dev",
                   "cd gsd-browser && PYTHONPATH=./src uv run python tools/export_contract_schemas.py",
                   "cd gsd-browser && PYTHONPATH=./src uv run python -m pytest -q tests/test_exported_jsonschema_in_sync.py"
                 ],
@@ -118,6 +120,50 @@
               }
             }
           ]
+        },
+        {
+          "id": "I0.2",
+          "title": "Add Redis/Valkey integration harness for Option B tests",
+          "status": "todo",
+          "risk": "high",
+          "deliverables": [
+            "gsd-browser/docker/compose.redistest.yml (new; Valkey/Redis service for tests)",
+            "gsd-browser/tests/integration/test_redis_smoke.py (new; proves connectivity and key isolation assumptions)"
+          ],
+          "depends_on": ["I0.1"],
+          "references": [
+            {
+              "path": "gsd-browser/docs/api/FAST_MCP_V2_CANONICAL_SPEC.md",
+              "purpose": "Redis/Valkey is required for Docket tasks, task ownership, and artifact indices."
+            }
+          ],
+          "kickoff_prompt": "You are executing task I0.2.\n\nObjective: add an explicit Redis/Valkey integration harness so Option B tasks can run deterministically in CI and locally.\n\nDeliverables:\n- `gsd-browser/docker/compose.redistest.yml` that starts a Valkey/Redis service for tests.\n- A smoke test that proves basic connectivity and that the server can use Redis for keying/TTL behavior (without requiring full FastMCP migration).\n\nValidation:\n- `cd gsd-browser && docker compose -f docker/compose.redistest.yml up -d`\n- `cd gsd-browser && uv sync --frozen --extra dev`\n- `cd gsd-browser && PYTHONPATH=./src uv run python -m pytest -q tests/integration/test_redis_smoke.py`\n- `cd gsd-browser && docker compose -f docker/compose.redistest.yml down -v`",
+          "acceptance_criteria": [
+            {
+              "id": "I0.2.A",
+              "statement": "A documented docker-compose harness starts Redis/Valkey for integration tests without manual setup.",
+              "validation": {
+                "commands": [
+                  "cd gsd-browser && docker compose -f docker/compose.redistest.yml up -d",
+                  "cd gsd-browser && docker compose -f docker/compose.redistest.yml down -v"
+                ],
+                "expect_exit_code": 0
+              }
+            },
+            {
+              "id": "I0.2.B",
+              "statement": "A smoke test validates Redis connectivity and basic read/write/TTL behavior needed by Option B components.",
+              "validation": {
+                "commands": [
+                  "cd gsd-browser && docker compose -f docker/compose.redistest.yml up -d",
+                  "cd gsd-browser && uv sync --frozen --extra dev",
+                  "cd gsd-browser && PYTHONPATH=./src uv run python -m pytest -q tests/integration/test_redis_smoke.py",
+                  "cd gsd-browser && docker compose -f docker/compose.redistest.yml down -v"
+                ],
+                "expect_exit_code": 0
+              }
+            }
+          ]
         }
       ]
     },
@@ -130,6 +176,12 @@
           "id": "I1.1",
           "title": "Add FastMCP v2 server entrypoint (stdio)",
           "status": "todo",
+          "risk": "high",
+          "deliverables": [
+            "gsd-browser/src/gsd_browser (new FastMCP v2 stdio entrypoint module)",
+            "gsd-browser/docs/api/STATUS.md (update when v2 stdio becomes implemented)",
+            "gsd-browser/tests (new smoke test ensuring v2 entrypoint can start)"
+          ],
           "depends_on": ["I0.1"],
           "references": [
             {
@@ -156,6 +208,17 @@
               "statement": "All existing tests pass with the v2 entrypoint enabled.",
               "validation": {
                 "commands": ["make -C gsd-browser test"],
+                "expect_exit_code": 0
+              }
+            },
+            {
+              "id": "I1.1.C",
+              "statement": "`gsd-browser/docs/api/STATUS.md` is updated to reflect that a FastMCP v2 stdio entrypoint is implemented (and what remains planned).",
+              "validation": {
+                "commands": [
+                  "git diff --name-only",
+                  "make -C gsd-browser test"
+                ],
                 "expect_exit_code": 0
               }
             }
@@ -235,6 +298,17 @@
                 "commands": ["make -C gsd-browser test"],
                 "expect_exit_code": 0
               }
+            },
+            {
+              "id": "I1.3.C",
+              "statement": "`gsd-browser/docs/api/STATUS.md` is updated to reflect that a FastMCP v2 HTTP entrypoint is implemented (and what remains planned).",
+              "validation": {
+                "commands": [
+                  "git diff --name-only",
+                  "make -C gsd-browser test"
+                ],
+                "expect_exit_code": 0
+              }
             }
           ]
         }
@@ -286,7 +360,7 @@
           ]
         },
         {
-          "id": "I2.0.1",
+          "id": "I2.1",
           "title": "Implement identity extraction + request context plumbing (stdio + http)",
           "status": "todo",
           "risk": "high",
@@ -304,7 +378,7 @@
           "kickoff_prompt": "You are executing task I2.0.1.\n\nObjective: implement identity extraction and make it available consistently to the runtime layers that need it (task ownership, artifact index, audit logs).\n\nRead first:\n- `gsd-browser/docs/api/FAST_MCP_V2_CANONICAL_SPEC.md` (§1–§2)\n\nHard requirements:\n- stdio identity is always `tenant_id=local`, `subject_id=local`.\n- http identity is derived from JWT claims specified by `GSD_JWT_TENANT_ID_CLAIM` and `GSD_JWT_SUBJECT_ID_CLAIM`, validated against the regex.\n\nValidation:\n- Add unit tests for invalid/missing claims and for regex failures.\n- Run `make -C gsd-browser lint` and `make -C gsd-browser test`.",
           "acceptance_criteria": [
             {
-              "id": "I2.0.1.A",
+              "id": "I2.1.A",
               "statement": "stdio identity is always normalized to `tenant_id=local`, `subject_id=local` and made available to downstream layers.",
               "validation": {
                 "commands": ["make -C gsd-browser test"],
@@ -312,7 +386,7 @@
               }
             },
             {
-              "id": "I2.0.1.B",
+              "id": "I2.1.B",
               "statement": "http identity extraction enforces canonical JWT requirements and rejects tokens with unmapped or invalid claim values.",
               "validation": {
                 "commands": ["make -C gsd-browser test"],
@@ -322,7 +396,7 @@
           ]
         },
         {
-          "id": "I2.1",
+          "id": "I2.2",
           "title": "Implement TaskOwnershipStore (Redis) + enforcement on tasks endpoints",
           "status": "todo",
           "risk": "high",
@@ -330,7 +404,7 @@
             "gsd-browser/src/gsd_browser (TaskOwnershipStore implementation)",
             "gsd-browser/tests (cross-tenant and failure-path tests for tasks endpoints)"
           ],
-          "depends_on": ["I2.0", "I2.0.1"],
+          "depends_on": ["I2.0", "I2.1"],
           "references": [
             {
               "path": "gsd-browser/docs/api/FAST_MCP_V2_CANONICAL_SPEC.md",
@@ -340,7 +414,7 @@
           "kickoff_prompt": "You are executing task I2.1.\n\nObjective: Implement TaskOwnershipRecord persistence and enforce it on `tasks/get`, `tasks/result`, and `tasks/cancel`.\n\nRead first:\n- `gsd-browser/docs/api/FAST_MCP_V2_CANONICAL_SPEC.md` (§2.2, §3.2)\n\nRules:\n- All authZ behavior must match canonical spec.\n- Non-enumerability must be preserved (not-found semantics).\n\nValidation:\n- Add unit tests for cross-tenant denial.\n- Run `make -C gsd-browser lint` and `make -C gsd-browser test`.",
           "acceptance_criteria": [
             {
-              "id": "I2.1.A",
+              "id": "I2.2.A",
               "statement": "Task ownership record is written before returning a Task response; failures abort the call per canonical spec.",
               "validation": {
                 "commands": ["make -C gsd-browser test"],
@@ -348,7 +422,7 @@
               }
             },
             {
-              "id": "I2.1.B",
+              "id": "I2.2.B",
               "statement": "`tasks/get|result|cancel` reject access from a mismatched tenant/subject with not-found semantics.",
               "validation": {
                 "commands": ["make -C gsd-browser test"],
@@ -356,7 +430,7 @@
               }
             },
             {
-              "id": "I2.1.C",
+              "id": "I2.2.C",
               "statement": "If Redis is unavailable at ownership-write time, the tool call fails and the created task is cancelled best-effort (no Task is returned).",
               "validation": {
                 "commands": ["make -C gsd-browser test"],
@@ -364,7 +438,7 @@
               }
             },
             {
-              "id": "I2.1.D",
+              "id": "I2.2.D",
               "statement": "taskId is not an authorization boundary: a caller with a different tenant/subject cannot access a task by guessing its id (not-found semantics).",
               "validation": {
                 "commands": ["make -C gsd-browser test"],
@@ -374,7 +448,7 @@
           ]
         },
         {
-          "id": "I2.2",
+          "id": "I2.3",
           "title": "Mark long tools as task-required and implement progress notifications",
           "status": "todo",
           "risk": "high",
@@ -382,7 +456,7 @@
             "gsd-browser/src/gsd_browser (taskSupport required for long tools)",
             "gsd-browser/tests (progress + pollInterval behavior tests)"
           ],
-          "depends_on": ["I2.1"],
+          "depends_on": ["I2.2"],
           "references": [
             {
               "path": "gsd-browser/docs/api/MCP_TASKS.md",
@@ -396,7 +470,7 @@
           "kickoff_prompt": "You are executing task I2.2.\n\nObjective: enforce `taskSupport=\"required\"` for long tools and emit progress per canonical spec.\n\nDo not invent progress message formats; use the canonical `phase=... step=... note=...` format and the max 200-char note bound.\n\nIf FastMCP v2 progress APIs are unclear, consult DeepWiki `jlowin/fastmcp` and record the answer.",
           "acceptance_criteria": [
             {
-              "id": "I2.2.A",
+              "id": "I2.3.A",
               "statement": "Invoking `web_eval_agent`, `web_task_agent`, and `web_task_agent_github` returns a Task object (not an immediate result).",
               "validation": {
                 "commands": ["make -C gsd-browser test"],
@@ -404,7 +478,7 @@
               }
             },
             {
-              "id": "I2.2.B",
+              "id": "I2.3.B",
               "statement": "Progress notifications are emitted at start, per agent step, and on terminal states.",
               "validation": {
                 "commands": ["make -C gsd-browser test"],
@@ -412,7 +486,7 @@
               }
             },
             {
-              "id": "I2.2.C",
+              "id": "I2.3.C",
               "statement": "Returned Task objects include `pollInterval` set to `GSD_TASK_POLL_INTERVAL_MS` (default 2000) per canonical spec.",
               "validation": {
                 "commands": ["make -C gsd-browser test"],
@@ -420,7 +494,7 @@
               }
             },
             {
-              "id": "I2.2.D",
+              "id": "I2.3.D",
               "statement": "Progress is emitted on early-error paths (start → terminal), not only on the happy path.",
               "validation": {
                 "commands": ["make -C gsd-browser test"],
@@ -430,7 +504,7 @@
           ]
         },
         {
-          "id": "I2.3",
+          "id": "I2.4",
           "title": "Implement cooperative cancellation with resource cleanup",
           "status": "todo",
           "risk": "high",
@@ -438,7 +512,7 @@
             "gsd-browser/src/gsd_browser (cooperative cancellation checks + cleanup in finally)",
             "gsd-browser/tests (cancel mid-run + no-post-cancel-progress tests)"
           ],
-          "depends_on": ["I2.2"],
+          "depends_on": ["I2.3"],
           "references": [
             {
               "path": "gsd-browser/docs/api/FAST_MCP_V2_CANONICAL_SPEC.md",
@@ -448,7 +522,7 @@
           "kickoff_prompt": "You are executing task I2.3.\n\nObjective: implement cooperative cancellation that stops work between steps and releases resources in `finally`.\n\nAdd tests that cancel mid-run and confirm task transitions promptly and resources are closed.",
           "acceptance_criteria": [
             {
-              "id": "I2.3.A",
+              "id": "I2.4.A",
               "statement": "Cancelling an in-flight task transitions it to cancelled promptly and stops further work.",
               "validation": {
                 "commands": ["make -C gsd-browser test"],
@@ -456,7 +530,7 @@
               }
             },
             {
-              "id": "I2.3.B",
+              "id": "I2.4.B",
               "statement": "After cancellation, the server emits no further progress notifications for that task.",
               "validation": {
                 "commands": ["make -C gsd-browser test"],
@@ -464,8 +538,43 @@
               }
             },
             {
-              "id": "I2.3.C",
+              "id": "I2.4.C",
               "statement": "Cancellation triggers measurable resource cleanup (e.g., browser contexts/pages closed; background processes stopped).",
+              "validation": {
+                "commands": ["make -C gsd-browser test"],
+                "expect_exit_code": 0
+              }
+            }
+          ]
+        },
+        {
+          "id": "I2.5",
+          "title": "Audit logging invariants (tasks + artifacts)",
+          "status": "todo",
+          "risk": "medium",
+          "deliverables": [
+            "gsd-browser/tests (new tests capturing structured logs for denied task access and artifact list queries)"
+          ],
+          "depends_on": ["I2.2", "I2.3", "I1.3"],
+          "references": [
+            {
+              "path": "gsd-browser/docs/api/FAST_MCP_V2_CANONICAL_SPEC.md",
+              "purpose": "§2.4 audit logging requirements; non-enumerability constraints."
+            }
+          ],
+          "kickoff_prompt": "You are executing task I2.5.\n\nObjective: ensure the runtime emits the required structured audit logs for security/ops without leaking resource existence.\n\nRead first:\n- `gsd-browser/docs/api/FAST_MCP_V2_CANONICAL_SPEC.md` (§2.4)\n\nHard requirements:\n- Task access denied logs must include `task_id` and identities.\n- Artifact list query logs must include `session_id`, filters, and identity.\n- Log messages must NOT introduce distinct client-visible behavior that leaks existence.\n\nValidation:\n- Add tests that capture logs and assert required keys are present.\n- Run `make -C gsd-browser test`.",
+          "acceptance_criteria": [
+            {
+              "id": "I2.5.A",
+              "statement": "Denied task access emits a structured audit log entry with `task_id` and identity fields, while still returning not-found semantics to the client.",
+              "validation": {
+                "commands": ["make -C gsd-browser test"],
+                "expect_exit_code": 0
+              }
+            },
+            {
+              "id": "I2.5.B",
+              "statement": "Artifact list queries (`get_screenshots`, `get_run_events`) emit structured logs containing identity, `session_id`, and applied filters.",
               "validation": {
                 "commands": ["make -C gsd-browser test"],
                 "expect_exit_code": 0
@@ -490,7 +599,7 @@
             "gsd-browser/docker/compose.s3test.yml (new; SeaweedFS S3 gateway for integration tests)",
             "gsd-browser/tests/integration/test_s3_compat_smoke.py (new; integration smoke against S3-compatible store)"
           ],
-          "depends_on": ["I2.3"],
+          "depends_on": ["I2.4"],
           "references": [
             {
               "path": "gsd-browser/docs/api/FAST_MCP_V2_CANONICAL_SPEC.md",
@@ -654,14 +763,14 @@
       "goal": "Add explicit E2E/conformance tests required to call Option B complete and scale-ready.",
       "tasks": [
         {
-          "id": "I4.1",
-          "title": "Task lifecycle E2E gate",
+          "id": "I4.1a",
+          "title": "Task lifecycle E2E gate (tasks-only; early)",
           "status": "todo",
           "risk": "high",
           "deliverables": [
-            "gsd-browser/tests/integration/test_tasks_lifecycle_e2e.py (new)"
+            "gsd-browser/tests/integration/test_tasks_lifecycle_e2e_tasks_only.py (new)"
           ],
-          "depends_on": ["I3.4"],
+          "depends_on": ["I2.3"],
           "references": [
             {
               "path": "docs/planning/FAST_MCP_V2_OPTION_B_PLAN.md",
@@ -675,8 +784,39 @@
           "kickoff_prompt": "You are executing task I4.1.\n\nObjective: add an E2E test that validates the full SEP-1686 lifecycle for a task-required tool:\n- invoke long tool in task mode → receive Task\n- poll `tasks/get` transitions\n- fetch `tasks/result`\n- validate final payload against committed schema\n\nUse the pinned env (`uv sync --frozen`) and keep the test deterministic.\n\nValidation:\n- `make -C gsd-browser test`",
           "acceptance_criteria": [
             {
-              "id": "I4.1.A",
-              "statement": "An E2E test validates Task create → poll → result, and validates the result JSON against the committed schema files.",
+              "id": "I4.1a.A",
+              "statement": "An E2E test validates Task create → poll → result for a long tool without requiring the distributed artifact pipeline, and validates the result JSON against committed schema files.",
+              "validation": {
+                "commands": ["make -C gsd-browser test"],
+                "expect_exit_code": 0
+              }
+            }
+          ]
+        },
+        {
+          "id": "I4.1b",
+          "title": "Task lifecycle E2E gate (full pipeline)",
+          "status": "todo",
+          "risk": "high",
+          "deliverables": [
+            "gsd-browser/tests/integration/test_tasks_lifecycle_e2e_full.py (new)"
+          ],
+          "depends_on": ["I3.4", "I4.1a"],
+          "references": [
+            {
+              "path": "docs/planning/FAST_MCP_V2_OPTION_B_PLAN.md",
+              "purpose": "Conformance / test gates section."
+            },
+            {
+              "path": "gsd-browser/docs/api/FAST_MCP_V2_CANONICAL_SPEC.md",
+              "purpose": "Task semantics + artifact production/retrieval behavior."
+            }
+          ],
+          "kickoff_prompt": "You are executing task I4.1b.\n\nObjective: add an E2E test that validates the SEP-1686 lifecycle and also asserts the full artifact pipeline:\n- invoke long tool in task mode → receive Task\n- poll `tasks/get` transitions\n- fetch `tasks/result`\n- validate result payload schema\n- validate screenshots/run-events are produced and retrievable per canonical spec\n\nUse pinned env (`uv sync --frozen --extra dev`) and keep the test deterministic.\n\nValidation:\n- `make -C gsd-browser test`",
+          "acceptance_criteria": [
+            {
+              "id": "I4.1b.A",
+              "statement": "An E2E test validates Task lifecycle plus screenshot/run-events production and retrieval behavior per canonical spec.",
               "validation": {
                 "commands": ["make -C gsd-browser test"],
                 "expect_exit_code": 0
@@ -692,7 +832,7 @@
           "deliverables": [
             "gsd-browser/tests/integration/test_tasks_cancellation_e2e.py (new)"
           ],
-          "depends_on": ["I4.1"],
+          "depends_on": ["I4.1a", "I2.4"],
           "references": [
             {
               "path": "gsd-browser/docs/api/FAST_MCP_V2_CANONICAL_SPEC.md",
@@ -719,7 +859,7 @@
           "deliverables": [
             "gsd-browser/tests/integration/test_multitenant_denial_e2e.py (new)"
           ],
-          "depends_on": ["I4.1", "I3.4"],
+          "depends_on": ["I4.1a", "I3.4"],
           "references": [
             {
               "path": "gsd-browser/docs/api/FAST_MCP_V2_CANONICAL_SPEC.md",
@@ -746,7 +886,7 @@
           "deliverables": [
             "gsd-browser/tests/integration/test_restart_resilience_e2e.py (new)"
           ],
-          "depends_on": ["I2.0", "I4.1"],
+          "depends_on": ["I2.0", "I4.1a"],
           "references": [
             {
               "path": "gsd-browser/docs/api/FAST_MCP_V2_CANONICAL_SPEC.md",
