@@ -99,7 +99,7 @@
         {
           "id": "I0.0",
           "title": "Environment bootstrap (Option B) and friction-free validation harness",
-          "status": "todo",
+          "status": "done",
           "risk": "high",
           "deliverables": [
             "gsd-browser/scripts/optionb_bootstrap.sh",
@@ -139,7 +139,7 @@
         {
           "id": "I0.1",
           "title": "Pin schema generation environment",
-          "status": "todo",
+          "status": "done",
           "risk": "medium",
           "depends_on": ["I0.0"],
           "references": [
@@ -202,7 +202,7 @@
         {
           "id": "I0.2",
           "title": "Add Redis/Valkey integration harness for Option B tests",
-          "status": "todo",
+          "status": "done",
           "risk": "high",
           "deliverables": [
             "gsd-browser/docker/compose.redistest.yml (new; Valkey/Redis service for tests)",
@@ -253,7 +253,7 @@
         {
           "id": "I1.1",
           "title": "Add FastMCP v2 server entrypoint (stdio)",
-          "status": "todo",
+          "status": "done",
           "risk": "high",
           "deliverables": [
             "gsd-browser/src/gsd_browser (new FastMCP v2 stdio entrypoint module)",
@@ -305,7 +305,7 @@
         {
           "id": "I1.2",
           "title": "Port tool policy + registration to FastMCP v2",
-          "status": "todo",
+          "status": "done",
           "risk": "medium",
           "deliverables": [
             "gsd-browser/tests/mcp/test_v2_tools_list_matches_docs.py (new; asserts tool names match MCP_TOOLS.md)",
@@ -341,7 +341,7 @@
         {
           "id": "I1.3",
           "title": "Add FastMCP v2 HTTP entrypoint (ASGI) behind a feature flag",
-          "status": "todo",
+          "status": "done",
           "risk": "high",
           "risk_notes": "HTTP mode is where multi-tenant authZ matters most; wiring mistakes here create security and drift risk.",
           "deliverables": [
@@ -400,7 +400,7 @@
         {
           "id": "I2.0",
           "title": "Wire Docket + Redis task backend (basic) and validate durable task storage",
-          "status": "todo",
+          "status": "done",
           "risk": "high",
           "deliverables": [
             "gsd-browser/src/gsd_browser (Docket/Redis configuration + startup validation)",
@@ -440,7 +440,7 @@
         {
           "id": "I2.1",
           "title": "Implement identity extraction + request context plumbing (stdio + http)",
-          "status": "todo",
+          "status": "done",
           "risk": "high",
           "deliverables": [
             "gsd-browser/src/gsd_browser (identity normalization helpers and request context plumbing)",
