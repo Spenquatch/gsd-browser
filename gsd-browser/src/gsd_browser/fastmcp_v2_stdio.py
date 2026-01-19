@@ -10,15 +10,16 @@ import logging
 from collections.abc import Awaitable, Callable
 from typing import TYPE_CHECKING, TypeVar
 
-from fastmcp import Context, FastMCP
+from fastmcp import Context
 from mcp.types import ImageContent, TextContent
 
 from . import mcp_server as sdk_server
 from .config import Settings
+from .optionb.fastmcp_server import GsdFastMCP
 
 logger = logging.getLogger("gsd_browser.fastmcp_v2")
 
-mcp = FastMCP("gsd")
+mcp = GsdFastMCP("gsd")
 
 T = TypeVar("T")
 
