@@ -476,7 +476,7 @@
         {
           "id": "I2.2",
           "title": "Implement TaskOwnershipStore (Redis) + enforcement on tasks endpoints",
-          "status": "todo",
+          "status": "done",
           "risk": "high",
           "deliverables": [
             "gsd-browser/src/gsd_browser (TaskOwnershipStore implementation)",
@@ -528,7 +528,7 @@
         {
           "id": "I2.3",
           "title": "Mark long tools as task-required and implement progress notifications",
-          "status": "todo",
+          "status": "done",
           "risk": "high",
           "deliverables": [
             "gsd-browser/src/gsd_browser (taskSupport required for long tools)",
