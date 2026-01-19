@@ -800,7 +800,7 @@
         {
           "id": "I3.4",
           "title": "Wire run-events to distributed store and enforce canonical filter semantics",
-          "status": "todo",
+          "status": "done",
           "risk": "high",
           "deliverables": [
             "gsd-browser/src/gsd_browser (run-events persistence to S3 + Redis index; get_run_events reads from index)",
