@@ -91,6 +91,7 @@
     "session_id": {
       "anyOf": [
         {
+          "format": "uuid",
           "type": "string"
         },
         {

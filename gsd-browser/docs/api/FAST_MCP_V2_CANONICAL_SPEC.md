@@ -67,14 +67,20 @@ For any `tasks/get`, `tasks/result`, `tasks/cancel` request:
 ### 2.3 Artifacts
 `session_id` and artifact keys are NOT authorization boundaries.
 
-For any artifact listing/retrieval (e.g., `get_screenshots`, `get_run_events`):
-- The server MUST authorize using the ArtifactIndexRecord’s `(tenant_id, subject_id)` (see §4.3).
-- If caller does not match, return not found.
+Artifact list tools are tenant/subject isolated by construction:
+- `get_screenshots` and `get_run_events` MUST query Redis indices that are scoped by
+  `(tenant_id, subject_id, session_id)` (see §4.3).
+- For these list tools, the server MUST NOT return a distinct “denied” vs “missing” response; the
+  response MUST be identical for:
+  - a nonexistent session, and
+  - a session that exists for a different `(tenant_id, subject_id)`.
+
+This achieves non-enumerability without requiring a separate SessionOwnershipRecord.
 
 ### 2.4 Audit logging (required)
 The server MUST emit structured logs for:
 - Task access denied (includes `task_id`, caller identity, and stored owner identity)
-- Artifact access denied (includes `artifact_id` or `session_id` + filter summary, caller identity)
+- Artifact list queries (`get_screenshots`, `get_run_events`) (includes `session_id`, filters, caller identity)
 - Presigned URL issuance (includes `artifact_id`, expiry, caller identity)
 
 ## 3) Task semantics + persistence
@@ -167,7 +173,9 @@ Run events object key format:
 - `tenants/{tenant_id}/subjects/{subject_id}/sessions/{session_id}/run-events/{timestamp_ms}_{chunk_id}.jsonl`
 
 Encryption:
-- All PUTs MUST set SSE-S3: `x-amz-server-side-encryption: AES256`
+- Encryption-at-rest MUST be enabled. Server behavior is controlled by `GSD_S3_SSE_MODE`:
+  - `sse_s3`: server MUST set SSE-S3 header `x-amz-server-side-encryption: AES256` on all PUTs
+  - `none`: server MUST NOT set any SSE headers; deployment MUST still ensure encryption-at-rest
 
 ### 4.3 Redis index (required)
 Redis is the authoritative index for listing/filtering. S3 is treated as blob storage.
@@ -290,6 +298,35 @@ Filtering:
 - `has_error` filters based on ArtifactIndexRecord.has_error.
 - `screenshot_type` filters based on ArtifactIndexRecord.screenshot_type.
 
+Non-enumerability (list semantics):
+- If the session has no visible artifacts to the caller (nonexistent or owned by a different
+  `(tenant_id, subject_id)`), the server MUST return:
+  - `screenshots=[]`
+  - `error=null`
+
+Identity and stable IDs:
+- `screenshots[].id` MUST be a UUIDv4 string and is the stable artifact identifier for that screenshot.
+- `screenshots[].artifact.key` MUST equal `screenshots[].id`.
+
+Delivery mode matrix (authoritative):
+- Delivery mode is controlled by `GSD_ARTIFACT_DELIVERY_MODE` and request `include_images`.
+- For all modes, the JSON header is always present and contains canonical metadata.
+- Outcomes:
+  - `delivery_mode=inline`
+    - `include_images=true`: emit inline `ImageContent` where bytes exist; set `inline_included=true` for those; `artifact.url=null`
+    - `include_images=false`: emit no inline images; set `inline_included=false` for all; `artifact.url=null`
+  - `delivery_mode=presigned`
+    - always emit no inline images; set `inline_included=false` for all
+    - set `artifact.url` + `artifact.url_expires_at` for each screenshot artifact
+  - `delivery_mode=both`
+    - `include_images=true`: emit inline images (as in `inline`) and also set `artifact.url` + `artifact.url_expires_at`
+    - `include_images=false`: emit no inline images; set `inline_included=false` for all; set `artifact.url` + `artifact.url_expires_at`
+- Presign failures:
+  - If presigning fails for any artifact, the server MUST:
+    - set that artifact’s `artifact.url=null` and `artifact.url_expires_at=null`
+    - set the top-level `error` to a non-null summary string
+    - emit a structured log with the failure cause
+
 Inline image pairing (deterministic):
 - Each screenshot header includes `inline_included` (server output MUST always be `true` or `false`):
   - `true` when inline image bytes are included in the response as an `ImageContent`
@@ -309,8 +346,25 @@ Chunk format:
 
 Filtering:
 - `session_id` MUST be provided and restricts listing to that session.
-- `event_types` and `has_error` filtering occurs server-side after loading events from chunks.
-- `last_n` applies after filtering (hard maximum 200).
+- `event_types` MAY be provided; when provided it MUST be a subset of `["agent","console","network"]`.
+- `has_error` MAY be provided; when provided it filters events where `has_error` matches.
+- `from_timestamp` MAY be provided; when provided it MUST be either:
+  - epoch seconds (number), or
+  - ISO-8601 timestamp string.
+- `include_details` defaults to `false`; when `false`, the server MUST omit heavy event detail payloads.
+- `last_n` defaults to 50 and applies after filtering (hard maximum 200).
+
+Non-enumerability (list semantics):
+- If the session has no visible events to the caller (nonexistent or owned by a different
+  `(tenant_id, subject_id)`), the server MUST return:
+  - `events=[]`
+  - `error=null`
+
+Invalid input handling:
+- If any provided filter is invalid (including `event_types` outside the allowed subset or an invalid
+  `from_timestamp`), the server MUST return:
+  - `events=[]`
+  - `error` as a non-null validation message string
 
 ## 6) Progress reporting conventions
 
@@ -398,6 +452,7 @@ All configuration is via environment variables.
 - `GSD_S3_REGION` (string; required)
 - `GSD_S3_ACCESS_KEY_ID` (string; required)
 - `GSD_S3_SECRET_ACCESS_KEY` (string; required)
+- `GSD_S3_SSE_MODE` (string): MUST be `sse_s3` or `none` (default: `sse_s3`)
 
 ### 8.7 Retention/cleanup
 - `GSD_RETENTION_SECONDS_DEV` (int; default: `86400`)

@@ -28,15 +28,9 @@
           "title": "Created At"
         },
         "key": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "title": "Key"
+          "format": "uuid",
+          "title": "Key",
+          "type": "string"
         },
         "size_bytes": {
           "anyOf": [
@@ -152,15 +146,9 @@
           "title": "Has Error"
         },
         "id": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "title": "Id"
+          "format": "uuid",
+          "title": "Id",
+          "type": "string"
         },
         "inline_included": {
           "title": "Inline Included",
@@ -183,15 +171,9 @@
           "title": "Mime Type"
         },
         "session_id": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "title": "Session Id"
+          "format": "uuid",
+          "title": "Session Id",
+          "type": "string"
         },
         "step": {
           "anyOf": [
@@ -305,6 +287,7 @@
     "session_id": {
       "anyOf": [
         {
+          "format": "uuid",
           "type": "string"
         },
         {

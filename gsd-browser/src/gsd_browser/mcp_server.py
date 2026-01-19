@@ -2294,7 +2294,7 @@ async def get_screenshots(
                 "metadata": shot.get("metadata") or {},
                 "artifact": {
                     # These are “presigned-url-ready” placeholders until the ArtifactStore lands.
-                    "key": None,
+                    "key": shot.get("id"),
                     "url": None,
                     "content_type": str(shot.get("mime_type") or "") or None,
                     "size_bytes": None,

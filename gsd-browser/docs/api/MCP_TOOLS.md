@@ -119,7 +119,7 @@ stable IDs/metadata suitable for switching delivery mode.
     - `inline_included`: boolean (required; never null). When `true`, an inline `ImageContent` item is included.
     - `url` is the **page URL** that the screenshot was captured from (not an artifact URL).
     - `artifact` (presigned-url-ready):
-      - `key`: string|null (stable artifact key/id)
+      - `key`: UUID string (required; stable artifact id). Always equals `id`.
       - `url`: string|null (artifact URL; typically null in Phase 1, pre-signed in Phase 2)
       - `content_type`: string|null
       - `size_bytes`: integer|null
@@ -143,7 +143,17 @@ stable IDs/metadata suitable for switching delivery mode.
 - Phase 1 default: inline `ImageContent` items plus JSON header metadata.
 - Phase 2 later: return `artifact.url` (pre-signed URL) for blobs and stop emitting inline images for
   large payloads.
-- Controlled by env/config (example): `GSD_ARTIFACT_DELIVERY_MODE=inline|presigned|both`.
+- Controlled by env/config: `GSD_ARTIFACT_DELIVERY_MODE=inline|presigned|both`.
+
+Delivery mode matrix (authoritative):
+- `delivery_mode=inline`
+  - `include_images=true`: emit inline images when bytes exist; `inline_included=true` for those; `artifact.url=null`
+  - `include_images=false`: no inline images; `inline_included=false` for all; `artifact.url=null`
+- `delivery_mode=presigned`
+  - no inline images; `inline_included=false` for all; `artifact.url` populated
+- `delivery_mode=both`
+  - `include_images=true`: inline images + `artifact.url` populated
+  - `include_images=false`: no inline images; `artifact.url` populated
 
 ### `setup_browser_state` (sync)
 **Input**

@@ -100,14 +100,14 @@ class RunEventStatsV1(ContractModel):
 
 class GetRunEventsPayloadV1(ContractModel):
     version: Literal["gsd.get_run_events.v1"]
-    session_id: str | None
+    session_id: UUID | None
     events: list[dict[str, Any]]
     stats: RunEventStatsV1
     error: str | None
 
 
 class ArtifactRefV1(ContractModel):
-    key: str | None
+    key: UUID
     url: str | None
     content_type: str | None = None
     size_bytes: int | None = None
@@ -116,10 +116,10 @@ class ArtifactRefV1(ContractModel):
 
 
 class ScreenshotHeaderV1(ContractModel):
-    id: str | None
+    id: UUID
     timestamp: float | None
     type: Literal["agent_step", "stream_sample"] | None
-    session_id: str | None
+    session_id: UUID
     has_error: bool | None
     mime_type: str | None
     url: str | None
@@ -144,7 +144,7 @@ class ScreenshotStatsV1(ContractModel):
 
 class GetScreenshotsPayloadV1(ContractModel):
     version: Literal["gsd.get_screenshots.v1"]
-    session_id: str | None
+    session_id: UUID | None
     filters: ScreenshotFiltersV1
     screenshots: list[ScreenshotHeaderV1] = Field(max_length=20)
     stats: ScreenshotStatsV1

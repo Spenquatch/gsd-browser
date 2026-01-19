@@ -50,12 +50,13 @@ def test_setup_browser_state_returns_versioned_json(monkeypatch: pytest.MonkeyPa
 
 def test_get_screenshots_emits_versioned_json_header(monkeypatch: pytest.MonkeyPatch) -> None:
     session_id = str(uuid.uuid4())
+    shot_id = str(uuid.uuid4())
 
     class _DummyScreenshots:
         def get_screenshots(self, *args: Any, **kwargs: Any) -> list[dict[str, Any]]:
             return [
                 {
-                    "id": "shot-1",
+                    "id": shot_id,
                     "timestamp": 123.0,
                     "type": "agent_step",
                     "session_id": kwargs.get("session_id"),
@@ -89,7 +90,7 @@ def test_get_screenshots_emits_versioned_json_header(monkeypatch: pytest.MonkeyP
     assert payload["version"] == "gsd.get_screenshots.v1"
     assert isinstance(payload["screenshots"], list)
     artifact = payload["screenshots"][0]["artifact"]
-    assert artifact["key"] is None
+    assert str(artifact["key"]) == shot_id
     assert artifact["url"] is None
     assert artifact["content_type"] == "image/png"
     assert artifact["created_at"] == 123.0
