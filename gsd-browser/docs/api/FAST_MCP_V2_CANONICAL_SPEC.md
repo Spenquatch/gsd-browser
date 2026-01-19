@@ -447,6 +447,9 @@ All configuration is via environment variables.
 - `GSD_PRESIGNED_URL_TTL_S` (int; default: `900`, max: `3600`)
 
 ### 8.6 S3 artifact store (required for Option B)
+`gsd` supports AWS S3 and S3-compatible object stores; the self-hosted reference deployment is
+SeaweedFS (via its S3 gateway). See `docs/adr/ADR-0009-distributed-artifact-storage-for-scaled-tasks.md`.
+
 - `GSD_S3_ENDPOINT_URL` (string; required)
 - `GSD_S3_BUCKET` (string; required)
 - `GSD_S3_REGION` (string; required)

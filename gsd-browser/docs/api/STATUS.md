@@ -17,6 +17,7 @@ FastMCP v2 (Option B) migration on `feat/fastmcp-v2-tasks`.
   `tasks/get`, `tasks/result`, `tasks/cancel`, and progress notifications.
 - Redis/Valkey-backed task queue via Docket (FastMCP background tasks).
 - Distributed artifact storage (S3-compatible object store + Redis index).
+  - Self-hosted reference: SeaweedFS (S3 gateway). AWS S3 is also supported.
 - Tenant/identity-scoped authorization boundaries for task + artifact access.
 
 ## Minimum supported versions (for the planned Option B runtime)
