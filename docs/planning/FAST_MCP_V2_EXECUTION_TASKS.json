@@ -716,7 +716,7 @@
         {
           "id": "I3.2",
           "title": "Implement Redis artifact index + cleanup lock",
-          "status": "todo",
+          "status": "done",
           "risk": "high",
           "deliverables": [
             "gsd-browser/src/gsd_browser (ArtifactIndexStore + cleanup runner with TTL-only lock release)",
