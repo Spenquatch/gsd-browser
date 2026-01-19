@@ -1545,6 +1545,13 @@ async def web_eval_agent(
             last_page_url=last_page_url,
             last_page_title=last_page_title,
         )
+        try:
+            from .optionb.run_event_artifacts import persist_run_events_from_store
+
+            if run_events is not None:
+                await persist_run_events_from_store(run_events, session_id=session_id)
+        except Exception:  # noqa: BLE001
+            pass
 
         raw_result = _normalize_history_result(_history_final_result(history))
         result, final_status, final_notes = _extract_wrapped_result(raw_result)
@@ -2059,7 +2066,9 @@ async def get_run_events(
     run_events = getattr(runtime, "run_events", None)
 
     try:
-        uuid.UUID(str(session_id))
+        parsed_session_id = uuid.UUID(str(session_id))
+        if parsed_session_id.version != 4:
+            raise ValueError("session_id must be UUIDv4")
     except (TypeError, ValueError):
         payload = {
             "version": "gsd.get_run_events.v1",
@@ -2102,19 +2111,137 @@ async def get_run_events(
     if error is None and from_timestamp is not None and parsed_from_timestamp is None:
         error = "from_timestamp must be epoch seconds or ISO-8601 timestamp."
 
-    get_events = getattr(run_events, "get_events", None) if run_events is not None else None
-    events: list[dict[str, Any]]
-    if error is None and callable(get_events):
-        events = get_events(
-            session_id=session_id,
-            last_n=last_n_value,
-            event_types=normalized_types,
-            from_timestamp=parsed_from_timestamp,
-            has_error=has_error,
-            include_details=bool(include_details),
-        )
-    else:
-        events = []
+    if error is not None:
+        payload = {
+            "version": "gsd.get_run_events.v1",
+            "session_id": None,
+            "events": [],
+            "stats": {
+                "counts": {"agent": 0, "console": 0, "network": 0, "total": 0},
+                "oldest_timestamp": None,
+                "newest_timestamp": None,
+            },
+            "error": error,
+        }
+        return [TextContent(type="text", text=json.dumps(payload, ensure_ascii=False))]
+
+    used_distributed = False
+    events: list[dict[str, Any]] = []
+
+    if str(os.environ.get("GSD_S3_ENDPOINT_URL", "")).strip():
+        try:
+            from .optionb.artifact_index import get_artifact_index_store
+            from .optionb.identity import STDIO_IDENTITY
+            from .optionb.request_context import get_current_identity
+            from .optionb.s3_client import get_s3_client
+
+            identity = get_current_identity() or STDIO_IDENTITY
+            store = get_artifact_index_store()
+            docket = store.docket_getter()
+            if docket is not None:
+                used_distributed = True
+                s3 = get_s3_client()
+                zset_key = (
+                    f"gsd:v1:tenants:{identity.tenant_id}:subjects:{identity.subject_id}"
+                    f":sessions:{session_id}:run_events:z"
+                )
+                candidate_limit = 50
+                min_score: int | None = None
+                if parsed_from_timestamp is not None:
+                    min_score = int(float(parsed_from_timestamp) * 1000)
+                async with docket.redis() as redis:
+                    if min_score is None:
+                        candidates = await redis.zrevrange(zset_key, 0, candidate_limit - 1)
+                    else:
+                        candidates = await redis.zrevrangebyscore(
+                            zset_key, "+inf", min_score, start=0, num=candidate_limit
+                        )
+
+                for raw in candidates:
+                    artifact_id = raw.decode("utf-8") if isinstance(raw, bytes) else str(raw)
+                    try:
+                        parsed = uuid.UUID(str(artifact_id))
+                        if parsed.version != 4:
+                            continue
+                    except (TypeError, ValueError):
+                        continue
+
+                    record = await store.get_meta(artifact_id)
+                    if record is None or record.state != "ready":
+                        continue
+                    if record.artifact_kind != "run_event_chunk":
+                        continue
+                    if has_error is True and not bool(record.has_error):
+                        continue
+
+                    try:
+                        body = s3.get_bytes(key=record.s3_key)
+                    except Exception:  # noqa: BLE001
+                        continue
+                    if not body:
+                        continue
+
+                    try:
+                        text = body.decode("utf-8")
+                    except Exception:  # noqa: BLE001
+                        continue
+
+                    for line in text.splitlines():
+                        stripped = line.strip()
+                        if not stripped:
+                            continue
+                        try:
+                            event = json.loads(stripped)
+                        except Exception:  # noqa: BLE001
+                            continue
+                        if not isinstance(event, dict):
+                            continue
+
+                        event_type_value = event.get("event_type") or event.get("type")
+                        if not isinstance(event_type_value, str):
+                            continue
+                        event_type_value = event_type_value.strip()
+                        if normalized_types and event_type_value not in normalized_types:
+                            continue
+
+                        ts = event.get("timestamp")
+                        if ts is None:
+                            ts = event.get("captured_at")
+                        if parsed_from_timestamp is not None and isinstance(ts, (int, float)):
+                            if float(ts) < float(parsed_from_timestamp):
+                                continue
+
+                        if has_error is not None:
+                            if bool(event.get("has_error")) is not bool(has_error):
+                                continue
+
+                        item = dict(event)
+                        if not include_details:
+                            item.pop("details", None)
+                            item.pop("location", None)
+                        events.append(item)
+                        if len(events) >= last_n_value:
+                            break
+
+                    if len(events) >= last_n_value:
+                        break
+        except Exception:  # noqa: BLE001
+            used_distributed = False
+            events = []
+
+    if not used_distributed:
+        get_events = getattr(run_events, "get_events", None) if run_events is not None else None
+        if callable(get_events):
+            events = get_events(
+                session_id=session_id,
+                last_n=last_n_value,
+                event_types=normalized_types,
+                from_timestamp=parsed_from_timestamp,
+                has_error=has_error,
+                include_details=bool(include_details),
+            )
+        else:
+            events = []
 
     counts: dict[str, int] = {"agent": 0, "console": 0, "network": 0, "total": len(events)}
     timestamps: list[float] = []
@@ -2131,13 +2258,13 @@ async def get_run_events(
     payload = {
         "version": "gsd.get_run_events.v1",
         "session_id": session_id,
-        "events": events,
+        "events": events[:last_n_value],
         "stats": {
             "counts": counts,
             "oldest_timestamp": min(timestamps) if timestamps else None,
             "newest_timestamp": max(timestamps) if timestamps else None,
         },
-        "error": error,
+        "error": None,
     }
 
     return [TextContent(type="text", text=json.dumps(payload, ensure_ascii=False))]
