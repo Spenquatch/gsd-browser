@@ -1,0 +1,383 @@
+{
+  "schema_version": "fastmcp_v2_execution_tasks.v1",
+  "project": {
+    "name": "gsd-browser",
+    "branch": "feat/fastmcp-v2-tasks",
+    "goal": "Migrate gsd MCP server to FastMCP v2 Option B with SEP-1686 tasks, Docket/Redis task queue, distributed artifacts (S3-compatible + Redis index), and tenant/subject authorization boundaries.",
+    "single_source_of_truth": [
+      {
+        "path": "gsd-browser/docs/api/FAST_MCP_V2_CANONICAL_SPEC.md",
+        "purpose": "Canonical implementation-level specification (no open questions)."
+      },
+      {
+        "path": "docs/planning/FAST_MCP_V2_OPTION_B_PLAN.md",
+        "purpose": "Spec checklist + implementation plan."
+      },
+      {
+        "path": "docs/planning/FAST_MCP_V2_SESSION_HANDOFF.md",
+        "purpose": "Session resume instructions."
+      },
+      {
+        "path": "gsd-browser/docs/api/STATUS.md",
+        "purpose": "Implemented vs planned boundary."
+      }
+    ],
+    "drift_gate": {
+      "description": "Contract schemas are generated from Pydantic and must match committed JSON Schemas.",
+      "source_model": "gsd-browser/src/gsd_browser/contracts/v1.py",
+      "export_command": "cd gsd-browser && uv sync --frozen && PYTHONPATH=./src uv run python tools/export_contract_schemas.py",
+      "enforcement_test": "cd gsd-browser && uv sync --frozen && PYTHONPATH=./src uv run python -m pytest -q tests/test_exported_jsonschema_in_sync.py"
+    }
+  },
+  "deepwiki": {
+    "when_to_consult": [
+      "If implementing a FastMCP v2 runtime integration and an API behavior is unclear after reading the canonical spec and the plan docs.",
+      "If a FastMCP v2 task/cancellation/progress behavior differs from expectations and you need upstream details or examples.",
+      "If Docket/Redis configuration details are unclear and need upstream confirmation."
+    ],
+    "repos": [
+      {
+        "repo": "jlowin/fastmcp",
+        "use_for": "FastMCP v2 runtime, tasks/background tasks, Docket integration, HTTP transport behavior."
+      }
+    ],
+    "rule": "Consult local repo docs first; only consult DeepWiki when local docs do not answer the question. Record the outcome in the task notes (what was asked and what was learned)."
+  },
+  "global_rules": {
+    "no_spec_drift": "Implementation MUST follow `gsd-browser/docs/api/FAST_MCP_V2_CANONICAL_SPEC.md`. If changes are required, update canonical spec + MCP_TOOLS + contracts + exported JSON schemas in the same PR/commit series.",
+    "validation_before_done": [
+      "make -C gsd-browser lint",
+      "make -C gsd-browser test"
+    ],
+    "schema_export_required_when_contracts_change": true,
+    "session_id_required_for_retrieval_tools": true
+  },
+  "phases": [
+    {
+      "id": "I0",
+      "name": "Determinism + Repo Gates",
+      "goal": "Ensure schema generation and tests are deterministic across environments.",
+      "tasks": [
+        {
+          "id": "I0.1",
+          "title": "Pin schema generation environment",
+          "status": "todo",
+          "depends_on": [],
+          "references": [
+            {
+              "path": "gsd-browser/pyproject.toml",
+              "purpose": "Pydantic version pin for stable JSON schema generation."
+            },
+            {
+              "path": "gsd-browser/uv.lock",
+              "purpose": "Pinned dependency lockfile for reproducible schema outputs."
+            },
+            {
+              "path": "gsd-browser/tests/test_exported_jsonschema_in_sync.py",
+              "purpose": "Drift-gate test."
+            }
+          ],
+          "kickoff_prompt": "You are executing task I0.1. Objective: make JSON schema export deterministic. Steps: (1) Verify `gsd-browser/pyproject.toml` pins Pydantic to a stable minor series; (2) ensure `gsd-browser/uv.lock` is updated and committed; (3) confirm drift gate passes with `uv sync --frozen`.\n\nRequired commands:\n- `cd gsd-browser && uv sync --frozen`\n- `cd gsd-browser && PYTHONPATH=./src uv run python tools/export_contract_schemas.py`\n- `cd gsd-browser && PYTHONPATH=./src uv run python -m pytest -q tests/test_exported_jsonschema_in_sync.py`\n\nIf schema output differs across environments, tighten version pins until stable.",
+          "acceptance_criteria": [
+            {
+              "id": "I0.1.A",
+              "statement": "`uv sync --frozen` succeeds from a clean checkout using `gsd-browser/uv.lock`.",
+              "validation": {
+                "commands": ["cd gsd-browser && uv sync --frozen"],
+                "expect_exit_code": 0
+              }
+            },
+            {
+              "id": "I0.1.B",
+              "statement": "Schema export drift gate passes in the pinned environment.",
+              "validation": {
+                "commands": [
+                  "cd gsd-browser && PYTHONPATH=./src uv run python tools/export_contract_schemas.py",
+                  "cd gsd-browser && PYTHONPATH=./src uv run python -m pytest -q tests/test_exported_jsonschema_in_sync.py"
+                ],
+                "expect_exit_code": 0
+              }
+            },
+            {
+              "id": "I0.1.C",
+              "statement": "If `gsd-browser/src/gsd_browser/contracts/v1.py` changes, updated schemas under `gsd-browser/docs/api/jsonschema/` are committed in the same change set.",
+              "validation": {
+                "commands": ["cd gsd-browser && PYTHONPATH=./src uv run python -m pytest -q tests/test_exported_jsonschema_in_sync.py"],
+                "expect_exit_code": 0
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "I1",
+      "name": "Framework Migration (No Behavior Change)",
+      "goal": "Swap runtime from official SDK FastMCP wrapper to `jlowin/fastmcp` v2 without changing tool semantics.",
+      "tasks": [
+        {
+          "id": "I1.1",
+          "title": "Add FastMCP v2 server entrypoint (stdio)",
+          "status": "todo",
+          "depends_on": ["I0.1"],
+          "references": [
+            {
+              "path": "gsd-browser/docs/api/STATUS.md",
+              "purpose": "Migration boundary; must update once v2 runtime is implemented."
+            },
+            {
+              "path": "gsd-browser/docs/api/FAST_MCP_V2_CANONICAL_SPEC.md",
+              "purpose": "Target runtime semantics; do not change behavior in I1."
+            }
+          ],
+          "kickoff_prompt": "You are executing task I1.1. Objective: add a FastMCP v2 stdio entrypoint that exposes the same tools without changing semantics.\n\nRead first:\n- `gsd-browser/docs/api/STATUS.md`\n- `gsd-browser/docs/api/MCP_TOOLS.md`\n\nRules:\n- No contract or semantic changes in this task.\n- If a behavior change is required, stop and update the canonical spec first.\n\nValidation:\n- `make -C gsd-browser lint`\n- `make -C gsd-browser test`",
+          "acceptance_criteria": [
+            {
+              "id": "I1.1.A",
+              "statement": "A FastMCP v2 stdio server can start and register all tools currently exposed by the SDK server.",
+              "validation": {
+                "commands": ["make -C gsd-browser test"],
+                "expect_exit_code": 0
+              }
+            },
+            {
+              "id": "I1.1.B",
+              "statement": "All existing tests pass with the v2 entrypoint enabled.",
+              "validation": {
+                "commands": ["make -C gsd-browser test"],
+                "expect_exit_code": 0
+              }
+            }
+          ]
+        },
+        {
+          "id": "I1.2",
+          "title": "Port tool policy + registration to FastMCP v2",
+          "status": "todo",
+          "depends_on": ["I1.1"],
+          "references": [
+            {
+              "path": "gsd-browser/docs/api/MCP_TOOLS.md",
+              "purpose": "Tool names, inputs, and output schema references."
+            }
+          ],
+          "kickoff_prompt": "You are executing task I1.2. Objective: ensure tool registration/policy matches existing behavior under FastMCP v2.\n\nIf you are unsure about how FastMCP v2 represents tool metadata, consult DeepWiki `jlowin/fastmcp` with a targeted question, then record what you learned in the task notes.",
+          "acceptance_criteria": [
+            {
+              "id": "I1.2.A",
+              "statement": "Tool list and names match `gsd-browser/docs/api/MCP_TOOLS.md` exactly.",
+              "validation": {
+                "commands": ["make -C gsd-browser test"],
+                "expect_exit_code": 0
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "I2",
+      "name": "Tasks End-to-End (SEP-1686 + Docket + Ownership)",
+      "goal": "Implement FastMCP v2 background tasks for long tools, with ownership authZ, progress, and cancellation semantics.",
+      "tasks": [
+        {
+          "id": "I2.1",
+          "title": "Implement TaskOwnershipStore (Redis) + enforcement on tasks endpoints",
+          "status": "todo",
+          "depends_on": ["I1.2"],
+          "references": [
+            {
+              "path": "gsd-browser/docs/api/FAST_MCP_V2_CANONICAL_SPEC.md",
+              "purpose": "§3.2 Task ownership record; §2.2 task authZ rules."
+            }
+          ],
+          "kickoff_prompt": "You are executing task I2.1.\n\nObjective: Implement TaskOwnershipRecord persistence and enforce it on `tasks/get`, `tasks/result`, and `tasks/cancel`.\n\nRead first:\n- `gsd-browser/docs/api/FAST_MCP_V2_CANONICAL_SPEC.md` (§2.2, §3.2)\n\nRules:\n- All authZ behavior must match canonical spec.\n- Non-enumerability must be preserved (not-found semantics).\n\nValidation:\n- Add unit tests for cross-tenant denial.\n- Run `make -C gsd-browser lint` and `make -C gsd-browser test`.",
+          "acceptance_criteria": [
+            {
+              "id": "I2.1.A",
+              "statement": "Task ownership record is written before returning a Task response; failures abort the call per canonical spec.",
+              "validation": {
+                "commands": ["make -C gsd-browser test"],
+                "expect_exit_code": 0
+              }
+            },
+            {
+              "id": "I2.1.B",
+              "statement": "`tasks/get|result|cancel` reject access from a mismatched tenant/subject with not-found semantics.",
+              "validation": {
+                "commands": ["make -C gsd-browser test"],
+                "expect_exit_code": 0
+              }
+            }
+          ]
+        },
+        {
+          "id": "I2.2",
+          "title": "Mark long tools as task-required and implement progress notifications",
+          "status": "todo",
+          "depends_on": ["I2.1"],
+          "references": [
+            {
+              "path": "gsd-browser/docs/api/MCP_TASKS.md",
+              "purpose": "Task surfaces and UX expectations."
+            },
+            {
+              "path": "gsd-browser/docs/api/FAST_MCP_V2_CANONICAL_SPEC.md",
+              "purpose": "§3.1 task-required tools; §6 progress conventions; §3.4 poll interval."
+            }
+          ],
+          "kickoff_prompt": "You are executing task I2.2.\n\nObjective: enforce `taskSupport=\"required\"` for long tools and emit progress per canonical spec.\n\nDo not invent progress message formats; use the canonical `phase=... step=... note=...` format and the max 200-char note bound.\n\nIf FastMCP v2 progress APIs are unclear, consult DeepWiki `jlowin/fastmcp` and record the answer.",
+          "acceptance_criteria": [
+            {
+              "id": "I2.2.A",
+              "statement": "Invoking `web_eval_agent`, `web_task_agent`, and `web_task_agent_github` returns a Task object (not an immediate result).",
+              "validation": {
+                "commands": ["make -C gsd-browser test"],
+                "expect_exit_code": 0
+              }
+            },
+            {
+              "id": "I2.2.B",
+              "statement": "Progress notifications are emitted at start, per agent step, and on terminal states.",
+              "validation": {
+                "commands": ["make -C gsd-browser test"],
+                "expect_exit_code": 0
+              }
+            }
+          ]
+        },
+        {
+          "id": "I2.3",
+          "title": "Implement cooperative cancellation with resource cleanup",
+          "status": "todo",
+          "depends_on": ["I2.2"],
+          "references": [
+            {
+              "path": "gsd-browser/docs/api/FAST_MCP_V2_CANONICAL_SPEC.md",
+              "purpose": "§3.5 cancellation requirements."
+            }
+          ],
+          "kickoff_prompt": "You are executing task I2.3.\n\nObjective: implement cooperative cancellation that stops work between steps and releases resources in `finally`.\n\nAdd tests that cancel mid-run and confirm task transitions promptly and resources are closed.",
+          "acceptance_criteria": [
+            {
+              "id": "I2.3.A",
+              "statement": "Cancelling an in-flight task transitions it to cancelled promptly and stops further work.",
+              "validation": {
+                "commands": ["make -C gsd-browser test"],
+                "expect_exit_code": 0
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "I3",
+      "name": "Distributed Artifact Store (S3 + Redis Index + Cleanup)",
+      "goal": "Persist artifacts to S3-compatible storage and index in Redis; retrieval tools read from Redis and optionally deliver via inline/presigned modes.",
+      "tasks": [
+        {
+          "id": "I3.1",
+          "title": "Implement S3 client wrapper + presign (SeaweedFS/AWS S3 compatible)",
+          "status": "todo",
+          "depends_on": ["I2.3"],
+          "references": [
+            {
+              "path": "gsd-browser/docs/api/FAST_MCP_V2_CANONICAL_SPEC.md",
+              "purpose": "§4.2 key scheme + encryption; §4.4 presigned URL policy; §8.6 store config."
+            },
+            {
+              "path": "docs/adr/ADR-0009-distributed-artifact-storage-for-scaled-tasks.md",
+              "purpose": "SeaweedFS reference + compatibility matrix."
+            }
+          ],
+          "kickoff_prompt": "You are executing task I3.1.\n\nObjective: implement S3-compatible interactions (PUT/HEAD/GET via presign/DELETE) honoring:\n- key scheme: tenants/{tenant}/subjects/{subject}/sessions/{session}/...\n- Cache-Control: no-store\n- encryption-at-rest policy via `GSD_S3_SSE_MODE`\n\nIf a behavior is unclear across S3-compatible stores, consult ADR-0009 and (only if needed) DeepWiki `jlowin/fastmcp` for upstream examples; do not invent semantics that contradict the canonical spec.",
+          "acceptance_criteria": [
+            {
+              "id": "I3.1.A",
+              "statement": "S3 wrapper supports upload + delete + presign; configuration is validated at startup.",
+              "validation": {
+                "commands": ["make -C gsd-browser test"],
+                "expect_exit_code": 0
+              }
+            }
+          ]
+        },
+        {
+          "id": "I3.2",
+          "title": "Implement Redis artifact index + cleanup lock",
+          "status": "todo",
+          "depends_on": ["I3.1"],
+          "references": [
+            {
+              "path": "gsd-browser/docs/api/FAST_MCP_V2_CANONICAL_SPEC.md",
+              "purpose": "§4.3 Redis index, atomicity, cleanup leadership/lock."
+            }
+          ],
+          "kickoff_prompt": "You are executing task I3.2.\n\nObjective: implement the ArtifactIndexRecord meta + session zsets and cleanup behavior exactly per canonical spec.\n\nCritical requirements:\n- atomicity sequence meta(pending) → upload → finalize(ready + zset)\n- cleanup leader lock: TTL expiry only (do not delete lock key)\n- idempotency rules exactly as specified\n\nWrite tests for partial failures and cleanup idempotency.",
+          "acceptance_criteria": [
+            {
+              "id": "I3.2.A",
+              "statement": "Artifact write atomicity and cleanup idempotency behaviors match canonical spec and are covered by tests.",
+              "validation": {
+                "commands": ["make -C gsd-browser test"],
+                "expect_exit_code": 0
+              }
+            }
+          ]
+        },
+        {
+          "id": "I3.3",
+          "title": "Wire screenshots to distributed store and implement delivery-mode matrix",
+          "status": "todo",
+          "depends_on": ["I3.2"],
+          "references": [
+            {
+              "path": "gsd-browser/docs/api/FAST_MCP_V2_CANONICAL_SPEC.md",
+              "purpose": "§5.1 delivery mode matrix, id/key invariants, and pairing rules."
+            },
+            {
+              "path": "gsd-browser/docs/api/MCP_TOOLS.md",
+              "purpose": "Tool input/output schema and delivery mode docs."
+            }
+          ],
+          "kickoff_prompt": "You are executing task I3.3.\n\nObjective: persist screenshots to the distributed store and make `get_screenshots` read from Redis index.\n\nMust-haves:\n- delivery-mode matrix must match canonical spec\n- `screenshots[].artifact.key == screenshots[].id`\n- timestamps in payload are epoch seconds; internal indices use ms\n\nValidation:\n- run schema export drift gate if any contract changes.\n- `make -C gsd-browser test`",
+          "acceptance_criteria": [
+            {
+              "id": "I3.3.A",
+              "statement": "`get_screenshots` behavior matches the canonical delivery-mode matrix and pairing invariants.",
+              "validation": {
+                "commands": ["make -C gsd-browser test"],
+                "expect_exit_code": 0
+              }
+            }
+          ]
+        },
+        {
+          "id": "I3.4",
+          "title": "Wire run-events to distributed store and enforce canonical filter semantics",
+          "status": "todo",
+          "depends_on": ["I3.3"],
+          "references": [
+            {
+              "path": "gsd-browser/docs/api/FAST_MCP_V2_CANONICAL_SPEC.md",
+              "purpose": "§5.2 filter semantics, invalid input behavior, bounds."
+            }
+          ],
+          "kickoff_prompt": "You are executing task I3.4.\n\nObjective: persist run-events chunks to the distributed store and make `get_run_events` read from Redis/S3 with canonical filtering semantics.\n\nMust-haves:\n- `event_types`, `has_error`, `from_timestamp`, `include_details` semantics exactly match canonical spec\n- `events` bounded to 200\n- timestamps are epoch seconds in payload\n\nValidation:\n- `make -C gsd-browser test`",
+          "acceptance_criteria": [
+            {
+              "id": "I3.4.A",
+              "statement": "`get_run_events` filtering, bounds, and invalid-input behavior match canonical spec and are covered by tests.",
+              "validation": {
+                "commands": ["make -C gsd-browser test"],
+                "expect_exit_code": 0
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
+
