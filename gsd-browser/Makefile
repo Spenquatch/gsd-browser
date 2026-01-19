@@ -11,8 +11,8 @@ help:
 	@echo "  make dev           Create .venv and install deps"
 	@echo "  make bootstrap     Deterministic Option B bootstrap (uv sync --frozen --extra dev)"
 	@echo "  make check         Bootstrap + lint + test"
-	@echo "  make lint          Run Ruff lint (requires dev)"
-	@echo "  make test          Run Pytest (requires dev)"
+	@echo "  make lint          Run Ruff lint (runs bootstrap first)"
+	@echo "  make test          Run Pytest (runs bootstrap first)"
 	@echo "  make smoke         Run smoke test script"
 	@echo "  make sanity-real   Run real-world sanity harness (manual; requires credentials + internet)"
 	@echo "  make prompt-compare Compare extended vs override-enhanced prompts (manual; requires credentials)"
@@ -34,21 +34,11 @@ bootstrap:
 
 check: bootstrap lint test
 
-lint:
-	@if [ -x .venv/bin/ruff ]; then \
-		. .venv/bin/activate && ruff check; \
-	else \
-		echo "Run 'make dev' first to create .venv"; \
-		exit 1; \
-	fi
+lint: bootstrap
+	. .venv/bin/activate && ruff check
 
-test:
-	@if [ -x .venv/bin/pytest ]; then \
-		. .venv/bin/activate && pytest; \
-	else \
-		echo "Run 'make dev' first to create .venv"; \
-		exit 1; \
-	fi
+test: bootstrap
+	. .venv/bin/activate && pytest
 
 smoke:
 	./scripts/smoke-test.sh
