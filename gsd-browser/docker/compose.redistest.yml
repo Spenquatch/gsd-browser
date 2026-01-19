@@ -1,0 +1,18 @@
+# Redis/Valkey harness for Option B integration tests.
+#
+# Usage:
+#   docker compose -f docker/compose.redistest.yml up -d
+#   PYTHONPATH=./src uv run python -m pytest -q tests/integration/test_redis_smoke.py
+#   docker compose -f docker/compose.redistest.yml down -v
+
+services:
+  valkey:
+    image: valkey/valkey:7.2-alpine
+    ports:
+      - "127.0.0.1:6379:6379"
+    command: ["valkey-server", "--save", "", "--appendonly", "no"]
+    volumes:
+      - valkey-data:/data
+
+volumes:
+  valkey-data:

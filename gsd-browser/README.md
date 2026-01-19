@@ -121,6 +121,14 @@ docker build -t gsd:dev -f docker/Dockerfile .
 docker run --rm -e ANTHROPIC_API_KEY=$ANTHROPIC_API_KEY gsd:dev
 ```
 
+## Redis/Valkey (Option B integration tests)
+```bash
+docker compose -f docker/compose.redistest.yml up -d
+uv sync --frozen --extra dev
+PYTHONPATH=./src uv run python -m pytest -q tests/integration/test_redis_smoke.py
+docker compose -f docker/compose.redistest.yml down -v
+```
+
 ## Docs
 - `docs/SETUP.md` – local + pipx + Docker instructions
 - `docs/TROUBLESHOOTING.md` – diagnostics workflow
