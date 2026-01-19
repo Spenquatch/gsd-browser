@@ -11,8 +11,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-
-from mcp.server.fastmcp import FastMCP
+from typing import Protocol
 
 logger = logging.getLogger("gsd_browser.mcp_tools")
 
@@ -115,7 +114,11 @@ def compute_tool_exposure_policy(
     )
 
 
-def apply_tool_exposure_policy(*, mcp: FastMCP, policy: ToolExposurePolicy) -> None:
+class _SupportsRemoveTool(Protocol):
+    def remove_tool(self, name: str) -> None: ...
+
+
+def apply_tool_exposure_policy(*, mcp: _SupportsRemoveTool, policy: ToolExposurePolicy) -> None:
     """Remove tools from a FastMCP instance to match the advertised tool set.
 
     Must be called before `mcp.run(...)` so clients receive a consistent list.
