@@ -36,9 +36,9 @@ JWT verification requirements:
 - `aud` MUST contain `GSD_JWT_AUDIENCE`
 - `exp` MUST be valid (no expired tokens)
 
-Claim → identity mapping (no alternates):
-- `subject_id = <JWT.sub>`
-- `tenant_id = <JWT.tenant_id>`
+Claim → identity mapping:
+- `subject_id` is read from claim name `GSD_JWT_SUBJECT_ID_CLAIM` (default: `sub`)
+- `tenant_id` is read from claim name `GSD_JWT_TENANT_ID_CLAIM` (default: `tenant_id`)
 
 Constraints:
 - `tenant_id` and `subject_id` MUST be non-empty strings (after trimming).
@@ -112,6 +112,13 @@ TTL behavior:
 - The Redis key TTL MUST be set to expire at `expires_at_ms`.
 - On task completion, the TTL remains unchanged (ownership remains valid until expiry).
 
+Task ownership record atomicity:
+- The server MUST persist the TaskOwnershipRecord before returning a `Task` response to the client.
+- If writing the TaskOwnershipRecord fails:
+  - the tool call MUST fail (no `Task` returned to the client)
+  - the server MUST attempt to cancel the created task (best effort)
+  - the server MUST emit an audit log entry with the failure cause and the intended owner identity
+
 ### 3.3 TTL policy (server-controlled)
 Server-side defaults and bounds are fixed:
 - `web_eval_agent`: 900 seconds
@@ -131,7 +138,8 @@ MCP protocol unit conversion:
   the protocol boundary.
 
 ### 3.4 Poll interval
-Server MUST set `Task.pollInterval = 2000` (milliseconds) for these task-required tools.
+Server MUST set `Task.pollInterval = GSD_TASK_POLL_INTERVAL_MS` (milliseconds; default 2000) for
+these task-required tools.
 
 ### 3.5 Cancellation (cooperative; required)
 Cancellation is cooperative and MUST be enforced by the tool implementation:
@@ -165,12 +173,17 @@ Redis is the authoritative index for listing/filtering. S3 is treated as blob st
 Artifact ID format:
 - UUID string (v4)
 
+ID validation:
+- `task_id`, `session_id`, and `artifact_id` MUST be canonical UUIDv4 strings.
+- Any request containing a non-UUID value in a position that is used in Redis key construction MUST
+  be rejected.
+
 Metadata key:
 - `gsd:v1:artifacts:{artifact_id}:meta` → JSON (ArtifactIndexRecord)
 
 Session listing keys:
-- screenshots: `gsd:v1:sessions:{session_id}:screenshots:z`
-- run events: `gsd:v1:sessions:{session_id}:run_events:z`
+- screenshots: `gsd:v1:tenants:{tenant_id}:subjects:{subject_id}:sessions:{session_id}:screenshots:z`
+- run events: `gsd:v1:tenants:{tenant_id}:subjects:{subject_id}:sessions:{session_id}:run_events:z`
 
 Sorted set members and scores:
 - member: `artifact_id`
@@ -180,6 +193,7 @@ ArtifactIndexRecord schema:
 ```json
 {
   "version": "gsd.artifact_index.v1",
+  "state": "pending|ready",
   "artifact_id": "<uuid>",
   "artifact_kind": "screenshot|run_event_chunk",
   "tenant_id": "<tenant_id>",
@@ -198,6 +212,16 @@ ArtifactIndexRecord schema:
 }
 ```
 
+Artifact write atomicity (S3 + Redis):
+- Artifact creation MUST follow this sequence:
+  1) Write Redis metadata key `...:meta` with `state="pending"` and all identity + S3 location fields.
+  2) Upload the object to S3 using the target `s3_key`.
+  3) Finalize Redis by setting `state="ready"` and adding `artifact_id` to the session zset.
+- If step (1) fails: the artifact MUST NOT be uploaded to S3.
+- If step (2) fails: the server MUST delete the Redis metadata key and MUST NOT add any zset member.
+- If step (3) fails: the server MUST leave `state="pending"` and MUST emit an audit log; cleanup MUST
+  treat old pending artifacts as orphaned and delete them (see Cleanup rules).
+
 Index TTL/retention:
 - Default retention is environment-driven and MUST be applied consistently to:
   - S3 objects (deletion)
@@ -207,8 +231,21 @@ Index TTL/retention:
   - `dev`: 86400 seconds (24h)
   - `prod`: 604800 seconds (7d)
 
-The server MUST implement periodic cleanup (interval: 300 seconds) that deletes expired artifacts
-from S3 and removes corresponding Redis keys/members.
+Cleanup rules (required):
+- Leadership: in multi-replica deployments, only one instance MUST run cleanup at a time using a
+  Redis distributed lock:
+  - lock key: `gsd:v1:maintenance:cleanup:lock`
+  - acquisition: `SET <key> <uuid> NX PX <lease_ms>`
+  - lease: `lease_ms = GSD_CLEANUP_INTERVAL_S * 1000 - 5000` (minimum 10000ms)
+  - only the lock holder performs cleanup for that interval
+- Idempotency and partial failure handling:
+  - If S3 delete returns 404/NoSuchKey, treat as success and remove Redis entries.
+  - If Redis meta is missing but zset member exists, remove the zset member.
+  - If Redis meta exists but zset member is missing, leave meta and allow it to expire by TTL.
+  - If S3 delete fails transiently, do not remove the Redis meta/zset member; retry on next cycle.
+- Pending artifacts:
+  - Any artifact with `state="pending"` older than 10 minutes MUST be treated as orphaned and deleted
+    from S3, then removed from Redis.
 
 ### 4.4 Presigned URL policy (Phase 2 contract; required)
 Presigned URLs MUST be generated only after authorization succeeds.
@@ -222,8 +259,15 @@ Constraints:
   - `artifact.url` is the presigned URL
   - `artifact.url_expires_at` is epoch seconds (float)
 
-Caching policy for presigned artifacts:
-- Response headers MUST set `Cache-Control: private, max-age=<expires_in>` (no shared caching).
+Browser completeness requirements:
+- The object store MUST be configured with CORS that allows browser-based clients to fetch artifacts:
+  - Allowed methods: `GET`, `HEAD`
+  - Allowed headers: `*`
+  - Exposed headers: `Content-Type`, `Content-Length`, `ETag`, `Last-Modified`
+  - Allowed origins: the operator UI origin(s) for the deployment
+
+Caching policy (portable across S3-compatible stores):
+- On upload, the server MUST set object metadata `Cache-Control: no-store`.
 
 Clients refresh behavior:
 - Clients MUST re-call retrieval tools to obtain fresh URLs after expiration.
@@ -244,9 +288,12 @@ Filtering:
 - `screenshot_type` filters based on ArtifactIndexRecord.screenshot_type.
 
 Inline image pairing (deterministic):
-- Each screenshot header includes `inline_included`:
+- Each screenshot header includes `inline_included` (server output MUST always be `true` or `false`):
   - `true` when inline image bytes are included in the response as an `ImageContent`
   - `false` when no inline image is included for that screenshot
+- After the JSON header `TextContent`, the response MUST contain only `ImageContent` items.
+- Let `K = count(screenshots[].inline_included == true)`. The response MUST contain exactly `K`
+  `ImageContent` items, in the same order as the corresponding `screenshots[]` headers.
 - Clients MUST iterate `screenshots[]` and consume one `ImageContent` item only when
   `inline_included=true`.
 
@@ -281,6 +328,9 @@ Message format (string; stable prefix keys):
 ```text
 phase=<init|navigate|agent_step|finalize|done|cancelled|failed> step=<n|null> note=<free text>
 ```
+
+Progress message bounds:
+- `note` MUST be at most 200 characters.
 
 ## 7) Diagnostic `code` vocabulary (stable)
 
@@ -320,6 +370,8 @@ All configuration is via environment variables.
 - `GSD_JWT_JWKS_URL` (string; required)
 - `GSD_JWT_ISSUER` (string; required)
 - `GSD_JWT_AUDIENCE` (string; required)
+- `GSD_JWT_TENANT_ID_CLAIM` (string; default: `tenant_id`)
+- `GSD_JWT_SUBJECT_ID_CLAIM` (string; default: `sub`)
 
 ### 8.4 Tasks (required for Option B)
 - `FASTMCP_DOCKET_URL` (string; required): MUST be `redis://...` (no `memory://`)
@@ -347,4 +399,3 @@ All configuration is via environment variables.
 - `GSD_RETENTION_SECONDS_DEV` (int; default: `86400`)
 - `GSD_RETENTION_SECONDS_PROD` (int; default: `604800`)
 - `GSD_CLEANUP_INTERVAL_S` (int; default: `300`)
-

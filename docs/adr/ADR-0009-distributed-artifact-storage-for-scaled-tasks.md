@@ -58,8 +58,8 @@ collection and retrieval must be designed for distributed execution now.
 ## Implementation Notes
 - Define an `ArtifactStore` interface (put/get/list/delete) and a small metadata/index layer.
 - Establish deterministic object keys, for example:
-  - `sessions/{session_id}/screenshots/{ts}-{step}-{type}.png`
-  - `sessions/{session_id}/run-events/{ts}.jsonl`
+  - `tenants/{tenant_id}/subjects/{subject_id}/sessions/{session_id}/screenshots/{ts}-{step}-{type}.png`
+  - `tenants/{tenant_id}/subjects/{subject_id}/sessions/{session_id}/run-events/{ts}.jsonl`
 - Keep binary payloads (images) out of Redis; store references + metadata only.
 - Make the operator dashboard read from the same artifact store/index so it remains accurate under
   distributed execution.

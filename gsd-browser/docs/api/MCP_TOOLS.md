@@ -135,6 +135,9 @@ stable IDs/metadata suitable for switching delivery mode.
 - Each screenshot header includes `inline_included` (boolean). When present and `true`, an inline
   `ImageContent` item is included for that screenshot. Clients should iterate `screenshots[]` and
   consume one image only when `inline_included=true`.
+- After the JSON header `TextContent`, the response contains only `ImageContent` items (no other
+  `Content` types). The number of `ImageContent` items equals the number of screenshot headers where
+  `inline_included=true`, in the same order.
 
 **Delivery mode**
 - Phase 1 default: inline `ImageContent` items plus JSON header metadata.
