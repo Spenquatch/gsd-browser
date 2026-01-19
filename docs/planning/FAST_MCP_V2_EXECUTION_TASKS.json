@@ -584,7 +584,7 @@
         {
           "id": "I2.4",
           "title": "Implement cooperative cancellation with resource cleanup",
-          "status": "todo",
+          "status": "done",
           "risk": "high",
           "deliverables": [
             "gsd-browser/src/gsd_browser (cooperative cancellation checks + cleanup in finally)",
