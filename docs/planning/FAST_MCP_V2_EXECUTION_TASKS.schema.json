@@ -99,7 +99,31 @@
           "items": { "type": "string" }
         },
         "schema_export_required_when_contracts_change": { "type": "boolean" },
-        "session_id_required_for_retrieval_tools": { "type": "boolean" }
+        "session_id_required_for_retrieval_tools": { "type": "boolean" },
+        "session_logging": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["required", "directory", "filename_pattern", "template_path", "start_required", "end_required"],
+          "properties": {
+            "required": { "type": "boolean" },
+            "directory": { "type": "string" },
+            "filename_pattern": { "type": "string" },
+            "template_path": { "type": "string" },
+            "start_required": { "type": "boolean" },
+            "end_required": { "type": "boolean" },
+            "notes": { "type": "string" }
+          }
+        },
+        "commit_policy": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["required", "rule"],
+          "properties": {
+            "required": { "type": "boolean" },
+            "rule": { "type": "string" },
+            "notes": { "type": "string" }
+          }
+        }
       }
     },
     "phases": {

@@ -74,7 +74,21 @@
       "make -C gsd-browser test"
     ],
     "schema_export_required_when_contracts_change": true,
-    "session_id_required_for_retrieval_tools": true
+    "session_id_required_for_retrieval_tools": true,
+    "session_logging": {
+      "required": true,
+      "directory": "docs/planning/execution_logs",
+      "filename_pattern": "{task_id}.md",
+      "template_path": "docs/planning/execution_logs/README.md",
+      "start_required": true,
+      "end_required": true,
+      "notes": "For each task: create a per-task log file at start; append an end-of-task entry after acceptance criteria are met. The end-of-task entry must include the final commit hash(es) for that task."
+    },
+    "commit_policy": {
+      "required": true,
+      "rule": "Each task MUST end with a clean working tree and at least one commit that includes the end-of-task session log entry and all task changes. Do not leave uncommitted changes after marking a task complete.",
+      "notes": "Multiple commits per task are allowed; the final commit is required after the end-of-task log entry is written."
+    }
   },
   "phases": [
     {
