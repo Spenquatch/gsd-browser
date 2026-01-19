@@ -760,7 +760,7 @@
         {
           "id": "I3.3",
           "title": "Wire screenshots to distributed store and implement delivery-mode matrix",
-          "status": "todo",
+          "status": "done",
           "risk": "high",
           "deliverables": [
             "gsd-browser/src/gsd_browser (screenshot persistence to S3 + Redis index; get_screenshots reads from index)",
