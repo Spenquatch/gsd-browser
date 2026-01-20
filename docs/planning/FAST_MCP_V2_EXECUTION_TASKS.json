@@ -959,7 +959,7 @@
         {
           "id": "I4.4",
           "title": "Restart resilience E2E gate",
-          "status": "todo",
+          "status": "done",
           "risk": "high",
           "deliverables": [
             "gsd-browser/tests/integration/test_restart_resilience_e2e.py (new)"
