@@ -874,7 +874,7 @@
         {
           "id": "I4.1b",
           "title": "Task lifecycle E2E gate (full pipeline)",
-          "status": "todo",
+          "status": "done",
           "risk": "high",
           "deliverables": [
             "gsd-browser/tests/integration/test_tasks_lifecycle_e2e_full.py (new)"
