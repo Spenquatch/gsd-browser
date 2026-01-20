@@ -319,7 +319,11 @@ def test_tasks_lifecycle_e2e_full_pipeline(monkeypatch: pytest.MonkeyPatch) -> N
             assert screenshots[0]["artifact"]["url"] is None
             assert screenshots[0]["artifact"]["size_bytes"] == len(png_bytes)
 
-            images = [item for item in screenshots_result.content[1:] if isinstance(item, ImageContent)]
+            images = [
+                item
+                for item in screenshots_result.content[1:]
+                if isinstance(item, ImageContent)
+            ]
             assert len(images) == 1
 
             screenshots_meta_only = await client.call_tool_mcp(
@@ -355,4 +359,3 @@ def test_tasks_lifecycle_e2e_full_pipeline(monkeypatch: pytest.MonkeyPatch) -> N
             assert all("details" not in event for event in events)
 
     asyncio.run(run())
-

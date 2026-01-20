@@ -10,8 +10,8 @@ from pathlib import Path
 from typing import Any
 
 import fastmcp
-import pytest
 import jsonschema
+import pytest
 from fastmcp import Client
 from mcp.types import TextContent
 
