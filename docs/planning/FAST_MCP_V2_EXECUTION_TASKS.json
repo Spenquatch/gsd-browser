@@ -905,7 +905,7 @@
         {
           "id": "I4.2",
           "title": "Cancellation E2E gate",
-          "status": "todo",
+          "status": "done",
           "risk": "high",
           "deliverables": [
             "gsd-browser/tests/integration/test_tasks_cancellation_e2e.py (new)"
