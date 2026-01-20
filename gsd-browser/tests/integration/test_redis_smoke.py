@@ -73,5 +73,10 @@ def test_redis_smoke_connectivity_and_ttl() -> None:
     ttl = client.ttl(key)
     assert 0 <= ttl <= 2
 
-    time.sleep(2.2)
-    assert client.get(key) is None
+    deadline = time.monotonic() + 5.0
+    value = client.get(key)
+    while value is not None and time.monotonic() < deadline:
+        time.sleep(0.1)
+        value = client.get(key)
+
+    assert value is None

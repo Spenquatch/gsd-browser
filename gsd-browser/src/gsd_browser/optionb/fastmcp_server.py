@@ -115,9 +115,27 @@ class GsdFastMCP(FastMCP[Any]):
             return
 
     async def _require_task_owner(self, task_id: str) -> None:
+        from fastmcp.server.dependencies import _current_docket
+
         identity = self._resolve_identity_for_current_request()
         store = task_ownership.get_task_ownership_store()
-        record = await store.get(task_id)
+        docket = getattr(self, "_docket", None)
+        if docket is None:
+            raise McpError(
+                ErrorData(
+                    code=mcp.types.INTERNAL_ERROR,
+                    message="Docket is required for task ownership lookup",
+                )
+            )
+
+        token = None
+        if _current_docket.get() is None:
+            token = _current_docket.set(docket)
+        try:
+            record = await store.get(task_id)
+        finally:
+            if token is not None:
+                _current_docket.reset(token)
         if record is None:
             _raise_not_found(task_id)
         if record.tenant_id != identity.tenant_id or record.subject_id != identity.subject_id:
