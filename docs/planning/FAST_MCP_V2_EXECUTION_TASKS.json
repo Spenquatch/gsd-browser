@@ -932,7 +932,7 @@
         {
           "id": "I4.3",
           "title": "Multi-tenant denial E2E gate (tasks + artifacts)",
-          "status": "todo",
+          "status": "done",
           "risk": "high",
           "deliverables": [
             "gsd-browser/tests/integration/test_multitenant_denial_e2e.py (new)"
