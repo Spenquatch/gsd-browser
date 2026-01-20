@@ -13,9 +13,19 @@ This document is a continuation/handoff plan for migrating `gsd` to FastMCP v2 l
     - Export command: `gsd-browser/tools/export_contract_schemas.py`
   - Contract docs: `gsd-browser/docs/api/MCP_TOOLS.md`, `gsd-browser/docs/api/MCP_TASKS.md`
 - What’s not done yet:
-  - Server is still implemented using the official SDK `mcp.server.fastmcp` (not `jlowin/fastmcp` v2).
-  - Task execution (SEP-1686) is not yet implemented end-to-end in our server runtime.
-  - Artifact store is still in-process for screenshots/run-events (not yet distributed).
+  - The legacy default runtime is still the official SDK `mcp.server.fastmcp` (FastMCP v2 is behind
+    `GSD_USE_FASTMCP_V2=true`).
+  - Codex-compatible “compat job tools” (submit/status/result/cancel) are not implemented yet; Codex does not
+    currently implement SEP-1686 as an MCP host.
+  - “Client-independent” long jobs (external workers as the default execution model) need packaging/docs and
+    a supported worker entrypoint (server concurrency=0, separate workers>0).
+  - MCP-compliant HTTP OAuth discovery/challenge surfaces (RFC 9728 `resource_metadata`, `WWW-Authenticate`
+    semantics, step-up scopes) are not implemented yet (JWT verification is implemented).
+  - Ensure “check later” lookups are independent of the current MCP session ID (identity-scoped access).
+
+Notes:
+- This document started as a migration checklist. Most implementation work has landed; remaining follow-ons are
+  tracked in `docs/planning/BACKLOG.md`.
 
 ## Locked decisions (already chosen)
 From ADR-0008 / ADR-0009:

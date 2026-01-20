@@ -3,8 +3,8 @@
 This document describes how `gsd` uses MCP long-running tasks (SEP-1686) for browser/agent tools.
 
 ## Status / migration boundary
-This document describes the **target** task semantics for the FastMCP v2 migration on
-`feat/fastmcp-v2-tasks`. See `gsd-browser/docs/api/STATUS.md` for what is implemented today.
+This document describes task semantics for the FastMCP v2 runtime on `feat/fastmcp-v2-tasks`.
+See `gsd-browser/docs/api/STATUS.md` for the implemented vs planned boundary and compatibility notes.
 
 Canonical spec: `gsd-browser/docs/api/FAST_MCP_V2_CANONICAL_SPEC.md`.
 
@@ -30,7 +30,7 @@ Progress updates are sent via MCP progress notifications.
 
 This section is fully specified in `gsd-browser/docs/api/FAST_MCP_V2_CANONICAL_SPEC.md` (§3.3–§3.4).
 
-### Concrete defaults (planned)
+### Concrete defaults (contract)
 Defaults (server-chosen):
 - `web_eval_agent`: 15 minutes (`900s`)
 - `web_task_agent`: 30 minutes (`1800s`)
@@ -48,7 +48,7 @@ Config knobs (names are part of the contract):
 - `GSD_TASK_TTL_WEB_TASK_AGENT_S` (int, default 1800)
 - `GSD_TASK_TTL_WEB_TASK_AGENT_GITHUB_S` (int, default 1800)
 
-## Polling + progress (planned)
+## Polling + progress
 - Server sets `Task.pollInterval` to a suggested value appropriate for browser work (default: 2s /
   2000ms).
 - Progress notifications are emitted at least once per “agent step” and on key phase transitions.
@@ -67,3 +67,9 @@ This section is fully specified in `gsd-browser/docs/api/FAST_MCP_V2_CANONICAL_S
 Cancellation is treated as expected control flow:
 - long-running tools must clean up browser sessions/pages on cancellation
 - tasks should report final status promptly after cancellation
+
+## Compatibility notes (important)
+- The legacy SDK runtime (`mcp.server.fastmcp`) does not expose SEP-1686 tasks; it runs tools synchronously.
+- The FastMCP v2 runtime makes long tools task-required, which requires an MCP host that supports SEP-1686.
+  For MCP hosts that do not (e.g., current Codex-as-host usage), `gsd` will need a separate “compat job tools”
+  surface (submit/status/result/cancel/wait). That surface is tracked in `docs/planning/BACKLOG.md`.
