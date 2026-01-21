@@ -89,6 +89,25 @@ def _is_noise_network(*, url: str | None, error: str | None) -> bool:
     return False
 
 
+_JUDGE_BOOLEAN_FLAGS: dict[str, str] = {
+    # Key is the canonical attribute/flag name; value is the human label.
+    "reached_captcha": "judge: reached_captcha",
+    "impossible_task": "judge: impossible_task",
+}
+
+
+def _normalize_judge_flag(flag: str) -> str | None:
+    """Return a canonical judge flag name, or None if unsupported.
+
+    This prevents accidental emission of unstable codes if upstream judgement outputs drift.
+    """
+
+    raw = str(flag or "").strip().lower()
+    if raw in _JUDGE_BOOLEAN_FLAGS:
+        return raw
+    return None
+
+
 @dataclass(frozen=True)
 class RankedFailure:
     score: int
@@ -333,18 +352,18 @@ def rank_failures_for_session(
                                 url=_safe_url(base_url),
                             )
                         )
-                for flag, label in (
-                    ("reached_captcha", "judge: reached_captcha"),
-                    ("impossible_task", "judge: impossible_task"),
-                ):
-                    value = getattr(judgement_value, flag, None)
+                for flag, label in _JUDGE_BOOLEAN_FLAGS.items():
+                    normalized_flag = _normalize_judge_flag(flag)
+                    if normalized_flag is None:
+                        continue
+                    value = getattr(judgement_value, normalized_flag, None)
                     if isinstance(value, bool) and value and label not in seen:
                         seen.add(label)
                         candidates.append(
                             RankedFailure(
                                 score=120,
                                 type="agent",
-                                code=f"judge.{flag}",
+                                code=f"judge.{normalized_flag}",
                                 summary=label,
                                 step=None,
                                 url=_safe_url(base_url),

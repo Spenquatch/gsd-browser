@@ -295,6 +295,78 @@ class TestComputeEffectiveTTL:
 
         assert result == 7_200_000
 
+    def test_rejects_one_ms_over_max_boundary(self) -> None:
+        """Verify ms-level precision: max_s*1000 + 1 ms is rejected."""
+        config = TaskTTLConfig(
+            allow_client_override=True,
+            min_ttl_s=60,
+            max_ttl_s=7200,
+            default_web_eval_agent_s=900,
+            default_web_task_agent_s=1800,
+            default_web_task_agent_github_s=1800,
+        )
+
+        # 7200.001 seconds (1ms over max) should be rejected
+        with pytest.raises(TTLOutOfBoundsError) as exc_info:
+            compute_effective_ttl_ms(
+                tool_name="web_eval_agent",
+                client_ttl_ms=7_200_001,
+                config=config,
+            )
+
+        # Error reports ceiling: (7200001 + 999) // 1000 = 7201
+        assert exc_info.value.requested_s == 7201
+        assert exc_info.value.max_s == 7200
+
+    def test_rejects_max_plus_999ms_edge_case(self) -> None:
+        """Regression test: max_s*1000 + 999 ms must NOT slip through.
+
+        This was the original bug where floor division allowed this edge case.
+        """
+        config = TaskTTLConfig(
+            allow_client_override=True,
+            min_ttl_s=60,
+            max_ttl_s=7200,
+            default_web_eval_agent_s=900,
+            default_web_task_agent_s=1800,
+            default_web_task_agent_github_s=1800,
+        )
+
+        # 7200.999 seconds - previously this slipped through due to flooring
+        with pytest.raises(TTLOutOfBoundsError) as exc_info:
+            compute_effective_ttl_ms(
+                tool_name="web_eval_agent",
+                client_ttl_ms=7_200_999,
+                config=config,
+            )
+
+        # Error reports ceiling: (7200999 + 999) // 1000 = 7201
+        assert exc_info.value.requested_s == 7201
+        assert exc_info.value.max_s == 7200
+
+    def test_rejects_one_ms_under_min_boundary(self) -> None:
+        """Verify ms-level precision: min_s*1000 - 1 ms is rejected."""
+        config = TaskTTLConfig(
+            allow_client_override=True,
+            min_ttl_s=60,
+            max_ttl_s=7200,
+            default_web_eval_agent_s=900,
+            default_web_task_agent_s=1800,
+            default_web_task_agent_github_s=1800,
+        )
+
+        # 59.999 seconds (1ms under min) should be rejected
+        with pytest.raises(TTLOutOfBoundsError) as exc_info:
+            compute_effective_ttl_ms(
+                tool_name="web_eval_agent",
+                client_ttl_ms=59_999,
+                config=config,
+            )
+
+        # Error reports ceiling: (59999 + 999) // 1000 = 60
+        assert exc_info.value.requested_s == 60
+        assert exc_info.value.min_s == 60
+
 
 class TestTTLOutOfBoundsError:
     """Tests for TTLOutOfBoundsError exception."""

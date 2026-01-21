@@ -138,10 +138,15 @@ def compute_effective_ttl_ms(
         return default_ttl_ms
 
     # Client TTL provided and override allowed: enforce bounds
-    client_ttl_s = client_ttl_ms // 1000
-    if client_ttl_s < config.min_ttl_s or client_ttl_s > config.max_ttl_s:
+    # Compare in milliseconds to avoid flooring edge cases
+    # (e.g., max_s*1000 + 999 ms slipping through)
+    min_ttl_ms = config.min_ttl_s * 1000
+    max_ttl_ms = config.max_ttl_s * 1000
+    if client_ttl_ms < min_ttl_ms or client_ttl_ms > max_ttl_ms:
+        # Report in seconds for user-friendly error message (ceiling to show actual overage)
+        requested_s = (client_ttl_ms + 999) // 1000  # ceiling division
         raise TTLOutOfBoundsError(
-            requested_s=client_ttl_s,
+            requested_s=requested_s,
             min_s=config.min_ttl_s,
             max_s=config.max_ttl_s,
         )
