@@ -449,7 +449,9 @@ All configuration is via environment variables.
 
 ### 8.4 Tasks (required for Option B)
 - `FASTMCP_DOCKET_URL` (string; required): MUST be `redis://...` (no `memory://`)
-- `GSD_REDIS_URL` (string; required): Redis/Valkey URL for task ownership + artifact index
+  - All Redis usage (task ownership, artifact indexing, maintenance locks) uses this single Docket
+    Redis backend. There is no separate `GSD_REDIS_URL`; a single Redis instance (or cluster)
+    satisfies all requirements.
 - `GSD_TASK_ALLOW_CLIENT_TTL_OVERRIDE` (bool; default: `false`)
 - `GSD_TASK_TTL_MIN_S` (int; default: `60`)
 - `GSD_TASK_TTL_MAX_S` (int; default: `7200`)
@@ -462,15 +464,17 @@ All configuration is via environment variables.
 - `GSD_ARTIFACT_DELIVERY_MODE` (string): MUST be `inline` or `presigned` or `both` (default: `inline`)
 - `GSD_PRESIGNED_URL_TTL_S` (int; default: `900`, max: `3600`)
 
-### 8.6 S3 artifact store (required for Option B)
+### 8.6 S3 artifact store (required for distributed artifact persistence)
 `gsd` supports AWS S3 and S3-compatible object stores; the self-hosted reference deployment is
 SeaweedFS (via its S3 gateway). See `docs/adr/ADR-0009-distributed-artifact-storage-for-scaled-tasks.md`.
 
-- `GSD_S3_ENDPOINT_URL` (string; required)
-- `GSD_S3_BUCKET` (string; required)
-- `GSD_S3_REGION` (string; required)
-- `GSD_S3_ACCESS_KEY_ID` (string; required)
-- `GSD_S3_SECRET_ACCESS_KEY` (string; required)
+- Without these settings, `gsd` may still run and return inline artifacts, but artifacts are not
+  durably persisted to shared storage for cross-process/replica retrieval.
+- `GSD_S3_ENDPOINT_URL` (string; required for persistence)
+- `GSD_S3_BUCKET` (string; required for persistence)
+- `GSD_S3_REGION` (string; required for persistence)
+- `GSD_S3_ACCESS_KEY_ID` (string; required for persistence)
+- `GSD_S3_SECRET_ACCESS_KEY` (string; required for persistence)
 - `GSD_S3_SSE_MODE` (string): MUST be `sse_s3` or `none` (default: `sse_s3`)
 
 ### 8.7 Retention/cleanup

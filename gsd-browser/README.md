@@ -93,7 +93,7 @@ Once configured as an MCP server, Claude can call:
 - `web_task_agent(url, task, headless_browser=False)` – general-purpose web task runner (does not use saved auth state by default).
 - `web_task_agent_github(url, task, headless_browser=False)` – GitHub workflows using a dedicated `github` saved state.
 - `setup_browser_state(url=None, state_id=None)` – opens a non-headless browser so you can log in, then saves state to `~/.gsd/browser_state/state.json` (or `~/.gsd/browser_state/states/<state_id>.json`).
-- `get_screenshots(last_n=5, screenshot_type="agent_step", session_id=None, from_timestamp=None, has_error=None, include_images=True)` – retrieves recent screenshots (max `last_n=20`); set `include_images=False` for metadata-only.
+- `get_screenshots(last_n=5, screenshot_type="agent_step", session_id="<session_uuid>", from_timestamp=None, has_error=None, include_images=True)` – retrieves recent screenshots (max `last_n=20`); set `include_images=False` for metadata-only.
 
 You can also capture browser state from the CLI:
 ```bash
@@ -114,6 +114,22 @@ For a quick end-to-end check:
 ```bash
 gsd mcp smoke --skip-browser-task
 ```
+
+## FastMCP v2 / Option B (tasks + Redis)
+The Option B runtime uses FastMCP v2 and SEP-1686 long-running tasks for long tools. It requires
+Redis/Valkey via `FASTMCP_DOCKET_URL` (even for stdio).
+
+Enabling:
+- stdio: set `GSD_USE_FASTMCP_V2=true` and `FASTMCP_DOCKET_URL=redis://localhost:6379/0`
+- HTTP: set `GSD_TRANSPORT=http` (plus JWT env vars) and `FASTMCP_DOCKET_URL=redis://...`
+
+Artifact persistence:
+- S3 is optional; it is required only for **distributed artifact persistence** (cross-process/replica
+  retrieval).
+
+References:
+- Status / implemented vs planned: `gsd-browser/docs/api/STATUS.md`
+- Canonical spec: `gsd-browser/docs/api/FAST_MCP_V2_CANONICAL_SPEC.md`
 
 ## Docker
 ```bash

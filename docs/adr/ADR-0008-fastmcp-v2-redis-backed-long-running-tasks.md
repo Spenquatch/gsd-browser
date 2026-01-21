@@ -1,7 +1,10 @@
 # ADR-0008: FastMCP v2 + Redis-backed MCP long-running tasks (SEP-1686)
 
 ## Status
-Proposed
+Accepted
+
+Implementation note: landed in the FastMCP v2 runtime (stdio behind `GSD_USE_FASTMCP_V2=true`, HTTP via
+`GSD_TRANSPORT=http`).
 
 ## Context
 `gsd` exposes browser automation + agent workflows over MCP. Some tool calls are naturally long-running
@@ -68,7 +71,7 @@ execution modes.
 ## Identity + authorization invariants (tasks)
 These are concrete invariants required for the Option B deployment model (multi-worker, multi-replica).
 
-### Identity sources (planned)
+### Identity sources
 - `stdio` transport: treat as single-tenant local trust boundary.
   - `tenant_id="local"`
   - `subject_id="local"`

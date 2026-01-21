@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import logging
-import os
 import uuid
 
 from ..screenshot_manager import Screenshot
@@ -9,6 +8,7 @@ from . import s3_client as s3_client_mod
 from .artifact_index import ArtifactWriter, build_record, get_artifact_index_store
 from .identity import Identity
 from .request_context import get_current_identity
+from .s3_client import has_complete_s3_config
 
 logger = logging.getLogger("gsd_browser.optionb.screenshot_artifacts")
 
@@ -26,10 +26,6 @@ def build_screenshot_s3_key(
     )
 
 
-def _has_required_s3_env() -> bool:
-    return bool(str(os.environ.get("GSD_S3_ENDPOINT_URL", "")).strip())
-
-
 def _is_uuid4(value: str) -> bool:
     try:
         parsed = uuid.UUID(str(value).strip())
@@ -43,7 +39,7 @@ async def persist_screenshot(
     *,
     identity: Identity | None = None,
 ) -> None:
-    if not _has_required_s3_env():
+    if not has_complete_s3_config():
         return
 
     identity_value = identity or get_current_identity()

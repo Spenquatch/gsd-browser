@@ -3,7 +3,8 @@
 Use this file to resume work in a new session without losing context.
 
 ## Branch
-- `feat/fastmcp-v2-tasks`
+- Option B core has landed; follow-on work is tracked in `docs/planning/BACKLOG.md` and ADRs
+  (`docs/adr/ADR-0010-*.md` onward).
 
 ## Local Redis/Valkey harness (do this)
 Some integration tests are skipped unless Redis is running at `redis://localhost:6379/0`.
@@ -57,4 +58,4 @@ Tracked resolutions (Option B checklist):
 - `docs/planning/FAST_MCP_V2_OPTION_B_PLAN.md`
 
 ## Recent commits (branch-only summary)
-Run: `git log --oneline main..HEAD`
+If working on a follow-on branch, use: `git log --oneline main..HEAD`

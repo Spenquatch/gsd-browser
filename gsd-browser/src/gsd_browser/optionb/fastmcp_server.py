@@ -15,6 +15,7 @@ from mcp.types import INVALID_PARAMS, METHOD_NOT_FOUND, ErrorData
 from . import task_ownership
 from .identity import Identity
 from .request_context import identity_scope
+from .task_ttl_policy import TTLOutOfBoundsError, compute_effective_ttl_ms
 
 logger = logging.getLogger("gsd_browser.optionb.fastmcp_server")
 
@@ -160,7 +161,6 @@ class GsdFastMCP(FastMCP[Any]):
         from fastmcp.server.tasks.protocol import (
             tasks_cancel_handler,
             tasks_get_handler,
-            tasks_list_handler,
             tasks_result_handler,
         )
         from mcp.types import (
@@ -189,9 +189,14 @@ class GsdFastMCP(FastMCP[Any]):
                 return ServerResult(result)
 
         async def handle_list_tasks(req: ListTasksRequest) -> ServerResult:
-            params = req.params.model_dump(by_alias=True, exclude_none=True) if req.params else {}
-            result = await tasks_list_handler(self, params)
-            return ServerResult(result)
+            # `tasks/list` is intentionally unsupported to preserve non-enumerability semantics.
+            # See ADR-0012.
+            raise McpError(
+                ErrorData(
+                    code=METHOD_NOT_FOUND,
+                    message="Method tasks/list is not supported",
+                )
+            )
 
         async def handle_cancel_task(req: CancelTaskRequest) -> ServerResult:
             with identity_scope(self._resolve_identity_for_current_request()):
@@ -251,9 +256,43 @@ class GsdFastMCP(FastMCP[Any]):
 
                                 ctx = get_context()
                                 session_id = ctx.session_id
-                                ttl_ms = int(getattr(task_meta, "ttl", 0) or 0)
+                                client_ttl_ms = int(getattr(task_meta, "ttl", 0) or 0)
 
+                                # Compute effective TTL using server-controlled policy
+                                try:
+                                    effective_ttl_ms = compute_effective_ttl_ms(
+                                        tool_name=key,
+                                        client_ttl_ms=client_ttl_ms if client_ttl_ms > 0 else None,
+                                    )
+                                except TTLOutOfBoundsError as exc:
+                                    logger.warning(
+                                        "task.ttl_rejected",
+                                        extra={
+                                            "tool_name": key,
+                                            "requested_ttl_s": exc.requested_s,
+                                            "min_ttl_s": exc.min_s,
+                                            "max_ttl_s": exc.max_s,
+                                        },
+                                    )
+                                    return mcp.types.CallToolResult(
+                                        content=[
+                                            mcp.types.TextContent(
+                                                type="text",
+                                                text=str(exc),
+                                            )
+                                        ],
+                                        isError=True,
+                                        _meta={
+                                            "modelcontextprotocol.io/task": {
+                                                "returned_immediately": True
+                                            }
+                                        },
+                                    )
+
+                                # Build task_meta_dict with server-computed TTL
                                 task_meta_dict = task_meta.model_dump(exclude_none=True)
+                                task_meta_dict["ttl"] = effective_ttl_ms
+
                                 result = await handle_tool_as_task(
                                     self, key, arguments, task_meta_dict
                                 )
@@ -265,7 +304,7 @@ class GsdFastMCP(FastMCP[Any]):
                                     await self._write_task_owner_or_fail(
                                         task_id=task_id.strip(),
                                         tool_name=key,
-                                        ttl_ms=ttl_ms,
+                                        ttl_ms=effective_ttl_ms,
                                         session_id=session_id,
                                     )
                                     task_payload["pollInterval"] = _task_poll_interval_ms()

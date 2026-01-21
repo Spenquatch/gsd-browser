@@ -4,7 +4,7 @@ This document is a continuation/handoff plan for migrating `gsd` to FastMCP v2 l
 (SEP-1686) and distributed artifact storage (S3 + Redis index), while preventing API/contract drift.
 
 ## Current branch / status
-- Branch: `feat/fastmcp-v2-tasks`
+- Status: Option B core has landed; this document is now primarily historical context.
 - What’s done:
   - ADRs exist and have concrete decisions recorded: `docs/adr/ADR-0008-*.md`, `docs/adr/ADR-0009-*.md`
   - Machine-checkable API contract exists:
@@ -25,7 +25,8 @@ This document is a continuation/handoff plan for migrating `gsd` to FastMCP v2 l
 
 Notes:
 - This document started as a migration checklist. Most implementation work has landed; remaining follow-ons are
-  tracked in `docs/planning/BACKLOG.md`.
+  tracked in `docs/planning/BACKLOG.md` (and the canonical implemented-vs-planned view is
+  `gsd-browser/docs/api/STATUS.md`).
 
 ## Locked decisions (already chosen)
 From ADR-0008 / ADR-0009:

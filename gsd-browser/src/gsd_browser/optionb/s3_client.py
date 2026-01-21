@@ -57,6 +57,26 @@ def _validate_presign_ttl_s(value: int) -> int:
     return ttl_s
 
 
+# Required env vars for S3 artifact storage (canonical spec §8.6)
+_REQUIRED_S3_ENV_VARS = (
+    "GSD_S3_ENDPOINT_URL",
+    "GSD_S3_BUCKET",
+    "GSD_S3_REGION",
+    "GSD_S3_ACCESS_KEY_ID",
+    "GSD_S3_SECRET_ACCESS_KEY",
+)
+
+
+def has_complete_s3_config() -> bool:
+    """Return True only if ALL required S3 env vars are set.
+
+    This should be used as the gate before attempting S3 operations. Checking only
+    GSD_S3_ENDPOINT_URL (partial config) will cause S3Config.from_env() to fail with
+    a confusing error about missing vars.
+    """
+    return all(str(os.environ.get(var, "")).strip() for var in _REQUIRED_S3_ENV_VARS)
+
+
 @dataclass(frozen=True, slots=True)
 class S3Config:
     endpoint_url: str

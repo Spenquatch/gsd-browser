@@ -23,6 +23,15 @@ def _configure_memory_docket(monkeypatch: pytest.MonkeyPatch, *, label: str) -> 
     monkeypatch.setattr(fastmcp.settings.docket, "name", f"gsd-{label}")
 
 
+def _configure_fake_s3_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Set all required S3 env vars so has_complete_s3_config() returns True."""
+    monkeypatch.setenv("GSD_S3_ENDPOINT_URL", "http://example.invalid")
+    monkeypatch.setenv("GSD_S3_BUCKET", "test-bucket")
+    monkeypatch.setenv("GSD_S3_REGION", "us-east-1")
+    monkeypatch.setenv("GSD_S3_ACCESS_KEY_ID", "test-key")
+    monkeypatch.setenv("GSD_S3_SECRET_ACCESS_KEY", "test-secret")
+
+
 @dataclass(frozen=True, slots=True)
 class _FakeS3:
     bucket: str
@@ -48,7 +57,7 @@ class _DummyRuntime:
 
 def test_get_run_events_filters_bounds_and_invalid_input(monkeypatch: pytest.MonkeyPatch) -> None:
     _configure_memory_docket(monkeypatch, label="run-events-distributed")
-    monkeypatch.setenv("GSD_S3_ENDPOINT_URL", "http://example.invalid")
+    _configure_fake_s3_env(monkeypatch)
 
     from gsd_browser.optionb import s3_client as s3_client_mod
 
@@ -183,7 +192,7 @@ def test_get_run_events_filters_bounds_and_invalid_input(monkeypatch: pytest.Mon
 
 def test_get_run_events_is_non_enumerable_across_tenants(monkeypatch: pytest.MonkeyPatch) -> None:
     _configure_memory_docket(monkeypatch, label="run-events-non-enumerable")
-    monkeypatch.setenv("GSD_S3_ENDPOINT_URL", "http://example.invalid")
+    _configure_fake_s3_env(monkeypatch)
 
     from gsd_browser.optionb import s3_client as s3_client_mod
 

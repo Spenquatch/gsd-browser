@@ -22,6 +22,7 @@ which is a good baseline, but “fully MCP compliant” HTTP authorization event
 Notes:
 - These are primarily relevant for HTTP transport and multi-tenant deployments.
 - `stdio` remains a local trust boundary (`tenant_id=local`, `subject_id=local`).
+- Track contract decisions in ADR-0013.
 
 ## Implication for `gsd` (detached execution + multi-tenant correctness)
 
@@ -59,12 +60,18 @@ Notes:
 FastMCP’s built-in task protocol handlers key task metadata by `session_id` in Redis. For “check later”
 workflows (and compat job tools), we must not require that the MCP host reuses the same `mcp-session-id`.
 
+- If `tasks/get|result|cancel` effectively require the *current* `mcp-session-id` to match the originating
+  one, then “check later” breaks even when identity matches.
+- If we intend “check later” to work for SEP-1686 tasks as well (not just compat jobs), we need an explicit
+  mapping/lookup strategy that is independent of the current session ID.
+
 - Implement session-independent lookup for status/result/cancel using persisted ownership records.
   - Task ownership already persists `session_id`; use it for lookups rather than the *current* session.
   - Consider persisting the full Docket task key (or a mapping) if required for robust lookup.
 - Add conformance tests:
   - create task in session A, then fetch status/result in session B (same identity) succeeds
   - cross-tenant denial remains non-enumerable
+Track contract decisions in ADR-0012.
 
 ### First-class worker entrypoint + deployment docs
 We need a canonical way to run external workers for `gsd` (not an ad-hoc command).
@@ -88,6 +95,10 @@ subprocess lifecycle coupling.
 - Document Codex configuration for Streamable HTTP transport (url/headers/token env vars).
 - Ensure HTTP mode includes local-security hardening (below).
 
+Notes:
+- Prefer HTTP daemon mode for Codex/client-independent execution in practice; prefer stdio for local/dev
+  convenience.
+
 ### Compat job tools: progress + session IDs
 Compat job tools should support “progress while running” without relying on SEP-1686 notifications.
 
@@ -97,6 +108,7 @@ Compat job tools should support “progress while running” without relying on 
 - Decide how/when `session_id` becomes known for compat jobs:
   - pre-allocate browser `session_id` at submit-time (recommended for “check while running”), or
   - emit it once known via progress/status updates
+Track contract decisions in ADR-0011.
 
 ### HTTP local security hardening (spec guidance)
 For local HTTP deployments, add the missing hardening expected by MCP security guidance.
@@ -104,12 +116,53 @@ For local HTTP deployments, add the missing hardening expected by MCP security g
 - Validate `Origin` on HTTP requests (DNS rebinding mitigation).
 - Bind to localhost by default for local deployments.
 - Ensure logs never include secrets/tokens and redact sensitive headers.
+Track contract decisions in ADR-0014.
+
+### Job retention + cleanup policy (separate from task TTL)
+Once we add compat jobs, we will likely have two clocks:
+- task TTL / backend retention (Docket/task store), and
+- business-level “job retention” (how long after completion we support `job_result` and artifact fetches).
+
+Decide this explicitly to avoid:
+- jobs disappearing “too soon” for Codex workflows, or
+- unbounded retention (storage growth).
+Track contract decisions in ADR-0017.
+
+### Maintenance leadership (where pruning runs)
+If artifact cleanup / pruning is coordinated via a distributed lock (e.g., Redis), decide which process is
+responsible for running maintenance in "server concurrency=0, external workers=N":
+- MCP server process,
+- worker processes, or
+- a dedicated "maintenance" process.
+
+This choice affects deployment docs and reliability.
+Track contract decisions in ADR-0015.
+
+### Artifact cleanup entrypoint (blocked on maintenance leadership)
+`CleanupRunner` is implemented and tested (`optionb/artifact_index.py`), but nothing schedules it.
+Without a deployed cleanup process, S3 objects accumulate even after Redis metadata expires.
+
+**Action items** (once ADR-0015 decides maintenance leadership):
+1. Add a first-class CLI entrypoint (e.g., `gsd mcp maintenance cleanup` or `gsd worker --maintenance`)
+   depending on the chosen leadership model.
+2. Document the entrypoint in ADR-0015 and deployment guides.
+3. For "dedicated maintenance process" model: add a reference compose service and k8s CronJob example.
+4. For "worker-led" or "server-led" model: wire `CleanupRunner.run_once()` into the appropriate daemon loop
+   with the configured interval (`GSD_CLEANUP_INTERVAL_S`).
+5. Add an integration test that verifies cleanup actually runs in a real deployment scenario.
+
+**Current workaround**: Operators can invoke `CleanupRunner.run_once()` manually via a custom script or
+external scheduler (cron, k8s CronJob) until a first-class entrypoint is provided.
+
+### Task enumeration endpoints (security semantics)
+Even if clients don’t use task enumeration, decide whether to:
+- expose `tasks/list` at all,
+- restrict it to identity-scoped results, or
+- disable it to preserve non-enumerability guarantees.
 
 ### Spec + runtime alignment
 Reduce operator confusion and prevent drift between docs and what actually runs.
 
-- Reconcile `GSD_REDIS_URL` usage:
-  - It is referenced in the canonical spec but is not wired as a runtime configuration input today.
-  - Either wire it (as an alias/override) or remove/clarify it in the spec/docs.
+- ~~Reconcile `GSD_REDIS_URL` usage~~ **DONE**: Removed from canonical spec; all Redis usage goes
+  through `FASTMCP_DOCKET_URL`. See ADR-0016 (Accepted).
 - Update status docs so they match reality (implemented vs planned boundary).
-

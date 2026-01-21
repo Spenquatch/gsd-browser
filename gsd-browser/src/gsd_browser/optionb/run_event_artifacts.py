@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 import time
 import uuid
 from typing import Any
@@ -11,6 +10,7 @@ from . import s3_client as s3_client_mod
 from .artifact_index import ArtifactWriter, build_record, get_artifact_index_store
 from .identity import Identity
 from .request_context import get_current_identity
+from .s3_client import has_complete_s3_config
 
 logger = logging.getLogger("gsd_browser.optionb.run_event_artifacts")
 
@@ -26,10 +26,6 @@ def build_run_events_s3_key(
         f"tenants/{identity.tenant_id}/subjects/{identity.subject_id}/sessions/{session_id}"
         f"/run-events/{int(timestamp_ms)}_{chunk_id}.jsonl"
     )
-
-
-def _has_required_s3_env() -> bool:
-    return bool(str(os.environ.get("GSD_S3_ENDPOINT_URL", "")).strip())
 
 
 def _is_uuid4(value: str) -> bool:
@@ -55,7 +51,7 @@ async def persist_run_event_chunk(
     events: list[dict[str, Any]],
     identity: Identity | None = None,
 ) -> None:
-    if not _has_required_s3_env():
+    if not has_complete_s3_config():
         return
 
     identity_value = identity or get_current_identity()

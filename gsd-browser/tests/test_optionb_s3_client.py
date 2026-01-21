@@ -2,7 +2,59 @@ from __future__ import annotations
 
 import pytest
 
-from gsd_browser.optionb.s3_client import S3Client, S3Config
+from gsd_browser.optionb.s3_client import S3Client, S3Config, has_complete_s3_config
+
+
+def test_has_complete_s3_config_returns_false_when_no_vars_set(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """When no S3 env vars are set, has_complete_s3_config returns False."""
+    for name in (
+        "GSD_S3_ENDPOINT_URL",
+        "GSD_S3_BUCKET",
+        "GSD_S3_REGION",
+        "GSD_S3_ACCESS_KEY_ID",
+        "GSD_S3_SECRET_ACCESS_KEY",
+    ):
+        monkeypatch.delenv(name, raising=False)
+
+    assert has_complete_s3_config() is False
+
+
+def test_has_complete_s3_config_returns_false_for_partial_config(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """When only some S3 env vars are set (partial config), returns False.
+
+    This prevents confusing errors where the code thinks S3 is enabled but
+    S3Config.from_env() fails due to missing vars.
+    """
+    for name in (
+        "GSD_S3_ENDPOINT_URL",
+        "GSD_S3_BUCKET",
+        "GSD_S3_REGION",
+        "GSD_S3_ACCESS_KEY_ID",
+        "GSD_S3_SECRET_ACCESS_KEY",
+    ):
+        monkeypatch.delenv(name, raising=False)
+
+    # Set only GSD_S3_ENDPOINT_URL (the old buggy check)
+    monkeypatch.setenv("GSD_S3_ENDPOINT_URL", "http://s3.test")
+
+    assert has_complete_s3_config() is False
+
+
+def test_has_complete_s3_config_returns_true_when_all_vars_set(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """When all required S3 env vars are set, returns True."""
+    monkeypatch.setenv("GSD_S3_ENDPOINT_URL", "http://s3.test")
+    monkeypatch.setenv("GSD_S3_BUCKET", "test-bucket")
+    monkeypatch.setenv("GSD_S3_REGION", "us-east-1")
+    monkeypatch.setenv("GSD_S3_ACCESS_KEY_ID", "test-key")
+    monkeypatch.setenv("GSD_S3_SECRET_ACCESS_KEY", "test-secret")
+
+    assert has_complete_s3_config() is True
 
 
 def test_s3_config_from_env_requires_required_fields(monkeypatch: pytest.MonkeyPatch) -> None:

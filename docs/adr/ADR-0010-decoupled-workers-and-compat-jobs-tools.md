@@ -19,6 +19,15 @@ Goal: support **client-independent** long jobs:
 
 ## Decision
 
+### 0) Session independence is a hard requirement (both paths)
+After decoupling execution into external workers, a long-running unit of work (job/task) MUST be
+retrievable from a new MCP server instance / a new host session, provided the caller’s identity
+matches the persisted ownership record.
+
+This requirement applies to:
+- the compat jobs surface (regular tools), and
+- the SEP-1686 task surface (`tasks/get|result|cancel`) when feasible.
+
 ### 1) Run execution in a separate worker process
 Adopt the FastMCP/Docket scale pattern:
 - MCP server processes run with `FASTMCP_DOCKET_CONCURRENCY=0` so they **do not execute** tasks.
@@ -70,16 +79,22 @@ To preserve multi-tenant boundaries:
   record that workers consult before executing.
 - Keep the native SEP-1686 path intact for MCP hosts that support it.
 
+## Acceptance / conformance
+- Start stdio server, submit long job, kill stdio server process: job continues (worker). Later start a
+  new server instance and `job_get`/`job_result` succeeds.
+- Same identity can fetch; different tenant/subject gets a non-enumerable “not found”.
+- (Optional) The SEP-1686 `tasks/get|result|cancel` path also works across server restart / new session.
+
 ## Open Questions
-- Should compat job IDs be identical to Docket task IDs, or a separate stable “gsd job ID” mapping?
-- What is the minimal progress snapshot surface for compat jobs (Docket progress message only vs
-  session-scoped run-events/screenshot listing)?
-- For HTTP OAuth compliance: do we adopt a FastMCP auth provider that exposes RFC 9728 metadata
-  endpoints, or keep JWT verification-only for a transitional period?
+- Compat jobs contract/IDs/progress surface: track in ADR-0011.
+- Session-independent task lookup for SEP-1686: track in ADR-0012.
+- MCP-compliant HTTP auth surfaces (OAuth discovery/challenges/scopes): track in ADR-0013.
 
 ## References
 - ADR-0008: FastMCP v2 + Redis-backed MCP long-running tasks (SEP-1686)
 - ADR-0009: Distributed artifact storage for scaled task execution
+- ADR-0011: Compat job tools contract and job ID strategy
+- ADR-0012: Session-independent task lookup for SEP-1686 tasks
+- ADR-0013: MCP-compliant HTTP authorization surfaces and scope model
 - `docs/planning/BACKLOG.md`
 - `gsd-browser/docs/api/FAST_MCP_V2_CANONICAL_SPEC.md`
-

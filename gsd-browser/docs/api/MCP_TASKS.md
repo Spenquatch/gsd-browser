@@ -3,8 +3,9 @@
 This document describes how `gsd` uses MCP long-running tasks (SEP-1686) for browser/agent tools.
 
 ## Status / migration boundary
-This document describes task semantics for the FastMCP v2 runtime on `feat/fastmcp-v2-tasks`.
-See `gsd-browser/docs/api/STATUS.md` for the implemented vs planned boundary and compatibility notes.
+This document describes task semantics for the FastMCP v2 runtime.
+See `gsd-browser/docs/api/STATUS.md` for the implemented vs planned boundary and compatibility notes
+(including stdio legacy vs v2 selection).
 
 Canonical spec: `gsd-browser/docs/api/FAST_MCP_V2_CANONICAL_SPEC.md`.
 
@@ -71,5 +72,14 @@ Cancellation is treated as expected control flow:
 ## Compatibility notes (important)
 - The legacy SDK runtime (`mcp.server.fastmcp`) does not expose SEP-1686 tasks; it runs tools synchronously.
 - The FastMCP v2 runtime makes long tools task-required, which requires an MCP host that supports SEP-1686.
+  - For stdio, FastMCP v2 is currently gated behind `GSD_USE_FASTMCP_V2=true`.
+  - For HTTP (`GSD_TRANSPORT=http`), `gsd` runs FastMCP v2 (Streamable HTTP).
   For MCP hosts that do not (e.g., current Codex-as-host usage), `gsd` will need a separate “compat job tools”
   surface (submit/status/result/cancel/wait). That surface is tracked in `docs/planning/BACKLOG.md`.
+- `tasks/list` is intentionally not supported (method not found) to preserve non-enumerability semantics.
+
+### ⚠ Known limitation: cross-session “check later” may not work yet for SEP-1686 tasks
+Today, SEP-1686 access is identity/tenant authorized, but task lookup may still be coupled to the
+originating transport session in the underlying task backend. True session-independent `tasks/get`,
+`tasks/result`, and `tasks/cancel` behavior (create in session A, fetch in session B) is tracked in
+ADR-0012.

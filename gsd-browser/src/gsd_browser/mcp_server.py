@@ -2128,7 +2128,14 @@ async def get_run_events(
     used_distributed = False
     events: list[dict[str, Any]] = []
 
-    if str(os.environ.get("GSD_S3_ENDPOINT_URL", "")).strip():
+    try:
+        from .optionb.s3_client import has_complete_s3_config
+
+        s3_available = has_complete_s3_config()
+    except ImportError:
+        s3_available = False
+
+    if s3_available:
         try:
             from .optionb.artifact_index import get_artifact_index_store
             from .optionb.identity import STDIO_IDENTITY
@@ -2439,7 +2446,14 @@ async def get_screenshots(
     error: str | None = None
     used_distributed = False
 
-    if str(os.environ.get("GSD_S3_ENDPOINT_URL", "")).strip():
+    try:
+        from .optionb.s3_client import has_complete_s3_config
+
+        s3_available = has_complete_s3_config()
+    except ImportError:
+        s3_available = False
+
+    if s3_available:
         try:
             from .optionb.artifact_index import get_artifact_index_store
             from .optionb.identity import STDIO_IDENTITY

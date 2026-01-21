@@ -1,7 +1,11 @@
 # ADR-0009: Distributed artifact storage for scaled task execution
 
 ## Status
-Proposed
+Accepted
+
+Implementation note: distributed artifact storage + index is implemented when the required S3 env vars
+are configured; without S3 configuration, artifacts may be returned inline but are not durably
+persisted to shared storage.
 
 ## Context
 “Option B” (scale-ready) implies that long-running browser/agent work can execute in separate worker

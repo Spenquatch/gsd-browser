@@ -22,6 +22,15 @@ def _configure_memory_docket(monkeypatch: pytest.MonkeyPatch, *, label: str) -> 
     monkeypatch.setattr(fastmcp.settings.docket, "name", f"gsd-{label}")
 
 
+def _configure_fake_s3_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Set all required S3 env vars so has_complete_s3_config() returns True."""
+    monkeypatch.setenv("GSD_S3_ENDPOINT_URL", "http://example.invalid")
+    monkeypatch.setenv("GSD_S3_BUCKET", "test-bucket")
+    monkeypatch.setenv("GSD_S3_REGION", "us-east-1")
+    monkeypatch.setenv("GSD_S3_ACCESS_KEY_ID", "test-key")
+    monkeypatch.setenv("GSD_S3_SECRET_ACCESS_KEY", "test-secret")
+
+
 @dataclass(frozen=True, slots=True)
 class _FakeS3:
     bucket: str
@@ -56,7 +65,7 @@ def test_get_screenshots_delivery_mode_matrix(
     expect_presigned: bool,
 ) -> None:
     _configure_memory_docket(monkeypatch, label="screenshots-delivery-mode")
-    monkeypatch.setenv("GSD_S3_ENDPOINT_URL", "http://example.invalid")
+    _configure_fake_s3_env(monkeypatch)
     monkeypatch.setenv("GSD_ARTIFACT_DELIVERY_MODE", delivery_mode)
     monkeypatch.setenv("GSD_PRESIGNED_URL_TTL_S", "900")
 
@@ -155,7 +164,7 @@ def test_get_screenshots_is_non_enumerable_across_tenants(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     _configure_memory_docket(monkeypatch, label="screenshots-non-enumerable")
-    monkeypatch.setenv("GSD_S3_ENDPOINT_URL", "http://example.invalid")
+    _configure_fake_s3_env(monkeypatch)
     monkeypatch.setenv("GSD_ARTIFACT_DELIVERY_MODE", "inline")
 
     from gsd_browser.optionb import s3_client as s3_client_mod

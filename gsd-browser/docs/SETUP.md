@@ -59,6 +59,29 @@ vim .env          # set LLM provider + API keys, LOG_LEVEL, GSD_JSON_LOGS, etc.
 ```
 `./scripts/run-local.sh` runs the MCP stdio server (`serve`) from a checkout without a global install.
 
+## FastMCP v2 / Option B (preview)
+The Option B runtime uses FastMCP v2 and SEP-1686 long-running tasks for long tools. It requires
+Redis/Valkey via `FASTMCP_DOCKET_URL` (even for stdio).
+
+Minimum env:
+- `GSD_USE_FASTMCP_V2=true` (stdio only; enables the v2 entrypoint)
+- `FASTMCP_DOCKET_URL=redis://localhost:6379/0`
+
+Quick local Redis/Valkey:
+```bash
+cd gsd-browser
+make redistest-up
+```
+
+Artifact persistence:
+- S3 is optional; it is required only for **distributed artifact persistence** (cross-process/replica
+  retrieval). Without S3 configured, artifacts may still be returned inline but are not durably
+  persisted to shared storage.
+
+References:
+- Status / implemented vs planned: `gsd-browser/docs/api/STATUS.md`
+- Canonical spec: `gsd-browser/docs/api/FAST_MCP_V2_CANONICAL_SPEC.md`
+
 ## .env Loading
 By default, `gsd` loads a `.env` file from the current working directory (if present), and then reads the process environment (shell env vars take precedence).
 

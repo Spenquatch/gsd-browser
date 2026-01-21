@@ -1,2 +1,5 @@
 artifacts/
 review_bundles/
+
+*.gz
+*.zip

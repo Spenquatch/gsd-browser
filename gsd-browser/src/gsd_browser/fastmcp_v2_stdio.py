@@ -1,7 +1,8 @@
 """FastMCP v2 (Option B) stdio entrypoint.
 
 This module wires the existing tool implementations into `fastmcp` v2 without changing tool
-semantics. Task support, Redis/Docket, and multi-tenant auth are implemented in later tasks.
+semantics. It uses the Option B runtime (Redis/Valkey-backed Docket tasks + identity-scoped
+authorization/ownership enforcement).
 """
 
 from __future__ import annotations
