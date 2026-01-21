@@ -2,8 +2,11 @@
   "status": "failed",
   "errors_top": [
     {
-      "type": "judge",
-      "summary": "HTTP 403 from target site"
+      "type": "agent",
+      "code": "judge.failure_reason",
+      "summary": "judge: HTTP 403 from target site",
+      "step": null,
+      "url": null
     }
   ]
 }

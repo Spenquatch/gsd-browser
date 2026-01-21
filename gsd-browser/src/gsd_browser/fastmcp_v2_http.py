@@ -65,7 +65,7 @@ def build_http_app() -> StarletteWithLifespan:
     )
 
     # Use FastMCP's "streamable-http" transport (FastMCP v2).
-    return mcp.http_app(transport="streamable-http")
+    return mcp.http_app(transport="streamable-http", stateless_http=True)
 
 
 app: StarletteWithLifespan | None = build_http_app() if _transport() == "http" else None

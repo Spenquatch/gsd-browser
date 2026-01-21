@@ -78,8 +78,11 @@ Cancellation is treated as expected control flow:
   surface (submit/status/result/cancel/wait). That surface is tracked in `docs/planning/BACKLOG.md`.
 - `tasks/list` is intentionally not supported (method not found) to preserve non-enumerability semantics.
 
-### ⚠ Known limitation: cross-session “check later” may not work yet for SEP-1686 tasks
-Today, SEP-1686 access is identity/tenant authorized, but task lookup may still be coupled to the
-originating transport session in the underlying task backend. True session-independent `tasks/get`,
-`tasks/result`, and `tasks/cancel` behavior (create in session A, fetch in session B) is tracked in
-ADR-0012.
+### Cross-session “check later” support
+SEP-1686 access is identity/tenant authorized and task lookup is session-independent:
+- a task created in session A can be fetched/cancelled from session B (same identity), and
+- HTTP can be configured as stateless so clients do not need to reuse `mcp-session-id` headers.
+
+Design note:
+- `tasks/get|result|cancel` uses the persisted task ownership record to locate the underlying task
+  across sessions (see ADR-0012).

@@ -1,7 +1,7 @@
 # ADR-0012: Session-independent task lookup for SEP-1686 tasks
 
 ## Status
-Proposed
+Accepted
 
 ## Context
 FastMCP v2 implements SEP-1686 tasks (`tasks/get|result|cancel`) using a Redis-backed Docket store.
@@ -55,6 +55,8 @@ where callers need task enumeration, see ADR-0018 which defines CLI (`gsd tasks 
 - Adds more “durability plumbing” to maintain and test.
 
 ## Implementation Notes
+- Implemented by persisting TaskOwnershipRecord (keyed by `taskId`) and using the stored `session_id` to temporarily bind FastMCP task protocol handler lookups to the originating session.
+- See: `gsd-browser/src/gsd_browser/optionb/fastmcp_server.py` (`_setup_task_protocol_handlers`).
 - Persist per-task ownership/mapping records with at least:
   - `taskId`, `tool_name`, `tenant_id`, `subject_id`, `created_at`, `expires_at`,
   - any backend-specific locator needed to fetch status/result/cancel from a new session.

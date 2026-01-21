@@ -2520,6 +2520,16 @@ async def get_screenshots(
                             artifact_url, artifact_url_expires_at = s3.presign_get(
                                 key=record.s3_key, ttl_s=ttl_s
                             )
+                            logger.info(
+                                "audit.presign_issued",
+                                extra={
+                                    "artifact_id": artifact_id,
+                                    "tenant_id": identity.tenant_id,
+                                    "subject_id": identity.subject_id,
+                                    "session_id": session_id,
+                                    "expires_at": artifact_url_expires_at,
+                                },
+                            )
                         except Exception as exc:  # noqa: BLE001
                             logger.warning(
                                 "audit.presign_failed",
@@ -2540,7 +2550,7 @@ async def get_screenshots(
                             "session_id": record.session_id,
                             "has_error": record.has_error,
                             "mime_type": record.content_type,
-                            "url": record.page_url,
+                            "url": _public_url(record.page_url),
                             "step": record.step,
                             "inline_included": bool(inline_included),
                             "metadata": {},

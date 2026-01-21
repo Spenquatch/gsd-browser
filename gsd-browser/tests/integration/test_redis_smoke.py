@@ -11,7 +11,9 @@ import redis
 
 
 def _redis_url() -> str:
-    return os.environ.get("GSD_REDIS_URL", "redis://localhost:6379/0")
+    # All Redis usage in Option B is configured via FastMCP/Docket.
+    # Keep this smoke test aligned with the operator-facing knob.
+    return os.environ.get("FASTMCP_DOCKET_URL", "redis://localhost:6379/0")
 
 
 def _wait_for_redis(client: redis.Redis, timeout_s: float = 30.0) -> None:
@@ -60,7 +62,7 @@ def test_redis_smoke_connectivity_and_ttl() -> None:
         if harness_running:
             raise
         pytest.skip(
-            f"Redis is not available at {_redis_url()}; start the harness with "
+            f"Redis/Valkey is not available at {_redis_url()}; start the harness with "
             f"`docker compose -f docker/compose.redistest.yml up -d` ({exc})"
         )
 

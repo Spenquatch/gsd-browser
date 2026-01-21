@@ -123,7 +123,6 @@ def test_restart_resilience_e2e(monkeypatch: pytest.MonkeyPatch) -> None:
     env["PYTHONUNBUFFERED"] = "1"
     env["PYTHONPATH"] = str(_repo_root() / "src")
     env["FASTMCP_DOCKET_URL"] = docket_url
-    env["GSD_REDIS_URL"] = docket_url
     env["GSD_TEST_DOCKET_NAME"] = docket_name
     env["GSD_TASK_POLL_INTERVAL_MS"] = "50"
     env["GSD_TEST_REDELIVERY_TIMEOUT_MS"] = "250"

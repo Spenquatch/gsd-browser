@@ -45,7 +45,7 @@ def _require_task_id(params: object | None) -> str:
 
 
 def _raise_not_found(task_id: str) -> None:
-    raise McpError(ErrorData(code=INVALID_PARAMS, message=f"Task {task_id} not found"))
+    raise NotFoundError(f"Task {task_id} not found")
 
 
 class GsdFastMCP(FastMCP[Any]):
@@ -115,7 +115,7 @@ class GsdFastMCP(FastMCP[Any]):
         except Exception:  # noqa: BLE001
             return
 
-    async def _require_task_owner(self, task_id: str) -> None:
+    async def _require_task_owner(self, task_id: str) -> task_ownership.TaskOwnershipRecord:
         from fastmcp.server.dependencies import _current_docket
 
         identity = self._resolve_identity_for_current_request()
@@ -156,6 +156,8 @@ class GsdFastMCP(FastMCP[Any]):
             )
             _raise_not_found(task_id)
 
+        return record
+
     def _setup_task_protocol_handlers(self) -> None:  # noqa: D401
         """Register task protocol handlers with ownership enforcement."""
         from fastmcp.server.tasks.protocol import (
@@ -174,18 +176,46 @@ class GsdFastMCP(FastMCP[Any]):
         async def handle_get_task(req: GetTaskRequest) -> ServerResult:
             with identity_scope(self._resolve_identity_for_current_request()):
                 task_id = _require_task_id(req.params)
-                await self._require_task_owner(task_id)
+                record = await self._require_task_owner(task_id)
                 params = req.params.model_dump(by_alias=True, exclude_none=True)
-                result = await tasks_get_handler(self, params)
+                request_ctx = self._mcp_server.request_context
+                sentinel = object()
+                original_session_id = getattr(request_ctx, "session_id", sentinel)
+                request_ctx.session_id = record.session_id
+                try:
+                    result = await tasks_get_handler(self, params)
+                finally:
+                    if original_session_id is sentinel:
+                        try:
+                            delattr(request_ctx, "session_id")
+                        except Exception:  # noqa: BLE001
+                            pass
+                    else:
+                        request_ctx.session_id = original_session_id
+
                 updated = result.model_copy(update={"pollInterval": _task_poll_interval_ms()})
                 return ServerResult(updated)
 
         async def handle_get_task_result(req: GetTaskPayloadRequest) -> ServerResult:
             with identity_scope(self._resolve_identity_for_current_request()):
                 task_id = _require_task_id(req.params)
-                await self._require_task_owner(task_id)
+                record = await self._require_task_owner(task_id)
                 params = req.params.model_dump(by_alias=True, exclude_none=True)
-                result = await tasks_result_handler(self, params)
+                request_ctx = self._mcp_server.request_context
+                sentinel = object()
+                original_session_id = getattr(request_ctx, "session_id", sentinel)
+                request_ctx.session_id = record.session_id
+                try:
+                    result = await tasks_result_handler(self, params)
+                finally:
+                    if original_session_id is sentinel:
+                        try:
+                            delattr(request_ctx, "session_id")
+                        except Exception:  # noqa: BLE001
+                            pass
+                    else:
+                        request_ctx.session_id = original_session_id
+
                 return ServerResult(result)
 
         async def handle_list_tasks(req: ListTasksRequest) -> ServerResult:
@@ -201,9 +231,23 @@ class GsdFastMCP(FastMCP[Any]):
         async def handle_cancel_task(req: CancelTaskRequest) -> ServerResult:
             with identity_scope(self._resolve_identity_for_current_request()):
                 task_id = _require_task_id(req.params)
-                await self._require_task_owner(task_id)
+                record = await self._require_task_owner(task_id)
                 params = req.params.model_dump(by_alias=True, exclude_none=True)
-                result = await tasks_cancel_handler(self, params)
+                request_ctx = self._mcp_server.request_context
+                sentinel = object()
+                original_session_id = getattr(request_ctx, "session_id", sentinel)
+                request_ctx.session_id = record.session_id
+                try:
+                    result = await tasks_cancel_handler(self, params)
+                finally:
+                    if original_session_id is sentinel:
+                        try:
+                            delattr(request_ctx, "session_id")
+                        except Exception:  # noqa: BLE001
+                            pass
+                    else:
+                        request_ctx.session_id = original_session_id
+
                 updated = result.model_copy(update={"pollInterval": _task_poll_interval_ms()})
                 return ServerResult(updated)
 

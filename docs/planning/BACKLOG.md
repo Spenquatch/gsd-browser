@@ -56,9 +56,12 @@ Notes:
 
 ## Additional gaps to plan for
 
-### Task lookup must not depend on the current MCP session
+### Task lookup must not depend on the current MCP session (DONE)
 FastMCP’s built-in task protocol handlers key task metadata by `session_id` in Redis. For “check later”
 workflows (and compat job tools), we must not require that the MCP host reuses the same `mcp-session-id`.
+
+
+**DONE**: Implemented session-independent `tasks/get|result|cancel` by using the persisted TaskOwnershipRecord (including the originating `session_id`) to locate the underlying Docket task across new sessions/restarts. See `gsd-browser/src/gsd_browser/optionb/fastmcp_server.py` and ADR-0012.
 
 - If `tasks/get|result|cancel` effectively require the *current* `mcp-session-id` to match the originating
   one, then “check later” breaks even when identity matches.

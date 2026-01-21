@@ -10,6 +10,7 @@ FastMCP v2 (Option B) runtime.
 - A FastMCP v2 stdio entrypoint is implemented behind `GSD_USE_FASTMCP_V2=true`.
 - FastMCP v2 requires Redis/Valkey via `FASTMCP_DOCKET_URL` (even on stdio).
 - A FastMCP v2 HTTP (ASGI) entrypoint is implemented when `GSD_TRANSPORT=http` and JWT config is present.
+  - HTTP transport is configured as stateless (`stateless_http=True`) so clients do not need to reuse `mcp-session-id` headers across calls.
 - Tool responses follow the JSON payload schemas documented in `gsd-browser/docs/api/MCP_TOOLS.md`.
 - SEP-1686 long-running tasks are implemented for long tools in the FastMCP v2 runtime:
   - long tools are task-required in v2
@@ -35,7 +36,6 @@ FastMCP v2 (Option B) runtime.
   (server concurrency=0, separate workers>0).
 - MCP-compliant HTTP OAuth discovery/challenge surfaces (RFC 9728 `resource_metadata`, `WWW-Authenticate`
   semantics, step-up scopes, resource indicators / audience binding).
-- Make “check later” task lookups independent of the current MCP session ID (identity-scoped access).
 
 ## Minimum supported versions (for the Option B runtime)
 - Python: `>=3.11` (this repo’s baseline)

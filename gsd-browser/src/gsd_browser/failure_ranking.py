@@ -93,13 +93,18 @@ def _is_noise_network(*, url: str | None, error: str | None) -> bool:
 class RankedFailure:
     score: int
     type: str
+    # Optional machine-readable code for stable filtering/ranking.
+    # NOTE: This is propagated into the public payload and should remain short.
+    code: str | None
     summary: str
     step: int | None
     url: str | None
 
     def to_public_dict(self) -> dict[str, Any]:
+        # Keep a stable shape for downstream consumers: all keys are present.
         return {
             "type": self.type,
+            "code": self.code,
             "summary": _truncate(self.summary, max_len=400),
             "step": self.step,
             "url": _safe_url(self.url),
@@ -215,6 +220,7 @@ def rank_failures_for_session(
                     RankedFailure(
                         score=score,
                         type="console",
+                        code=None,
                         summary=summary,
                         step=step_ctx,
                         url=url_ctx,
@@ -259,6 +265,7 @@ def rank_failures_for_session(
                 RankedFailure(
                     score=score,
                     type="network",
+                    code=None,
                     summary=summary,
                     step=step_ctx,
                     url=url_safe or url_ctx,
@@ -295,6 +302,7 @@ def rank_failures_for_session(
                     RankedFailure(
                         score=score,
                         type="agent",
+                        code=None,
                         summary=text,
                         step=None,
                         url=_safe_url(base_url),
@@ -318,7 +326,8 @@ def rank_failures_for_session(
                         candidates.append(
                             RankedFailure(
                                 score=120,
-                                type="judge",
+                                type="agent",
+                                code="judge.failure_reason",
                                 summary=f"judge: {text}",
                                 step=None,
                                 url=_safe_url(base_url),
@@ -334,7 +343,8 @@ def rank_failures_for_session(
                         candidates.append(
                             RankedFailure(
                                 score=120,
-                                type="judge",
+                                type="agent",
+                                code=f"judge.{flag}",
                                 summary=label,
                                 step=None,
                                 url=_safe_url(base_url),
