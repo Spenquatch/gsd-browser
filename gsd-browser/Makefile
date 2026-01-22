@@ -1,4 +1,4 @@
-.PHONY: help dev bootstrap check lint test smoke diagnose sanity-real prompt-compare docker-build docker-run redistest-up redistest-down redistest-logs
+.PHONY: help dev bootstrap check lint test smoke smoke-tasks diagnose sanity-real prompt-compare docker-build docker-run redistest-up redistest-down redistest-logs
 
 UV ?= uv
 SANITY_REAL_CONFIRM ?=
@@ -17,6 +17,7 @@ help:
 	@echo "  make redistest-down Stop local Redis/Valkey harness"
 	@echo "  make redistest-logs Tail Redis/Valkey harness logs"
 	@echo "  make smoke         Run smoke test script"
+	@echo "  make smoke-tasks   Run FastMCP v2 / SEP-1686 tasks smoke test (requires redistest-up)"
 	@echo "  make sanity-real   Run real-world sanity harness (manual; requires credentials + internet)"
 	@echo "  make prompt-compare Compare extended vs override-enhanced prompts (manual; requires credentials)"
 	@echo "  make diagnose      Run diagnostics script"
@@ -45,6 +46,14 @@ test: bootstrap
 
 smoke:
 	./scripts/smoke-test.sh
+
+smoke-tasks:
+	@if [ -x .venv/bin/python ]; then \
+		. .venv/bin/activate && python ./scripts/smoke-fastmcp-tasks.py; \
+	else \
+		echo "Run 'make dev' first to create .venv"; \
+		exit 1; \
+	fi
 
 sanity-real:
 	@if [ "$(SANITY_REAL_CONFIRM)" != "1" ]; then \

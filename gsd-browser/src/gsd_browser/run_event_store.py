@@ -313,7 +313,7 @@ class RunEventStore:
             timestamp=captured_at,
             summary=safe_message,
             details=details,
-            has_error=safe_level in {"error", "exception", "fatal"},
+            has_error=safe_level.lower() in {"error", "exception", "fatal"},
         )
 
     def record_network_event(

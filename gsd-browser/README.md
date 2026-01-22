@@ -123,6 +123,13 @@ Enabling:
 - stdio: set `GSD_USE_FASTMCP_V2=true` and `FASTMCP_DOCKET_URL=redis://localhost:6379/0`
 - HTTP: set `GSD_TRANSPORT=http` (plus JWT env vars) and `FASTMCP_DOCKET_URL=redis://...`
 
+Smoke test (exercises full SEP-1686 task lifecycle):
+```bash
+make redistest-up      # Start Redis/Valkey
+make smoke-tasks       # Run task smoke test
+make redistest-down    # Cleanup
+```
+
 Artifact persistence:
 - S3 is optional; it is required only for **distributed artifact persistence** (cross-process/replica
   retrieval).
