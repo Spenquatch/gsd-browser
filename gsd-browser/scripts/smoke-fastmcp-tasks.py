@@ -126,13 +126,13 @@ def main() -> int:
                 content = getattr(result, "content", [])
 
                 if is_error:
-                    print(f"      Task failed with error")
+                    print("      Task failed with error")
                     for item in content:
                         text = getattr(item, "text", str(item))
                         print(f"      Error: {text[:200]}...")
                     return False
                 else:
-                    print(f"      Task completed successfully!")
+                    print("      Task completed successfully!")
                     for item in content:
                         text = getattr(item, "text", str(item))
                         # Parse and show summary

@@ -1,7 +1,7 @@
 # ADR-0018: Task Enumeration Surfaces for Decoupled Operations
 
 ## Status
-Proposed
+Accepted
 
 ## Context
 ADR-0012 disabled `tasks/list` in the MCP protocol to preserve non-enumerability semantics. The
@@ -28,99 +28,105 @@ A task enumeration surface is required, but it must:
 ## Decision
 
 ### 1) Keep `tasks/list` disabled in MCP protocol
-Per ADR-0012, the MCP `tasks/list` method remains disabled (METHOD_NOT_FOUND). This avoids:
-- Protocol ambiguity with immature MCP client implementations.
-- Implicit coupling to MCP session semantics.
-- Confusion about authorization model in MCP context.
+Per ADR-0012, the MCP `tasks/list` method remains disabled (METHOD_NOT_FOUND).
 
-### 2) Implement CLI task enumeration: `gsd tasks list`
-Provide a CLI command for local/operator access:
+Task enumeration is an operations surface with sharp security semantics (enumerability, pagination,
+multi-tenant scoping). We do not treat MCP protocol `tasks/list` as the durable, supported listing
+mechanism for Option B.
 
-```bash
-# List tasks for current identity (from env/config)
-gsd tasks list
+### 2) Three HTTP surfaces with distinct purposes (the full picture)
+Option B needs three separate HTTP surfaces with different protocols, auth, and use cases.
 
-# Filter by status
-gsd tasks list --status running
-gsd tasks list --status completed
-gsd tasks list --status failed
+#### A) Port 5009: Streaming/Dashboard server (browser visualization/control)
+- Browser control (CDP)
+- Visual dashboard for watching agents work
+- Take-control feature
+- Socket.IO streaming
+- Purpose: browser visualization/control
 
-# Filter by time range
-gsd tasks list --since 1h
-gsd tasks list --since 2024-01-15T00:00:00Z
+#### B) Port 8080: MCP HTTP transport (MCP protocol over HTTP; not REST)
+- MCP protocol over HTTP (Streamable HTTP; **not** a REST API).
+- Exposes all MCP tools via HTTP transport:
+  - Native tools (examples): `web_eval_agent`, `setup_browser_state`, `get_run_events`, `get_screenshots`
+  - Compat job tools (examples; when implemented): `web_eval_agent_submit`, `job_get`, `job_wait`, etc.
+- For: MCP clients that can't do stdio and/or don't support SEP-1686.
+- JWT auth required (multi-tenant).
+- Identity propagation to workers required when execution is detached.
+- Purpose: broad MCP client support (HTTP-based MCP clients).
 
-# Show all tasks (admin mode - requires GSD_ADMIN_MODE=1 in server/prod)
-gsd tasks list --all
+#### C) Port 8081: Management/Admin REST API (operations visibility; not MCP)
+- Regular REST API (**not** the MCP protocol).
+- Task/job enumeration and inspection endpoints (example shapes):
+  - `GET /api/v1/tasks` (task listing)
+  - `GET /api/v1/jobs/{job_id}` (job details)
+- For:
+  - CLI: `gsd tasks list`
+  - monitoring tools
+  - dashboards
+  - operational visibility / audits
+- Auth: JWT and/or API key (operator/automation friendly).
+- Purpose: task enumeration outside of MCP protocol.
 
-# Output formats
-gsd tasks list --format table   # default, human-readable
-gsd tasks list --format json    # machine-readable
-```
+### 3) Why we need both 8080 (MCP) and 8081 (REST)
+Port 8080 (MCP HTTP):
+- MCP protocol clients connect here.
+- They submit/check long work via MCP tool calls.
+- Example: `job_wait(job_id="abc")` via MCP protocol over HTTP.
 
-Identity resolution for CLI:
-1. `GSD_TENANT_ID` + `GSD_SUBJECT_ID` environment variables (if set)
-2. `~/.gsd/.env` configured identity
-3. Fallback: `tenant_id=local`, `subject_id=$USER`
+Port 8081 (REST API):
+- Non-MCP clients connect here.
+- Plain HTTP REST for operations/monitoring.
+- Example: `curl http://localhost:8081/api/v1/tasks`.
+- CLI uses this surface for listing/ops visibility, not MCP protocol methods.
 
-### 3) Implement HTTP API endpoint: `GET /api/v1/tasks`
-Provide an HTTP endpoint for programmatic access:
-
-```
-GET /api/v1/tasks
-Authorization: Bearer <jwt> | X-API-Key: <key>
-
-Query parameters:
-  status    - filter by task status (running|completed|failed|cancelled)
-  since     - ISO-8601 timestamp or duration (1h, 30m, 7d)
-  limit     - max results (default: 100, max: 1000)
-  cursor    - pagination cursor for next page
-
-Response:
-{
-  "tasks": [
-    {
-      "task_id": "...",
-      "tool_name": "web_eval_agent",
-      "status": "running",
-      "created_at": "2024-01-15T10:30:00Z",
-      "updated_at": "2024-01-15T10:31:00Z",
-      "progress": { "current": 5, "total": 25 }
-    }
-  ],
-  "next_cursor": "..."
-}
-```
-
-Identity extraction from HTTP:
-- JWT: `tenant_id` from `tid` claim, `subject_id` from `sub` claim
-- API key: lookup in key registry → mapped identity
-- Local development: configurable bypass with explicit identity headers
-
-### 4) Identity scoping is mandatory
-Both CLI and HTTP surfaces MUST filter results by caller identity:
+### 4) Identity scoping and non-enumerability are mandatory (all listing surfaces)
+Both the management REST API and any CLI surfaces MUST filter results by caller identity:
 - Query: `WHERE tenant_id = :caller_tenant AND subject_id = :caller_subject`
 - No results from other identities are ever returned.
-- `--all` flag (CLI) or admin scope (HTTP) requires explicit elevated privileges.
+- “Admin/all identities” mode requires explicit elevated privileges and must be safe-by-default.
 
-### 5) Non-enumerability across identity boundaries
 Cross-identity enumeration remains impossible:
 - Caller A cannot discover that Caller B has tasks.
 - Empty result set is returned if no tasks match (not an error).
-- No timing/count side channels that reveal other identities' task existence.
+- Avoid timing/count side channels that reveal other identities' task existence.
+
+### 4.1) AuthZ invariants across ports (contract-level)
+To avoid drift and accidental cross-tenant leakage, the following invariants MUST hold across all three
+surfaces (5009/8080/8081):
+
+- **Consistent identity extraction**:
+  - 8080 (MCP HTTP) and 8081 (management REST) MUST derive `tenant_id` + `subject_id` from the same
+    JWT claims/mapping rules (or the same API-key → identity mapping), so “who am I?” is consistent.
+- **Default-deny + strict scoping**:
+  - All “list” and “get by id” operations on 8081 MUST be identity-scoped by default.
+  - No cross-tenant/subject reads are allowed without explicit, auditable admin configuration.
+- **Safe-by-default admin gating**:
+  - “admin/all identities” access is disabled by default and requires explicit configuration + scopes.
+  - Admin access must be observable (audit logging) and must not be reachable accidentally.
+- **Non-enumerability semantics are consistent**:
+  - Unknown vs unauthorized vs expired should not be distinguishable to non-admin callers. Prefer
+    non-enumerable “not found” behavior.
+- **Local-hardening expectations apply when exposed to browsers**:
+  - If 5009 and/or 8081 are reachable from a browser context, apply local HTTP hardening (Origin/Host
+    validation, bind defaults, and secret redaction) per ADR-0014.
+
+### 5) Transports summary (what connects where)
+- STDIO MCP: `gsd mcp serve` (local dev convenience).
+- HTTP MCP: port 8080 (broad client support; non-SEP-1686 support via compat job tools).
+- REST API: port 8081 (CLI, monitoring, dashboards; task enumeration outside of MCP).
 
 ## Consequences
 
 ### Positive
-- Operators can monitor and manage tasks without MCP client state.
-- Decoupled architecture (Option B) becomes fully operational.
-- Programmatic integration via HTTP enables dashboards, monitoring, CI/CD.
-- Identity-scoped access preserves security model.
+- Clear separation of concerns across protocols and ports (streaming UI vs MCP transport vs ops REST).
+- Operators can enumerate/monitor/manage tasks without relying on MCP client state.
+- HTTP MCP remains focused on tool invocation, not ops-grade enumeration semantics.
+- Identity-scoped access preserves the security model.
 
 ### Negative / Costs
-- Two new surfaces to implement, test, and document.
-- CLI must authenticate to Redis (connection string/credentials management).
-- HTTP endpoint requires auth middleware (JWT validation or API key lookup).
-- Potential for confusion: "why can't I use tasks/list in MCP?"
+- More surfaces to implement, test, and document (MCP HTTP + management REST + streaming server).
+- Auth middleware must be consistently applied (JWT and/or API keys) with clear operator guidance.
+- Potential for confusion: “why can't I use `tasks/list` in MCP?” (answer: use REST management API).
 
 ### Neutral
 - MCP protocol behavior unchanged (tasks/list still disabled).
@@ -128,16 +134,18 @@ Cross-identity enumeration remains impossible:
 
 ## Implementation Notes
 
-### CLI Implementation
-- Add `gsd tasks` command group to `gsd_cli.py`.
-- Query Redis directly using existing `TaskOwnershipStore`.
+### CLI implementation
+- `gsd tasks list` uses the management REST API (port 8081), not MCP `tasks/list` and not direct Redis
+  access by default.
 - Support `--format json` for scripting/piping.
-- Consider `gsd tasks get <task_id>` and `gsd tasks cancel <task_id>` as well.
 
-### HTTP Implementation
-- Add `/api/v1/tasks` route to streaming server or dedicated API server.
-- Reuse `TaskOwnershipStore` for queries.
-- Implement cursor-based pagination for large result sets.
+### MCP HTTP transport implementation (port 8080)
+- Expose Streamable HTTP MCP (FastMCP v2) with JWT auth and identity propagation invariants.
+- Compat jobs tool surface (ADR-0011) is the preferred non-SEP-1686 long-running path for HTTP MCP.
+
+### Management REST API implementation (port 8081)
+- Implement `/api/v1/tasks` and `/api/v1/jobs/{job_id}` (and related ops endpoints as needed).
+- Use cursor-based pagination and bounded limits.
 - Rate limiting recommended for production deployments.
 
 ### Redis Query Pattern
@@ -184,8 +192,7 @@ Task listing respects the retention policy defined in ADR-0017:
 - Default retention windows (dev vs prod) are defined in ADR-0017.
 
 ## Open Questions
-1. Should the HTTP endpoint live on the streaming server (port 5009) or a separate API server?
-   This requires further research into operational topology and auth middleware placement.
+None (for this ADR). Ports and responsibilities are explicitly split across the three surfaces.
 
 ## References
 - ADR-0010: Decouple execution from MCP server + add compat job tools
