@@ -77,6 +77,11 @@ Cancellation is treated as expected control flow:
   For MCP hosts that do not (e.g., current Codex-as-host usage), `gsd` will need a separate “compat job tools”
   surface (submit/status/result/cancel/wait). That surface is tracked in `docs/planning/BACKLOG.md`.
 - `tasks/list` is intentionally not supported (method not found) to preserve non-enumerability semantics.
+  - For task/job enumeration and operational visibility, Option B uses a separate management/admin REST API
+    (port 8081), documented in `gsd-browser/docs/api/HTTP_API.md` and defined in ADR-0018 (Accepted).
+  - If synchronous MCP clients need enumeration/inspection, expose it as **MCP tools** (not as the MCP
+    protocol `tasks/list` method), ideally by sharing the same identity-scoped implementation used by the
+    8081 management API.
 
 ### Cross-session “check later” support
 SEP-1686 access is identity/tenant authorized and task lookup is session-independent:

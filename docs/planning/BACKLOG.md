@@ -22,7 +22,10 @@ which is a good baseline, but “fully MCP compliant” HTTP authorization event
 Notes:
 - These are primarily relevant for HTTP transport and multi-tenant deployments.
 - `stdio` remains a local trust boundary (`tenant_id=local`, `subject_id=local`).
-- Track contract decisions in ADR-0013.
+- **DONE**: ADR-0013 is now **Accepted** and defines:
+  - path-aware Protected Resource Metadata (base path detection via `GSD_HTTP_BASE_PATH` and `X-Forwarded-Prefix`)
+  - a three-tier capability scope model (`gsd:browser:execute`, `gsd:browser:read`, `gsd:admin`)
+  - wrong-audience policy (`403` with `WWW-Authenticate: Bearer error="invalid_token"` and audience hints)
 
 ## Implication for `gsd` (detached execution + multi-tenant correctness)
 
@@ -105,13 +108,20 @@ Notes:
 ### Compat job tools: progress + session IDs
 Compat job tools should support “progress while running” without relying on SEP-1686 notifications.
 
+- Align the compat jobs external contract (tool names, job IDs, and state model) with ADR-0011:
+  - `{tool_name}_submit(...)` returns an opaque, stable `job_id` (not a raw backend task key).
+  - `job_get(job_id)` returns a stable state vocabulary (`queued|running|completed|failed|cancelled`) and a
+    best-effort `progress_message` snapshot (plus timestamps).
+  - `job_result(job_id)` returns the final tool payload schema (same as the tool payload / `tasks/result`)
+    once terminal.
+  - `job_cancel(job_id)` cancels the job (non-enumerable “not found” on unauthorized).
 - Define minimal progress surface:
   - Docket progress message snapshot (always available)
   - optional: run-events / screenshots availability during execution
 - Decide how/when `session_id` becomes known for compat jobs:
   - pre-allocate browser `session_id` at submit-time (recommended for “check while running”), or
   - emit it once known via progress/status updates
-Track contract decisions in ADR-0011.
+**DONE**: ADR-0011 is now **Accepted** (compat jobs contract, including `job_wait` and progress fields).
 
 ### HTTP local security hardening (spec guidance)
 For local HTTP deployments, add the missing hardening expected by MCP security guidance.
@@ -129,7 +139,10 @@ Once we add compat jobs, we will likely have two clocks:
 Decide this explicitly to avoid:
 - jobs disappearing “too soon” for Codex workflows, or
 - unbounded retention (storage growth).
-Track contract decisions in ADR-0017.
+ADR-0017 is now **Accepted** and defines default retention windows + cleanup observability requirements:
+- Dev defaults: jobs 24h, artifacts 12h
+- Prod defaults: jobs 7d, artifacts 3d
+- Cleanup emits Prometheus metrics and structured logs
 
 ### Maintenance leadership (where pruning runs)
 If artifact cleanup / pruning is coordinated via a distributed lock (e.g., Redis), decide which process is
@@ -139,29 +152,44 @@ responsible for running maintenance in "server concurrency=0, external workers=N
 - a dedicated "maintenance" process.
 
 This choice affects deployment docs and reliability.
-Track contract decisions in ADR-0015.
+**DONE**: ADR-0015 is now **Accepted** and chooses **worker-led maintenance**.
 
-### Artifact cleanup entrypoint (blocked on maintenance leadership)
+### Artifact cleanup entrypoint (blocked on worker/maintenance wiring)
 `CleanupRunner` is implemented and tested (`optionb/artifact_index.py`), but nothing schedules it.
 Without a deployed cleanup process, S3 objects accumulate even after Redis metadata expires.
 
-**Action items** (once ADR-0015 decides maintenance leadership):
-1. Add a first-class CLI entrypoint (e.g., `gsd mcp maintenance cleanup` or `gsd worker --maintenance`)
-   depending on the chosen leadership model.
-2. Document the entrypoint in ADR-0015 and deployment guides.
-3. For "dedicated maintenance process" model: add a reference compose service and k8s CronJob example.
-4. For "worker-led" or "server-led" model: wire `CleanupRunner.run_once()` into the appropriate daemon loop
-   with the configured interval (`GSD_CLEANUP_INTERVAL_S`).
-5. Add an integration test that verifies cleanup actually runs in a real deployment scenario.
+**Action items**:
+1. Wire a maintenance loop into the worker process per ADR-0015 (worker-led leader election + scheduled run).
+2. Standardize the interval env var name and docs:
+   - ADR-0015 uses `GSD_MAINTENANCE_INTERVAL` (default: 300s).
+3. Ensure the maintenance loop enforces the retention policy from ADR-0017 (dev/prod defaults).
+4. Add an integration test that verifies cleanup runs in a real deployment scenario.
 
 **Current workaround**: Operators can invoke `CleanupRunner.run_once()` manually via a custom script or
 external scheduler (cron, k8s CronJob) until a first-class entrypoint is provided.
 
-### Task enumeration endpoints (security semantics)
-Even if clients don’t use task enumeration, decide whether to:
-- expose `tasks/list` at all,
-- restrict it to identity-scoped results, or
-- disable it to preserve non-enumerability guarantees.
+### Task/job enumeration surfaces (ADR-0018 Accepted)
+Task enumeration is **not** part of the supported MCP protocol surface for Option B:
+- `tasks/list` stays disabled (METHOD_NOT_FOUND) per ADR-0012 / ADR-0018.
+
+Instead, enumeration/inspection is an operations surface:
+- **8081** management/admin REST API (task/job listing + inspection), documented in
+  `gsd-browser/docs/api/HTTP_API.md`.
+- CLI surfaces (e.g., `gsd tasks list`) built on the 8081 API.
+
+Additionally, if we want synchronous MCP clients (or stdio-only deployments) to have an
+enumeration/inspection workflow, we can expose **MCP tools** that proxy the same underlying
+implementation as the 8081 API (this is *not* the MCP protocol `tasks/list` method). Example shape:
+- `tasks_list(...)` / `jobs_get(...)` tools that call into the same identity-scoped listing/get logic.
+
+**Action items**:
+- Implement the 8081 management REST API endpoints (`GET /api/v1/tasks`, `GET /api/v1/jobs/{job_id}`)
+  with identity-scoped filtering and safe-by-default admin gating.
+- Reuse the same identity extraction rules as 8080 (MCP HTTP) and preserve non-enumerability semantics
+  (unauthorized vs nonexistent vs expired should not be distinguishable for non-admin callers).
+- Apply local HTTP hardening guidance when browser-reachable (ADR-0014).
+- Decide whether to add MCP tool wrappers for listing/inspection (and their naming/scope), and ensure
+  they do not re-introduce cross-identity enumerability.
 
 ### Spec + runtime alignment
 Reduce operator confusion and prevent drift between docs and what actually runs.

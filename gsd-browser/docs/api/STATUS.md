@@ -15,6 +15,8 @@ FastMCP v2 (Option B) runtime.
 - SEP-1686 long-running tasks are implemented for long tools in the FastMCP v2 runtime:
   - long tools are task-required in v2
   - `tasks/get`, `tasks/result`, `tasks/cancel` handlers are active with ownership enforcement
+  - task lookup is session-independent (create in one session, fetch/cancel in another) via persisted
+    ownership records (ADR-0012 Accepted)
   - progress notifications are emitted during agent work
 - Distributed artifact storage is implemented (S3-compatible object store + Redis index) and is used when
   the required S3 env vars are configured.
@@ -23,10 +25,10 @@ FastMCP v2 (Option B) runtime.
 - **Artifact cleanup/retention enforcement**: `CleanupRunner` exists in `optionb/artifact_index.py` and is
   fully tested, but **no process currently schedules it**. S3 objects and Redis index entries will
   accumulate until a maintenance entrypoint is deployed. The canonical spec (§4.3 "Cleanup rules") documents
-  this as "required", but the scheduling decision is blocked on ADR-0015 (which process leads maintenance?).
+  this as "required", but worker-led maintenance is not wired/deployed yet (ADR-0015 Accepted).
   - Operators requiring cleanup today must invoke `CleanupRunner.run_once()` manually or via external
     scheduling (cron, k8s CronJob, etc.).
-  - See ADR-0015 (operational topology) and ADR-0017 (retention policy) for open questions.
+  - See ADR-0015 (operational topology) and ADR-0017 (retention policy) for the accepted defaults.
 
 ### Planned (not yet implemented in runtime)
 - Switch the default stdio runtime to `fastmcp` v2 (remove feature flag default-off behavior).
@@ -35,7 +37,11 @@ FastMCP v2 (Option B) runtime.
 - Decouple execution from the MCP server process by running work in external Docket workers by default
   (server concurrency=0, separate workers>0).
 - MCP-compliant HTTP OAuth discovery/challenge surfaces (RFC 9728 `resource_metadata`, `WWW-Authenticate`
-  semantics, step-up scopes, resource indicators / audience binding).
+  semantics, step-up scopes, resource indicators / audience binding). (ADR-0013 Accepted; not implemented yet.)
+- Add the management/admin REST API (port 8081) for identity-scoped task/job enumeration and inspection
+  (ADR-0018 Accepted), and wire CLI surfaces (e.g., `gsd tasks list`) to it.
+  - Optionally also expose MCP tool wrappers for enumeration/inspection (proxying the same underlying
+    identity-scoped logic), for clients that want a synchronous “list” workflow without using 8081.
 
 ## Minimum supported versions (for the Option B runtime)
 - Python: `>=3.11` (this repo’s baseline)

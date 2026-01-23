@@ -1,7 +1,7 @@
 # ADR-0017: Job/task retention and cleanup policy
 
 ## Status
-Proposed
+Accepted
 
 ## Context
 Option B introduces multiple time horizons that affect user experience and operational cost:
@@ -23,11 +23,39 @@ SEP-1686 task TTL governs backend task state retention and is tuned for executio
 It is not, by itself, the product-level “how long users can fetch results”.
 
 ### 2) Define explicit retention windows (separate contracts)
-Define and document separate retention windows for:
-- compat jobs (`job_get` / `job_result` availability after completion), and
-- artifacts (screenshots/run-events) referenced by session/job.
+Define and document retention windows for compat jobs and artifacts with environment-specific
+defaults.
 
-Retention windows may differ by deployment environment (`dev` vs `prod`) and must be bounded.
+**Default retention windows:**
+
+**Development environment:**
+- Jobs: 24 hours (`GSD_JOB_RETENTION_DEV=24h`)
+- Artifacts: 12 hours (`GSD_ARTIFACT_RETENTION_DEV=12h`)
+
+**Production environment:**
+- Jobs: 7 days (`GSD_JOB_RETENTION_PROD=7d`)
+- Artifacts: 3 days (`GSD_ARTIFACT_RETENTION_PROD=3d`)
+
+**Coupled retention model:**
+Jobs and artifacts expire together. When a job expires, all associated artifacts (screenshots,
+run-events) are deleted atomically in the same cleanup operation.
+
+**Rationale for long retention:**
+- "Check later" is a core value proposition for Option B (decoupled execution)
+- Users expect results to be available across sessions, even with delays
+- Storage is cheap relative to user frustration from expired results
+- 24h/7d split balances UX reliability with storage costs
+
+**Rationale for coupled retention:**
+- Simplicity: Single retention window, single cleanup loop, no orphan handling
+- Artifacts without job context are useless to users
+- Jobs without artifacts frustrate users (references to deleted data)
+- Delete atomically when job expires
+- Storage optimization via compression instead of independent retention
+
+**Configuration:**
+Retention windows are configurable via environment variables to allow operators to tune based on
+storage/cost constraints. Defaults optimize for reliability and user experience.
 
 ### 3) Expiry behavior is non-enumerable by default
 After expiry:
@@ -41,6 +69,26 @@ non-enumerability.
 Cleanup/pruning MUST be performed by exactly one leader at a time in a shared backend, coordinated
 via a distributed lock (e.g., Redis). The chosen leader process type is defined in ADR-0015.
 
+### 5) Cleanup metrics and logging for operational visibility
+Provide comprehensive observability for cleanup operations to enable production monitoring and
+troubleshooting.
+
+**Prometheus metrics:**
+- `gsd_cleanup_jobs_pruned_total` - Counter of jobs deleted by cleanup
+- `gsd_cleanup_duration_seconds` - Histogram of cleanup operation duration
+- `gsd_cleanup_errors_total` - Counter of cleanup failures
+
+**Structured logging:**
+- **INFO level (summary):** Cleanup start/end with total counts
+  - Example: "Cleanup completed: 42 jobs pruned, 156 artifacts deleted, duration=2.3s"
+- **DEBUG level (per-job):** Individual job deletion details
+  - Example: "Pruned job job_abc123: created=2026-01-20T10:00:00Z, expired=2026-01-21T10:00:00Z, artifacts=4"
+
+**Rationale:**
+Cleanup is critical infrastructure for production deployments. Operators must monitor success/failure
+rates and diagnose issues when cleanup fails. Metrics enable alerting (e.g., cleanup_errors_total > 0),
+while debug logs enable troubleshooting specific job retention issues. Metrics are cheap to emit;
+outages from silent cleanup failures are expensive.
 ## Consequences
 
 ### Positive
@@ -53,20 +101,85 @@ via a distributed lock (e.g., Redis). The chosen leader process type is defined 
 - Requires careful coordination to avoid concurrent cleanup races.
 
 ## Implementation Notes
+### Retention window implementation
+- Add environment variables:
+  - `GSD_JOB_RETENTION_DEV` (default: 24h)
+  - `GSD_JOB_RETENTION_PROD` (default: 7d)
+  - `GSD_ARTIFACT_RETENTION_DEV` (default: 12h)
+  - `GSD_ARTIFACT_RETENTION_PROD` (default: 3d)
+- Parse retention values on startup (support duration formats: `h`, `d`, `s`).
+- Calculate `expires_at = created_at + retention_window` at job creation.
 - Record timestamps and expiry in ownership/mapping records (tasks + compat jobs) so cleanup is
   deterministic.
-- Ensure cleanup can safely delete:
-  - job/task ownership records,
-  - artifact index entries,
-  - object store blobs (S3) by key prefix.
-- Add tests/verification steps:
-  - expired records return non-enumerable “not found”
-  - cleanup deletes artifacts/index entries as expected
 
-## Open Questions
-- Default retention windows for compat jobs vs artifacts (dev vs prod).
-- Whether artifact retention is tied to job retention or can be longer (e.g., for audit/debug).
-- Exact metrics/logging expected from the cleanup loop (for operators).
+### Coupled retention implementation
+- Cleanup loop deletes job + artifacts together atomically:
+  1. Query expired jobs (`expires_at < now()`).
+  2. For each expired job:
+     - Delete job ownership record.
+     - Delete artifact index entries.
+     - Delete object store blobs (S3) by key prefix.
+  3. Commit deletions atomically where possible.
+
+### Cleanup metrics implementation
+- Add Prometheus metric exports to cleanup loop:
+  - `gsd_cleanup_jobs_pruned_total`: increment per job deleted
+  - `gsd_cleanup_duration_seconds`: record total cleanup duration
+  - `gsd_cleanup_errors_total`: increment on any cleanup error
+- Structured logging:
+  - INFO: log cleanup summary (total jobs/artifacts, duration)
+  - DEBUG: log per-job deletion details (job_id, created_at, expires_at, artifact_count)
+- Document metrics in an operational runbook.
+- Add Grafana dashboard examples for cleanup monitoring:
+  - cleanup rate over time
+  - cleanup duration trends
+  - error rate alerts
+
+### Testing and verification
+- Expired records return non-enumerable "not found".
+- Cleanup deletes artifacts/index entries as expected.
+- Coupled deletion: artifacts are deleted when the job expires.
+- Metrics are correctly emitted during cleanup.
+- Logs include both summary and per-job details.
+- Retention windows are configurable and respected.
+
+## Resolved Questions
+
+### Default Retention Windows
+**Decision (2026-01-23):** Long retention optimized for "check later" UX.
+
+**Implementation:**
+- Development: jobs 24h, artifacts 12h
+- Production: jobs 7d, artifacts 3d
+- Configurable via environment variables
+
+**Rationale:** "Check later" is a core value proposition for Option B. Users expect results to be
+available across sessions. Storage is cheap; frustration from expired results is expensive. The
+24h/7d split balances reliability with storage costs while supporting async workflows.
+
+### Artifact vs Job Retention Independence
+**Decision (2026-01-23):** Coupled retention (artifacts expire with jobs).
+
+**Implementation:**
+- Jobs and artifacts expire together (delete atomically when the job expires)
+- Cleanup deletes job + artifacts together atomically
+
+**Rationale:** Simplicity wins. Artifacts without job context are useless; jobs without artifacts
+frustrate users. Delete atomically when job expires. Optimize storage via compression instead of
+independent retention policies. Avoids orphan handling and complex cleanup logic.
+
+### Cleanup Metrics and Logging
+**Decision (2026-01-23):** Structured metrics + detailed debug logs.
+
+**Implementation:**
+- Prometheus metrics: `gsd_cleanup_jobs_pruned_total`, `gsd_cleanup_duration_seconds`, `gsd_cleanup_errors_total`
+- Structured logging: INFO (summary), DEBUG (per-job details)
+- Operational runbook documentation
+- Grafana dashboard examples
+
+**Rationale:** Cleanup is critical infrastructure. Operators must monitor success/failure rates and
+diagnose issues. Metrics enable alerting and trend analysis. Debug logs enable troubleshooting
+specific retention issues. Metrics are cheap; outages from silent cleanup failures are expensive.
 
 ## References
 - ADR-0010: Decouple execution from MCP server + add compat job tools
@@ -74,4 +187,3 @@ via a distributed lock (e.g., Redis). The chosen leader process type is defined 
 - ADR-0015: Option B operational topology and reference deployment
 - ADR-0009: Distributed artifact storage for scaled task execution
 - `docs/planning/BACKLOG.md`
-

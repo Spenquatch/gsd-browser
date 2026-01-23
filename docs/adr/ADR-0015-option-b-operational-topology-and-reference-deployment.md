@@ -1,7 +1,7 @@
 # ADR-0015: Option B operational topology and reference deployment
 
 ## Status
-Proposed
+Accepted
 
 ## Context
 Option B (FastMCP v2 + Redis-backed tasks + distributed artifact storage) enables a scale-ready,
@@ -30,17 +30,85 @@ Define supported shapes explicitly:
   - artifacts are stored in shared storage if multiple replicas are used.
 
 ### 2) Maintenance responsibilities are explicit
-Pick and document where maintenance runs (artifact cleanup/pruning/job retention enforcement):
-- worker-led maintenance,
-- server-led maintenance, or
-- a dedicated maintenance process.
+**Maintenance is worker-led** for simplicity and operational efficiency.
 
-### 3) Provide versioned reference deployments
-Provide a versioned, runnable reference deployment (compose) that includes:
-- MCP server (HTTP),
-- Redis/Valkey,
-- worker(s),
-- optional S3 gateway (e.g., SeaweedFS) if artifact persistence is enabled.
+**Implementation:**
+- One worker in the worker pool claims leadership via Redis-based distributed lock
+- Leader worker runs cleanup loop on schedule (configurable interval)
+- Maintenance tasks include:
+  - Job/task retention enforcement (delete expired jobs per ADR-0017)
+  - Artifact cleanup (screenshots, run-events)
+  - Orphaned record pruning
+- Leadership is re-acquired if the leader worker dies (another worker takes over)
+
+**Configuration:**
+- `GSD_MAINTENANCE_INTERVAL` - Cleanup interval in seconds (default: 300s / 5 minutes)
+
+**Rationale:** Workers already connect to Redis/Docket and understand task lifecycle. One worker claims
+leadership via distributed lock and runs cleanup. This is simpler than a dedicated maintenance process
+while maintaining reliability through the worker pool. If all workers die, maintenance stops (acceptable
+risk), but restarts when workers come back online.
+
+### 3) Minimal production components
+Define minimum viable production deployment for clarity and progressive complexity.
+
+**Container architecture:**
+- **gsd container** - MCP server and worker processes (can run both in single container or separate)
+- **Docket + Redis container** - Combined Docket task queue and Redis backend
+- **SeaweedFS container** - S3-compatible object storage (optional, for distributed artifacts)
+
+**Minimal deployment (single-worker):**
+- gsd container (server + worker)
+- Docket + Redis container
+
+**Characteristics:**
+- Supports basic production workloads
+- Single worker limits concurrency
+- Artifacts stored locally within gsd container (not distributed)
+- Cannot scale horizontally without artifact loss
+
+**Production-ready deployment (multi-worker):**
+- gsd container (server + worker pool)
+- Docket + Redis container
+- SeaweedFS container (S3-compatible storage)
+
+**Characteristics:**
+- True horizontal scaling capability
+- Distributed artifact storage across workers
+- No artifact locality concerns
+- Production-grade from day one
+
+**Rationale:** Define minimal as "gsd + Docket/Redis" for simplicity and fast onboarding. Document
+SeaweedFS artifact storage as recommended for multi-worker deployments but not required for
+single-worker scenarios. Progressive complexity allows operators to start simple and scale when needed.
+
+**When to add SeaweedFS:**
+- Multiple worker replicas (horizontal scaling)
+- Worker node failures requiring artifact failover
+- Long-term artifact retention requirements
+- Compliance/audit requirements for artifact storage
+
+### 4) Provide versioned reference deployments
+Provide versioned, runnable reference deployments (docker-compose) for different scenarios:
+
+**docker-compose.minimal.yml:**
+- gsd container (server + worker)
+- Docket + Redis container
+- Health checks and restart policies
+- Volume mounts for local artifacts
+
+**docker-compose.production.yml:**
+- gsd container (server + worker pool, scalable)
+- Docket + Redis container
+- SeaweedFS container (S3-compatible)
+- Health checks and restart policies
+- Distributed artifact storage configuration
+- Recommended resource limits
+
+**Versioning:**
+- Reference deployments are versioned with gsd releases
+- Breaking changes documented in deployment migration guides
+- Backward compatibility maintained where possible
 
 ## Consequences
 
@@ -52,19 +120,71 @@ Provide a versioned, runnable reference deployment (compose) that includes:
 - Requires ongoing maintenance of reference compose files and docs.
 
 ## Implementation Notes
-- Document canonical CLI entrypoints for:
-  - HTTP server (daemon-style),
-  - worker process,
-  - optional maintenance process.
-- Document health checks and recommended scaling knobs (worker concurrency, queue depth metrics).
+### Worker-led maintenance implementation
+- Implement maintenance loop in worker process with Redis-based leader election
+- Add `GSD_MAINTENANCE_INTERVAL` environment variable (default: 300 seconds)
+- Maintenance tasks:
+  - Query expired jobs/tasks (based on retention windows from ADR-0017)
+  - Delete job records and associated artifacts atomically
+  - Log cleanup actions at INFO level (summary) and DEBUG level (per-job)
+- Document maintenance responsibilities in operational runbook
+- Add worker logs for maintenance actions (cleanup start/end, records pruned)
 
-## Open Questions
-- Which process should lead maintenance work in production?
-- What are the “minimal required” components for a supported production deployment?
+### Reference deployment creation
+- Create `docker-compose.minimal.yml`:
+  - gsd service (server + worker combined)
+  - docket-redis service (combined Docket + Redis container)
+  - Volume mounts for local artifact storage
+  - Health check endpoints configured
+  - Restart policies (unless-stopped)
+- Create `docker-compose.production.yml`:
+  - gsd service (scalable via replicas)
+  - docket-redis service
+  - seaweedfs service (S3-compatible storage)
+  - Artifact storage configuration (S3 endpoints)
+  - Resource limits and reservations
+  - Health checks for all services
+- Document artifact storage tradeoffs in deployment guide
+- Add "When to add SeaweedFS" decision guide in deployment documentation
+
+### CLI entrypoints documentation
+- Document canonical CLI entrypoints:
+  - `gsd mcp serve --http` - HTTP server (daemon-style)
+  - `gsd worker` or similar - Worker process (to be defined)
+  - Maintenance is automatic within workers (no separate process)
+- Document health check endpoints:
+  - `/health` - Server health
+  - Worker health via Docket queue depth metrics
+- Document recommended scaling knobs:
+  - `FASTMCP_DOCKET_CONCURRENCY` - Worker task concurrency
+  - Queue depth metrics for autoscaling decisions
+  - Worker replica count for horizontal scaling
+
+## Resolved Questions
+
+### Maintenance Process Leadership
+**Decision (2026-01-23):** Worker-led maintenance.
+
+**Implementation:** Workers run cleanup loop on schedule using Redis-based leader election. One worker
+claims leadership via distributed lock and runs cleanup. If leader dies, another worker takes over.
+
+**Rationale:** Workers already connect to Redis/Docket and understand task lifecycle. One worker claims
+leadership via distributed lock and runs cleanup. Simpler than dedicated maintenance process while
+maintaining reliability through worker pool.
+
+### Minimal Production Components
+**Decision (2026-01-23):** Minimal deployment is gsd + Docket/Redis containers.
+
+**Container architecture:**
+- Minimal: gsd container + Docket/Redis container (combined)
+- Production-ready: add SeaweedFS container (S3-compatible storage)
+
+**Rationale:** Define minimal as "gsd + Docket/Redis" for simplicity. Document SeaweedFS artifact storage
+as recommended for multi-worker deployments but not required for single-worker scenarios. Progressive
+complexity allows operators to start simple and scale when needed.
 
 ## References
 - ADR-0010: Decouple execution from MCP server + add compat job tools
 - ADR-0008: FastMCP v2 + Redis-backed MCP long-running tasks (SEP-1686)
 - ADR-0009: Distributed artifact storage for scaled task execution
 - `docs/planning/BACKLOG.md`
-

@@ -6,12 +6,16 @@ This document is a continuation/handoff plan for migrating `gsd` to FastMCP v2 l
 ## Current branch / status
 - Status: Option B core has landed; this document is now primarily historical context.
 - What’s done:
-  - ADRs exist and have concrete decisions recorded: `docs/adr/ADR-0008-*.md`, `docs/adr/ADR-0009-*.md`
+  - ADRs exist and have concrete decisions recorded:
+    - `docs/adr/ADR-0008-fastmcp-v2-redis-backed-long-running-tasks.md`
+    - `docs/adr/ADR-0009-distributed-artifact-storage-for-scaled-tasks.md`
   - Machine-checkable API contract exists:
     - Pydantic: `gsd-browser/src/gsd_browser/contracts/v1.py`
     - Exported JSON Schema (enforced by tests): `gsd-browser/docs/api/jsonschema/`
     - Export command: `gsd-browser/tools/export_contract_schemas.py`
   - Contract docs: `gsd-browser/docs/api/MCP_TOOLS.md`, `gsd-browser/docs/api/MCP_TASKS.md`
+  - Session-independent SEP-1686 task lookup is implemented (create in session A, fetch in session B),
+    enforced by persisted task ownership records. See ADR-0012 (Accepted).
 - What’s not done yet:
   - The legacy default runtime is still the official SDK `mcp.server.fastmcp` (FastMCP v2 is behind
     `GSD_USE_FASTMCP_V2=true`).
@@ -21,7 +25,10 @@ This document is a continuation/handoff plan for migrating `gsd` to FastMCP v2 l
     a supported worker entrypoint (server concurrency=0, separate workers>0).
   - MCP-compliant HTTP OAuth discovery/challenge surfaces (RFC 9728 `resource_metadata`, `WWW-Authenticate`
     semantics, step-up scopes) are not implemented yet (JWT verification is implemented).
-  - Ensure “check later” lookups are independent of the current MCP session ID (identity-scoped access).
+  - Management/admin REST API for task/job enumeration (port 8081) is planned but may not be implemented yet.
+    See ADR-0018 (Accepted) and `gsd-browser/docs/api/HTTP_API.md`.
+    - Optionally also add MCP tool wrappers for enumeration/inspection (proxying the same underlying
+      identity-scoped implementation) for synchronous MCP workflows.
 
 Notes:
 - This document started as a migration checklist. Most implementation work has landed; remaining follow-ons are
