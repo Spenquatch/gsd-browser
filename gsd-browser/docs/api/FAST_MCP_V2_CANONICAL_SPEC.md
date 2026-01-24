@@ -56,6 +56,24 @@ Extraction rules (pinned):
   - a space-separated string.
 - Any invalid scope claim format results in “no scopes”.
 
+### 1.4 Clerk compatibility notes (non-normative)
+Clerk should be compatible with this contract, provided the minted JWTs include the required claims.
+In practice, you will likely configure a Clerk **JWT template** (or custom session token claims) so
+the token matches the expectations below:
+
+- `iss`: must match `GSD_JWT_ISSUER`.
+- `aud`: must match `GSD_JWT_AUDIENCE`.
+  - Note: some Clerk flows also use/mention `azp` (authorized party). This spec’s audience binding is
+    expressed via `aud`; prefer configuring Clerk tokens so `aud` is present and stable.
+- `sub`: subject identifier (default mapping).
+- `tenant_id`: provide a top-level string claim (for example, map the active Organization ID to a
+  custom `tenant_id` claim via Clerk configuration, or configure `GSD_JWT_TENANT_ID_CLAIM` to point at
+  an alternate top-level claim).
+- Scopes: include either `scope` (space-separated string) or `scp` (string/array) containing the
+  required `gsd:*` scopes (for example `gsd:admin` for admin endpoints).
+
+As always, `tenant_id` and `subject_id` values must satisfy the identity regex constraints in §1.2.
+
 ## 2) Authorization rules (authoritative)
 
 ### 2.1 Non-enumerability
