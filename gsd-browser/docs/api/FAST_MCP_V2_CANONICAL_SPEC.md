@@ -509,3 +509,122 @@ SeaweedFS (via its S3 gateway). See `docs/adr/ADR-0009-distributed-artifact-stor
 - `GSD_RETENTION_SECONDS_DEV` (int; default: `86400`)
 - `GSD_RETENTION_SECONDS_PROD` (int; default: `604800`)
 - `GSD_CLEANUP_INTERVAL_S` (int; default: `300`)
+
+## 9) HTTP OAuth discovery + challenges + scope enforcement (8080 MCP HTTP)
+
+This section pins the MCP-compliant HTTP authorization surfaces for the 8080 MCP-over-HTTP service
+(`GSD_TRANSPORT=http`). It is based on ADR-0013 (OAuth discovery + challenge semantics + scope model)
+and ADR-0014 (local HTTP hardening model + exemptions).
+
+### 9.1 Base path detection (pinned)
+The HTTP server MUST support root hosting and subpath hosting behind a reverse proxy.
+
+Base-path detection order:
+1) `GSD_HTTP_BASE_PATH` (explicit operator override)
+2) `X-Forwarded-Prefix` (reverse proxy hint)
+3) default `/`
+
+Normalization rules (pinned):
+- The detected base path is trimmed.
+- If empty, treat as `/`.
+- Ensure it starts with `/`.
+- Remove any trailing `/`, unless the path is exactly `/`.
+
+This detected base path is used when constructing the RFC 9728 metadata URL and when routing the
+metadata endpoints in §9.2.
+
+### 9.2 RFC 9728 Protected Resource Metadata endpoints (pinned)
+The server MUST expose the Protected Resource Metadata endpoint at:
+- `GET /.well-known/oauth-protected-resource`
+- `GET {base_path}/.well-known/oauth-protected-resource` (when `base_path != "/"`)
+
+Notes:
+- These endpoints MUST be accessible without authentication.
+- These endpoints MUST be exempt from local hardening origin/host validation (see §9.6).
+
+The `resource_metadata` URL used in `WWW-Authenticate` challenges (§9.4) MUST be the path:
+- `{base_path}/.well-known/oauth-protected-resource` (with `base_path="/"` collapsing to `/.well-known/oauth-protected-resource`)
+
+### 9.3 RFC 9728 Protected Resource Metadata payload (minimal v1; pinned)
+The server returns a minimal v1 RFC 9728 JSON object with exactly these fields:
+
+```json
+{
+  "resource": "<GSD_JWT_AUDIENCE>",
+  "authorization_servers": ["<GSD_JWT_ISSUER>"],
+  "scopes_supported": ["gsd:browser:execute", "gsd:browser:read", "gsd:admin"],
+  "bearer_methods_supported": ["header"]
+}
+```
+
+Value sources (pinned):
+- `resource` MUST be exactly `GSD_JWT_AUDIENCE` (the protected-resource identifier / expected audience).
+- `authorization_servers` MUST be a single-item array containing exactly `GSD_JWT_ISSUER`.
+- `scopes_supported` MUST be the fixed list above.
+- `bearer_methods_supported` MUST be `["header"]` (Authorization header Bearer tokens only).
+
+### 9.4 `WWW-Authenticate` challenge semantics (pinned)
+For endpoints that require authentication/authorization (including `/mcp` and MCP task-method routes):
+
+#### 9.4.1 Missing/invalid token → `401 Unauthorized` (pinned)
+When the request is unauthenticated (missing Bearer token) or the token is invalid (cannot be
+verified), the server MUST return `401` and MUST include:
+
+```text
+WWW-Authenticate: Bearer resource_metadata="<resource_metadata_url>"
+```
+
+Where `<resource_metadata_url>` is computed per §9.2.
+
+#### 9.4.2 Authenticated but insufficient scope → `403 Forbidden` (pinned)
+When the request is authenticated but the token does not include the required scope(s), the server
+MUST return `403` and MUST include:
+
+```text
+WWW-Authenticate: Bearer error="insufficient_scope", scope="<required_scopes>"
+```
+
+Where `<required_scopes>` is the required scope string for the operation (see §9.5).
+
+#### 9.4.3 Wrong audience/resource binding → `403 Forbidden` (pinned)
+When the token is otherwise valid but fails the audience/resource binding requirement, the server
+MUST return `403`, MUST include:
+
+```text
+WWW-Authenticate: Bearer error="invalid_token"
+```
+
+and MUST return this JSON error body (ADR-0013):
+
+```json
+{
+  "error": "invalid_token",
+  "error_description": "Token audience does not match protected resource",
+  "expected_audience": "<GSD_JWT_AUDIENCE>",
+  "actual_audience": "<token aud>"
+}
+```
+
+### 9.5 Scope requirements (pinned)
+Scope extraction is pinned in §1.3. Scope checks are enforced in addition to identity/ownership
+checks (see §2).
+
+Scopes (pinned):
+- `gsd:browser:execute`
+- `gsd:browser:read`
+- `gsd:admin` (grants all)
+
+Operation → required scope (pinned):
+- `web_eval_agent`, `web_task_agent`, `web_task_agent_github`, `setup_browser_state`:
+  - require `gsd:browser:execute` OR `gsd:admin`
+- `get_screenshots`, `get_run_events`:
+  - require `gsd:browser:read` OR `gsd:admin`
+- MCP task methods (HTTP mode only):
+  - `tasks/get`, `tasks/result`: require `gsd:browser:read` OR `gsd:admin`
+  - `tasks/cancel`: require `gsd:browser:execute` OR `gsd:admin`
+
+### 9.6 Local hardening exemptions (pinned)
+Local HTTP hardening (ADR-0014) MUST NOT apply Origin/Host validation to:
+- `GET /.well-known/*`
+- `GET /healthz`
+- `OPTIONS *`

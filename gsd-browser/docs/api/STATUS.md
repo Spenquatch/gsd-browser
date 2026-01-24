@@ -37,7 +37,8 @@ FastMCP v2 (Option B) runtime.
 - Decouple execution from the MCP server process by running work in external Docket workers by default
   (server concurrency=0, separate workers>0).
 - MCP-compliant HTTP OAuth discovery/challenge surfaces (RFC 9728 `resource_metadata`, `WWW-Authenticate`
-  semantics, step-up scopes, resource indicators / audience binding). (ADR-0013 Accepted; not implemented yet.)
+  semantics, step-up scopes, resource indicators / audience binding). (ADR-0013 Accepted; not implemented yet;
+  spec: `gsd-browser/docs/api/FAST_MCP_V2_CANONICAL_SPEC.md` §9.)
 - Add the management/admin REST API (port 8081) for identity-scoped task/job enumeration and inspection
   (ADR-0018 Accepted), and wire CLI surfaces (e.g., `gsd tasks list`) to it.
   - Optionally also expose MCP tool wrappers for enumeration/inspection (proxying the same underlying

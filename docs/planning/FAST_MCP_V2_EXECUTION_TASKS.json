@@ -993,7 +993,7 @@
         {
           "id": "I5.0",
           "title": "Spec pin: HTTP OAuth discovery/challenge + scope enforcement (8080)",
-          "status": "todo",
+          "status": "done",
           "risk": "high",
           "risk_notes": "The canonical spec currently does not include RFC 9728 metadata payload shape, WWW-Authenticate rules, or scope mapping for MCP methods; implementing without pinning risks drift and client breakage.",
           "deliverables": [
