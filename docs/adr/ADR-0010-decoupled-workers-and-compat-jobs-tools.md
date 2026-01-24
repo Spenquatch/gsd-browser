@@ -1,7 +1,7 @@
 # ADR-0010: Decouple execution from MCP server + add compat job tools
 
 ## Status
-Proposed
+Accepted
 
 ## Context
 `gsd` is used from MCP hosts with different capability levels.
@@ -85,10 +85,10 @@ To preserve multi-tenant boundaries:
 - Same identity can fetch; different tenant/subject gets a non-enumerable “not found”.
 - (Optional) The SEP-1686 `tasks/get|result|cancel` path also works across server restart / new session.
 
-## Open Questions
-- Compat jobs contract/IDs/progress surface: track in ADR-0011.
-- Session-independent task lookup for SEP-1686: track in ADR-0012.
-- MCP-compliant HTTP auth surfaces (OAuth discovery/challenges/scopes): track in ADR-0013.
+## Resolved Questions
+- Compat jobs contract/IDs/progress surface: ADR-0011 (Accepted).
+- Session-independent task lookup for SEP-1686: ADR-0012 (Accepted).
+- MCP-compliant HTTP auth surfaces (OAuth discovery/challenges/scopes): ADR-0013 (Accepted).
 
 ## References
 - ADR-0008: FastMCP v2 + Redis-backed MCP long-running tasks (SEP-1686)

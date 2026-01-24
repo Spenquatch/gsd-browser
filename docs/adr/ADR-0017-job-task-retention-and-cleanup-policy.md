@@ -36,9 +36,13 @@ defaults.
 - Jobs: 7 days (`GSD_JOB_RETENTION_PROD=7d`)
 - Artifacts: 3 days (`GSD_ARTIFACT_RETENTION_PROD=3d`)
 
-**Coupled retention model:**
-Jobs and artifacts expire together. When a job expires, all associated artifacts (screenshots,
-run-events) are deleted atomically in the same cleanup operation.
+**Retention and cleanup relationship (job vs artifacts):**
+- Jobs and artifacts have **separately configurable retention windows** (defaults above).
+- Artifact retention may be **shorter** than job retention (to control storage).
+- When a job expires, any remaining associated artifacts (screenshots/run-events) are deleted as part of
+  the same cleanup operation (no long-lived orphans).
+- If you require artifacts to remain available for the full job retention window, set the artifact
+  retention to be >= the job retention in your deployment.
 
 **Rationale for long retention:**
 - "Check later" is a core value proposition for Option B (decoupled execution)
@@ -46,8 +50,8 @@ run-events) are deleted atomically in the same cleanup operation.
 - Storage is cheap relative to user frustration from expired results
 - 24h/7d split balances UX reliability with storage costs
 
-**Rationale for coupled retention:**
-- Simplicity: Single retention window, single cleanup loop, no orphan handling
+**Rationale for coupled cleanup:**
+- Simplicity: predictable cleanup lifecycle and no long-lived orphan handling
 - Artifacts without job context are useless to users
 - Jobs without artifacts frustrate users (references to deleted data)
 - Delete atomically when job expires
@@ -113,12 +117,18 @@ outages from silent cleanup failures are expensive.
   deterministic.
 
 ### Coupled retention implementation
-- Cleanup loop deletes job + artifacts together atomically:
+Cleanup has two responsibilities:
+
+1) **Artifact pruning** (artifact retention window):
+- Delete artifacts whose artifact retention window has elapsed (even if the job is still retained).
+
+2) **Job expiry pruning** (job retention window):
+- Cleanup loop deletes job + any remaining artifacts together when the job expires:
   1. Query expired jobs (`expires_at < now()`).
   2. For each expired job:
      - Delete job ownership record.
-     - Delete artifact index entries.
-     - Delete object store blobs (S3) by key prefix.
+     - Delete any remaining artifact index entries.
+     - Delete any remaining object store blobs (S3) by key prefix.
   3. Commit deletions atomically where possible.
 
 ### Cleanup metrics implementation
@@ -138,7 +148,8 @@ outages from silent cleanup failures are expensive.
 ### Testing and verification
 - Expired records return non-enumerable "not found".
 - Cleanup deletes artifacts/index entries as expected.
-- Coupled deletion: artifacts are deleted when the job expires.
+- Job expiry pruning deletes the job record and any remaining artifacts.
+- Artifact pruning respects the artifact retention window (artifacts can expire before the job does).
 - Metrics are correctly emitted during cleanup.
 - Logs include both summary and per-job details.
 - Retention windows are configurable and respected.
@@ -158,15 +169,16 @@ available across sessions. Storage is cheap; frustration from expired results is
 24h/7d split balances reliability with storage costs while supporting async workflows.
 
 ### Artifact vs Job Retention Independence
-**Decision (2026-01-23):** Coupled retention (artifacts expire with jobs).
+**Decision (2026-01-23):** Separate retention windows, coupled cleanup on job expiry.
 
 **Implementation:**
-- Jobs and artifacts expire together (delete atomically when the job expires)
-- Cleanup deletes job + artifacts together atomically
+- Jobs and artifacts have separate retention windows (defaults: dev 24h/12h, prod 7d/3d).
+- When the job expires, cleanup deletes the job record and any remaining artifacts together.
+- Deployments that require full “job + artifacts” availability for the job retention window must set
+  artifact retention >= job retention.
 
-**Rationale:** Simplicity wins. Artifacts without job context are useless; jobs without artifacts
-frustrate users. Delete atomically when job expires. Optimize storage via compression instead of
-independent retention policies. Avoids orphan handling and complex cleanup logic.
+**Rationale:** This keeps operator control over storage (artifacts can be shorter-lived), while still
+ensuring job expiry does not leave long-lived orphan artifacts behind.
 
 ### Cleanup Metrics and Logging
 **Decision (2026-01-23):** Structured metrics + detailed debug logs.

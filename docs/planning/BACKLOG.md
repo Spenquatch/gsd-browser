@@ -129,7 +129,7 @@ For local HTTP deployments, add the missing hardening expected by MCP security g
 - Validate `Origin` on HTTP requests (DNS rebinding mitigation).
 - Bind to localhost by default for local deployments.
 - Ensure logs never include secrets/tokens and redact sensitive headers.
-Track contract decisions in ADR-0014.
+**DONE**: ADR-0014 is now **Accepted** (local HTTP hardening model, origin/host validation, and log redaction).
 
 ### Job retention + cleanup policy (separate from task TTL)
 Once we add compat jobs, we will likely have two clocks:
@@ -142,6 +142,7 @@ Decide this explicitly to avoid:
 ADR-0017 is now **Accepted** and defines default retention windows + cleanup observability requirements:
 - Dev defaults: jobs 24h, artifacts 12h
 - Prod defaults: jobs 7d, artifacts 3d
+- Artifact pruning may occur before job expiry; job expiry prunes any remaining artifacts (ADR-0017).
 - Cleanup emits Prometheus metrics and structured logs
 
 ### Maintenance leadership (where pruning runs)

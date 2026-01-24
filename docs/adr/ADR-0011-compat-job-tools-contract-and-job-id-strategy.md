@@ -207,7 +207,7 @@ and no schema burden for simple tools.
 Default retention windows:
 - Development: jobs 24h, artifacts 12h
 - Production: jobs 7d, artifacts 3d
-- Artifacts and jobs expire together (coupled retention)
+- Artifacts may be pruned earlier per the artifact retention window; job expiry prunes any remaining artifacts (ADR-0017).
 
 ## References
 - ADR-0010: Decouple execution from MCP server + add compat job tools
