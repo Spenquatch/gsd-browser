@@ -18,13 +18,13 @@
       },
       {
         "id": "P2",
-        "description": "Docker prerequisites for integration harness tasks (required for I0.2 and later integration tests).",
-        "required": false,
+        "description": "Docker prerequisites (required). Used for reference deployments and for integration harness tasks.",
+        "required": true,
         "check_commands": [
           "docker --version",
           "docker compose version"
         ],
-        "notes": "If Docker is not available, skip integration harness tasks locally; CI must run them."
+        "notes": "Docker is a mandatory prerequisite for this plan (reference deployments + integration harness)."
       }
     ],
     "single_source_of_truth": [
@@ -978,6 +978,1053 @@
               "statement": "An E2E test demonstrates task persistence and correct ownership enforcement across restart boundaries.",
               "validation": {
                 "commands": ["make -C gsd-browser test"],
+                "expect_exit_code": 0
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "I5",
+      "name": "HTTP Auth Compliance (OAuth Discovery + Challenges + Scopes)",
+      "goal": "Implement MCP-compliant HTTP authorization discovery/challenge surfaces and scope enforcement for the 8080 MCP HTTP transport, without spec drift.",
+      "tasks": [
+        {
+          "id": "I5.0",
+          "title": "Spec pin: HTTP OAuth discovery/challenge + scope enforcement (8080)",
+          "status": "todo",
+          "risk": "high",
+          "risk_notes": "The canonical spec currently does not include RFC 9728 metadata payload shape, WWW-Authenticate rules, or scope mapping for MCP methods; implementing without pinning risks drift and client breakage.",
+          "deliverables": [
+            "gsd-browser/docs/api/FAST_MCP_V2_CANONICAL_SPEC.md (update; add HTTP auth surfaces + config knobs)",
+            "docs/adr/DECISIONS.md (optional; only if new decisions are required)",
+            "gsd-browser/docs/api/STATUS.md (update; planned → implemented boundary for HTTP auth surfaces)"
+          ],
+          "depends_on": [],
+          "references": [
+            {
+              "path": "gsd-browser/docs/api/FAST_MCP_V2_CANONICAL_SPEC.md",
+              "purpose": "Authoritative spec; add missing HTTP auth surfaces so implementation work does not drift."
+            },
+            {
+              "path": "docs/adr/ADR-0013-mcp-compliant-http-authorization-surfaces-and-scope-model.md",
+              "purpose": "Accepted decisions for RFC 9728 discovery, WWW-Authenticate semantics, and three-tier scope model."
+            },
+            {
+              "path": "docs/adr/ADR-0014-local-http-security-hardening-model.md",
+              "purpose": "Accepted local-hardening model (Origin/Host validation + exemptions) relevant to HTTP auth rollout."
+            },
+            {
+              "path": "gsd-browser/src/gsd_browser/fastmcp_v2_http.py",
+              "purpose": "Current HTTP entrypoint wiring; this task pins the spec that later tasks will implement here."
+            }
+          ],
+          "kickoff_prompt": "You are executing task I5.0.\n\nObjective\n- Pin the missing HTTP auth discovery/challenge + scope enforcement contract in `gsd-browser/docs/api/FAST_MCP_V2_CANONICAL_SPEC.md` so later implementation tasks can cite it without drift.\n\nConstraints\n- `gsd-browser/docs/api/FAST_MCP_V2_CANONICAL_SPEC.md` is the single source of truth.\n- Do not invent new behavior beyond ADR-0013/ADR-0014; if anything is still ambiguous, record it in `docs/adr/DECISIONS.md` first.\n\nDeliverables\n- Update `gsd-browser/docs/api/FAST_MCP_V2_CANONICAL_SPEC.md` to add a new section (append after §8) covering:\n  - RFC 9728 Protected Resource Metadata endpoint paths + base-path detection (`GSD_HTTP_BASE_PATH`, `X-Forwarded-Prefix`).\n  - The exact RFC 9728 JSON payload fields we return (minimal v1) and where values come from.\n  - `WWW-Authenticate` header rules for:\n    - `401` unauthenticated/invalid token (must include `resource_metadata=...`)\n    - `403` insufficient scope (`error=\\\"insufficient_scope\\\"`, `scope=\\\"...\\\"`)\n    - wrong audience (`error=\\\"invalid_token\\\"` and error body shape from ADR-0013)\n  - Scope requirements for:\n    - MCP tool calls (`web_eval_agent`, `web_task_agent`, `web_task_agent_github`, `get_screenshots`, `get_run_events`, `setup_browser_state`)\n    - MCP task methods (`tasks/get`, `tasks/result`, `tasks/cancel`) in HTTP mode\n  - Local hardening exemptions for `GET /.well-known/*`, `GET /healthz`, and `OPTIONS *`.\n- Update `gsd-browser/docs/api/STATUS.md` to mark these as planned items with a pointer to the new spec section.\n\nValidation\n- `make -C gsd-browser check`",
+          "acceptance_criteria": [
+            {
+              "id": "I5.0.A",
+              "statement": "Canonical spec includes a pinned, implementation-ready section for HTTP OAuth discovery/challenge and scope enforcement that is sufficient to implement without guessing.",
+              "validation": {
+                "commands": ["make -C gsd-browser check"],
+                "expect_exit_code": 0
+              }
+            }
+          ]
+        },
+        {
+          "id": "I5.1",
+          "title": "Shared helpers: scope extraction + base-path normalization (unit-tested)",
+          "status": "todo",
+          "risk": "medium",
+          "deliverables": [
+            "gsd-browser/src/gsd_browser/optionb/scopes.py (new)",
+            "gsd-browser/src/gsd_browser/http_base_path.py (new)",
+            "gsd-browser/tests/test_http_scopes.py (new)",
+            "gsd-browser/tests/test_http_base_path.py (new)"
+          ],
+          "depends_on": ["I5.0"],
+          "references": [
+            {
+              "path": "gsd-browser/docs/api/FAST_MCP_V2_CANONICAL_SPEC.md",
+              "purpose": "§1.3 scope extraction rules; new HTTP auth section added in I5.0 for base path detection."
+            },
+            {
+              "path": "docs/adr/ADR-0013-mcp-compliant-http-authorization-surfaces-and-scope-model.md",
+              "purpose": "Scope extraction rules and base path detection inputs."
+            },
+            {
+              "path": "gsd-browser/src/gsd_browser/optionb/identity.py",
+              "purpose": "JWT identity parsing; scope helpers must be compatible with claims mapping."
+            }
+          ],
+          "kickoff_prompt": "You are executing task I5.1.\n\nObjective\n- Add small, reusable helpers for:\n  - extracting scopes from JWT claims (and later API key scopes) per ADR-0013 and canonical spec\n  - normalizing/detecting HTTP base paths for `/.well-known/*` routing per ADR-0013\n\nDeliverables\n- `gsd-browser/src/gsd_browser/optionb/scopes.py`:\n  - `extract_scopes_from_claims(claims) -> set[str]` implementing: prefer `scope` (space-separated string), fallback `scp` (string or list[str]); invalid formats => empty set.\n  - `has_any_scope(scopes, required) -> bool` for enforcement.\n- `gsd-browser/src/gsd_browser/http_base_path.py`:\n  - `normalize_base_path(value) -> str` producing `/` or `/prefix` (no trailing slash, always leading slash).\n  - `detect_base_path(env_base_path, x_forwarded_prefix) -> str` with precedence described in ADR-0013.\n- Unit tests for both modules.\n\nValidation\n- `make -C gsd-browser test`\n- `make -C gsd-browser lint`",
+          "acceptance_criteria": [
+            {
+              "id": "I5.1.A",
+              "statement": "Scope extraction helper matches canonical extraction rules (scope + scp variants) and is covered by unit tests.",
+              "validation": {
+                "commands": ["make -C gsd-browser test"],
+                "expect_exit_code": 0
+              }
+            },
+            {
+              "id": "I5.1.B",
+              "statement": "Base path normalization/detection matches ADR-0013 precedence and is covered by unit tests.",
+              "validation": {
+                "commands": ["make -C gsd-browser test"],
+                "expect_exit_code": 0
+              }
+            },
+            {
+              "id": "I5.1.V",
+              "statement": "Repo gates pass for the new helper modules (lint + tests).",
+              "validation": {
+                "commands": [
+                  "make -C gsd-browser check",
+                  "make -C gsd-browser lint",
+                  "make -C gsd-browser test"
+                ],
+                "expect_exit_code": 0
+              }
+            }
+          ]
+        },
+        {
+          "id": "I5.2",
+          "title": "Expose RFC 9728 Protected Resource Metadata endpoints on 8080",
+          "status": "todo",
+          "risk": "high",
+          "deliverables": [
+            "gsd-browser/src/gsd_browser/fastmcp_v2_http.py (update; mount /.well-known routes)",
+            "gsd-browser/src/gsd_browser/http_oauth_metadata.py (new)",
+            "gsd-browser/tests/test_http_oauth_metadata.py (new)"
+          ],
+          "depends_on": ["I5.1"],
+          "references": [
+            {
+              "path": "docs/adr/ADR-0013-mcp-compliant-http-authorization-surfaces-and-scope-model.md",
+              "purpose": "RFC 9728 discovery requirement + base path behavior and metadata endpoint paths."
+            },
+            {
+              "path": "docs/adr/ADR-0014-local-http-security-hardening-model.md",
+              "purpose": "Exempt `GET /.well-known/*` from Origin validation."
+            },
+            {
+              "path": "gsd-browser/docs/api/FAST_MCP_V2_CANONICAL_SPEC.md",
+              "purpose": "New HTTP auth section added in I5.0; implement exactly that pinned metadata response."
+            },
+            {
+              "path": "gsd-browser/src/gsd_browser/fastmcp_v2_http.py",
+              "purpose": "HTTP ASGI entrypoint for 8080 MCP; will be extended to serve metadata endpoints."
+            }
+          ],
+          "kickoff_prompt": "You are executing task I5.2.\n\nObjective\n- Add RFC 9728 Protected Resource Metadata endpoints to the 8080 MCP HTTP ASGI app.\n\nConstraints\n- Implement exactly what was pinned in `gsd-browser/docs/api/FAST_MCP_V2_CANONICAL_SPEC.md` by task I5.0.\n- Endpoints must work for root hosting and subpath hosting (base path via env/header).\n- `GET /.well-known/*` must remain accessible without Origin checks (ADR-0014).\n\nDeliverables\n- Implement a small module (e.g. `gsd-browser/src/gsd_browser/http_oauth_metadata.py`) that:\n  - builds the JSON payload\n  - returns the correct `resource_metadata` URL for challenges\n  - supports base path routing\n- Update `gsd-browser/src/gsd_browser/fastmcp_v2_http.py` to mount the route(s) on the same ASGI app returned by `mcp.http_app(...)`.\n- Add unit tests validating:\n  - both `/.well-known/oauth-protected-resource` and `{base_path}/.well-known/oauth-protected-resource` respond\n  - payload contains the pinned fields and correct base-path-relative URLs\n\nValidation\n- `make -C gsd-browser test`",
+          "acceptance_criteria": [
+            {
+              "id": "I5.2.A",
+              "statement": "Protected Resource Metadata endpoints respond at root and under base path and return the pinned JSON payload shape.",
+              "validation": {
+                "commands": ["make -C gsd-browser test"],
+                "expect_exit_code": 0
+              }
+            }
+          ]
+        },
+        {
+          "id": "I5.3a",
+          "title": "Implement 401 + insufficient_scope challenges + scope enforcement baseline (8080)",
+          "status": "todo",
+          "risk": "high",
+          "deliverables": [
+            "gsd-browser/src/gsd_browser/optionb/http_auth.py (new)",
+            "gsd-browser/src/gsd_browser/fastmcp_v2_http.py (update; apply middleware)",
+            "gsd-browser/tests/test_http_auth_challenges.py (new)"
+          ],
+          "depends_on": ["I5.2"],
+          "references": [
+            {
+              "path": "gsd-browser/docs/api/FAST_MCP_V2_CANONICAL_SPEC.md",
+              "purpose": "New HTTP auth section pinned in I5.0: challenge rules + scope requirements (implement baseline 401 + insufficient_scope first)."
+            },
+            {
+              "path": "docs/adr/ADR-0013-mcp-compliant-http-authorization-surfaces-and-scope-model.md",
+              "purpose": "WWW-Authenticate semantics for 401/403 and scope model/mapping. Wrong-audience explicit handling is deferred to I5.3b."
+            },
+            {
+              "path": "gsd-browser/src/gsd_browser/optionb/identity.py",
+              "purpose": "JWT verification and identity enforcement. Baseline challenge behavior should not require preserving wrong-audience cause."
+            },
+            {
+              "path": "gsd-browser/src/gsd_browser/fastmcp_v2_stdio.py",
+              "purpose": "Tool set to scope-map for HTTP mode; ensure tool names match the canonical mapping."
+            }
+          ],
+          "kickoff_prompt": "You are executing task I5.3a.\n\nObjective\n- Implement the MCP-compliant HTTP auth baseline for the 8080 MCP HTTP surface:\n  - `401` challenges for missing/invalid tokens (with `resource_metadata=...`)\n  - `403` insufficient scope challenges (with `error=\"insufficient_scope\"` and `scope=\"...\"`)\n  - scope enforcement by tool/method\n\nWhy split\n- The current verifier path typically returns `None` on failure, so reliably distinguishing wrong-audience vs other invalid-token failures may require a refactor to preserve error cause. This task implements the baseline without requiring that distinction.\n\nConstraints\n- Implement exactly what is pinned in `gsd-browser/docs/api/FAST_MCP_V2_CANONICAL_SPEC.md` (added in I5.0) for baseline 401/403 behavior.\n- Do not attempt to implement wrong-audience explicit 403 yet; that is task I5.3b.\n\nDeliverables\n- Add `gsd_browser/optionb/http_auth.py` that:\n  - extracts/validates Bearer JWTs using the existing verifier hook\n  - enforces required scopes by MCP operation/tool name\n  - returns:\n    - `401` + `WWW-Authenticate: Bearer ... resource_metadata=...` when missing/invalid token\n    - `403` + `WWW-Authenticate: Bearer error=\\\"insufficient_scope\\\", scope=\\\"...\\\"` when authenticated but insufficient scope\n- Wire it into `build_http_app()` in `gsd-browser/src/gsd_browser/fastmcp_v2_http.py`.\n- Add unit tests that hit the ASGI app and assert status codes + headers for:\n  - missing token → 401 + resource_metadata\n  - token valid but missing scope → 403 insufficient_scope + scope listing\n\nValidation\n- `make -C gsd-browser test`\n- `make -C gsd-browser lint`",
+          "acceptance_criteria": [
+            {
+              "id": "I5.3a.A",
+              "statement": "HTTP 401 (missing/invalid token) and 403 insufficient_scope responses include the pinned WWW-Authenticate semantics, and scope enforcement works for at least one execute tool and one read tool.",
+              "validation": {
+                "commands": [
+                  "make -C gsd-browser check",
+                  "make -C gsd-browser lint",
+                  "make -C gsd-browser test"
+                ],
+                "expect_exit_code": 0
+              }
+            }
+          ]
+        },
+        {
+          "id": "I5.3b",
+          "title": "Add wrong-audience explicit 403 (preserve JWT verification error cause)",
+          "status": "todo",
+          "risk": "high",
+          "risk_notes": "To return a reliable 403 for wrong audience, JWT verification must preserve/return the failure cause instead of collapsing all failures into None; this may require refactoring identity/auth integration with FastMCP.",
+          "deliverables": [
+            "gsd-browser/src/gsd_browser/optionb/identity.py (update; preserve audience-mismatch cause)",
+            "gsd-browser/src/gsd_browser/optionb/http_auth.py (update; map wrong-audience → 403)",
+            "gsd-browser/tests/test_http_auth_challenges.py (update; add wrong-audience case)"
+          ],
+          "depends_on": ["I5.3a"],
+          "references": [
+            {
+              "path": "docs/adr/ADR-0013-mcp-compliant-http-authorization-surfaces-and-scope-model.md",
+              "purpose": "Wrong audience error policy: explicit 403 + WWW-Authenticate invalid_token + JSON body shape."
+            },
+            {
+              "path": "gsd-browser/docs/api/FAST_MCP_V2_CANONICAL_SPEC.md",
+              "purpose": "Pinned wrong-audience behavior (added in I5.0)."
+            },
+            {
+              "path": "gsd-browser/src/gsd_browser/optionb/identity.py",
+              "purpose": "JWT verifier integration point; must be capable of distinguishing audience mismatch from other failures."
+            }
+          ],
+          "kickoff_prompt": "You are executing task I5.3b.\n\nObjective\n- Implement explicit wrong-audience behavior for 8080 MCP HTTP:\n  - return `403` with `WWW-Authenticate: Bearer error=\\\"invalid_token\\\"`\n  - include the pinned JSON error body fields (expected vs actual audience) per ADR-0013\n\nConstraints\n- Do not guess: first refactor JWT verification/auth plumbing so the server can reliably detect an audience mismatch distinctly from other invalid-token failures.\n- If FastMCP’s auth provider cannot surface this distinction, record the limitation in `docs/adr/DECISIONS.md` and update the canonical spec to match before implementing.\n\nDeliverables\n- Update the JWT verifier / auth layer to preserve the failure cause for audience mismatch.\n- Update HTTP auth middleware to return the explicit 403 for wrong audience.\n- Add tests covering wrong-audience requests.\n\nValidation\n- `make -C gsd-browser test`\n- `make -C gsd-browser lint`",
+          "acceptance_criteria": [
+            {
+              "id": "I5.3b.A",
+              "statement": "Wrong-audience tokens reliably produce a 403 with the pinned WWW-Authenticate header and JSON error body, covered by tests.",
+              "validation": {
+                "commands": [
+                  "make -C gsd-browser check",
+                  "make -C gsd-browser lint",
+                  "make -C gsd-browser test"
+                ],
+                "expect_exit_code": 0
+              }
+            }
+          ]
+        },
+        {
+          "id": "I5.4",
+          "title": "Local HTTP hardening for 8080 MCP endpoints (Origin/Host validation + exemptions)",
+          "status": "todo",
+          "risk": "high",
+          "deliverables": [
+            "gsd-browser/src/gsd_browser/optionb/http_hardening.py (new)",
+            "gsd-browser/src/gsd_browser/fastmcp_v2_http.py (update; apply hardening middleware)",
+            "gsd-browser/tests/test_http_hardening.py (new)"
+          ],
+          "depends_on": ["I5.0", "I5.1"],
+          "references": [
+            {
+              "path": "docs/adr/ADR-0014-local-http-security-hardening-model.md",
+              "purpose": "Accepted local hardening rules (Origin/Host validation) and exemption scope for `/.well-known/*` and `/healthz`."
+            },
+            {
+              "path": "gsd-browser/docs/api/FAST_MCP_V2_CANONICAL_SPEC.md",
+              "purpose": "New HTTP auth section added in I5.0 must pin the concrete hardening config knobs and exemption rules."
+            },
+            {
+              "path": "gsd-browser/src/gsd_browser/fastmcp_v2_http.py",
+              "purpose": "8080 ASGI entrypoint; apply hardening to MCP endpoints without breaking `/.well-known/*` discovery."
+            }
+          ],
+          "kickoff_prompt": "You are executing task I5.4.\n\nObjective\n- Implement the local HTTP security hardening model (ADR-0014) for the 8080 MCP HTTP surface.\n\nConstraints\n- Follow ADR-0014 exactly:\n  - default bind to localhost remains (already true in integration harnesses)\n  - enforce Origin allowlist and Host allowlist where required\n  - exempt endpoints: `GET /.well-known/*`, `GET /healthz`, and `OPTIONS *`\n- Configuration knobs must match what was pinned in the canonical spec in I5.0.\n\nDeliverables\n- Implement `gsd_browser/optionb/http_hardening.py` middleware utilities.\n- Wire middleware into `gsd-browser/src/gsd_browser/fastmcp_v2_http.py`.\n- Add unit tests covering:\n  - requests to `/mcp` rejected with 403 on missing/disallowed Origin\n  - requests to `/.well-known/oauth-protected-resource` succeed without Origin header\n  - null origin accepted only when configured\n\nValidation\n- `make -C gsd-browser test`\n- `make -C gsd-browser lint`",
+          "acceptance_criteria": [
+            {
+              "id": "I5.4.A",
+              "statement": "8080 MCP endpoints enforce ADR-0014 Origin/Host hardening with the correct exemption scope, covered by unit tests.",
+              "validation": {
+                "commands": [
+                  "make -C gsd-browser check",
+                  "make -C gsd-browser lint",
+                  "make -C gsd-browser test"
+                ],
+                "expect_exit_code": 0
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "I6",
+      "name": "Ops Surfaces (8081 REST + MCP Wrapper Tools)",
+      "goal": "Implement the 8081 management/admin REST API and optional MCP wrapper tools using a shared internal service layer, including API key auth and safe-by-default admin gating.",
+      "tasks": [
+        {
+          "id": "I6.0",
+          "title": "Spec pin: 8081 management REST API v1 + API keys + wrapper MCP tools",
+          "status": "todo",
+          "risk": "high",
+          "risk_notes": "HTTP_API.md pins the 8081 contract but canonical spec does not reference 8081 or API key configuration yet; wrapper tools also require pinned naming/payload shapes.",
+          "deliverables": [
+            "gsd-browser/docs/api/FAST_MCP_V2_CANONICAL_SPEC.md (update; reference 8081 surfaces + config knobs)",
+            "gsd-browser/docs/api/HTTP_API.md (update if needed; ensure examples are pinned and complete)",
+            "gsd-browser/docs/api/MCP_TOOLS.md (update; pin wrapper tool names + payload schemas)",
+            "docs/adr/DECISIONS.md (only if any remaining ambiguities must be resolved)"
+          ],
+          "depends_on": ["I5.0"],
+          "references": [
+            {
+              "path": "gsd-browser/docs/api/HTTP_API.md",
+              "purpose": "Pinned 8081 v1 contract: endpoints, pagination, errors, and API key file format."
+            },
+            {
+              "path": "docs/adr/ADR-0018-task-enumeration-surfaces-for-decoupled-operations.md",
+              "purpose": "Accepted 8081 purpose, safe-by-default admin gating, and shared service layer requirement."
+            },
+            {
+              "path": "docs/adr/DECISIONS.md",
+              "purpose": "DR-0018-01/02 and DR-SEC-01 resolved details (cursor binding, API keys file, admin gating)."
+            },
+            {
+              "path": "gsd-browser/docs/api/FAST_MCP_V2_CANONICAL_SPEC.md",
+              "purpose": "Authoritative spec; must be updated to include 8081 scope/auth invariants before implementation."
+            }
+          ],
+          "kickoff_prompt": "You are executing task I6.0.\n\nObjective\n- Promote the 8081 contract and wrapper MCP tool contract to an implementation-ready, canonical spec reference so later tasks do not guess.\n\nConstraints\n- Canonical spec is authoritative; `HTTP_API.md` is the pinned contract doc for 8081 and must be referenced explicitly.\n- Do not introduce endpoints beyond ADR-0018 + `gsd-browser/docs/api/HTTP_API.md`.\n\nDeliverables\n- Update `gsd-browser/docs/api/FAST_MCP_V2_CANONICAL_SPEC.md` to:\n  - explicitly describe the three HTTP surfaces (5009/8080/8081) and which docs govern each.\n  - pin config knobs required for 8081:\n    - `GSD_API_KEYS_FILE`\n    - `GSD_ADMIN_MODE`\n  - pin scope requirements for:\n    - `GET /api/v1/tasks`\n    - `GET /api/v1/admin/tasks`\n    - wrapper tools `tasks_list` and `tasks_admin_list`\n- Update `gsd-browser/docs/api/MCP_TOOLS.md` to pin:\n  - wrapper tool names: `tasks_list`, `tasks_admin_list`\n  - payload schemas (version strings) + fields + error semantics\n  - admin gating semantics (server enablement + `gsd:admin` scope)\n\nValidation\n- `make -C gsd-browser check`",
+          "acceptance_criteria": [
+            {
+              "id": "I6.0.A",
+              "statement": "Canonical spec and API docs unambiguously define 8081 auth, admin gating, API keys, and (if included) wrapper tool naming/payloads.",
+              "validation": {
+                "commands": ["make -C gsd-browser check"],
+                "expect_exit_code": 0
+              }
+            }
+          ]
+        },
+        {
+          "id": "I6.1",
+          "title": "API key registry: load/validate file + constant-time lookup (unit-tested)",
+          "status": "todo",
+          "risk": "medium",
+          "deliverables": [
+            "gsd-browser/src/gsd_browser/optionb/api_keys.py (new)",
+            "gsd-browser/tests/test_api_keys.py (new)"
+          ],
+          "depends_on": ["I6.0", "I5.1"],
+          "references": [
+            {
+              "path": "gsd-browser/docs/api/HTTP_API.md",
+              "purpose": "Pinned `GSD_API_KEYS_FILE` JSON format and `X-API-Key` header behavior."
+            },
+            {
+              "path": "docs/adr/DECISIONS.md",
+              "purpose": "DR-0018-02: file-based registry, `key` vs `key_sha256`, reload-on-start guidance."
+            },
+            {
+              "path": "gsd-browser/src/gsd_browser/optionb/identity.py",
+              "purpose": "Identity normalization rules (tenant_id/subject_id regex); API key identities must obey the same invariants."
+            }
+          ],
+          "kickoff_prompt": "You are executing task I6.1.\n\nObjective\n- Implement API key auth support for 8081 by loading a JSON key registry from `GSD_API_KEYS_FILE`.\n\nConstraints\n- Implement the exact file format from `gsd-browser/docs/api/HTTP_API.md`.\n- Support both `key` (plaintext) and `key_sha256` (hex SHA-256).\n- Compare keys in constant time (avoid timing side-channels).\n\nDeliverables\n- Add `gsd_browser/optionb/api_keys.py`:\n  - Pydantic model(s) for entries (validate required fields)\n  - loader for `GSD_API_KEYS_FILE`\n  - `lookup_identity_and_scopes(api_key) -> (Identity, set[str])|None`\n- Add unit tests covering:\n  - plaintext and sha256 entries\n  - invalid JSON / invalid entries\n  - duplicate keys handling\n\nValidation\n- `make -C gsd-browser test`\n- `make -C gsd-browser lint`",
+          "acceptance_criteria": [
+            {
+              "id": "I6.1.A",
+              "statement": "API key registry loads from `GSD_API_KEYS_FILE`, validates entries, and authenticates keys using constant-time comparison, with unit tests.",
+              "validation": {
+                "commands": [
+                  "make -C gsd-browser check",
+                  "make -C gsd-browser lint",
+                  "make -C gsd-browser test"
+                ],
+                "expect_exit_code": 0
+              }
+            }
+          ]
+        },
+        {
+          "id": "I6.2",
+          "title": "Shared ops service layer: list tasks with cursor-bound pagination",
+          "status": "todo",
+          "risk": "high",
+          "deliverables": [
+            "gsd-browser/src/gsd_browser/optionb/ops_tasks.py (new)",
+            "gsd-browser/tests/test_ops_tasks_list.py (new)"
+          ],
+          "depends_on": ["I6.0"],
+          "references": [
+            {
+              "path": "docs/adr/ADR-0018-task-enumeration-surfaces-for-decoupled-operations.md",
+              "purpose": "Shared service layer requirement; identity scoping and non-enumerability invariants."
+            },
+            {
+              "path": "gsd-browser/docs/api/HTTP_API.md",
+              "purpose": "Pinned 8081 listing contract: filters, sort order, cursor binding, error codes."
+            },
+            {
+              "path": "gsd-browser/src/gsd_browser/optionb/task_ownership.py",
+              "purpose": "Task ownership records stored in Redis; primary data source for listing."
+            },
+            {
+              "path": "gsd-browser/src/gsd_browser/optionb/fastmcp_server.py",
+              "purpose": "How to map ownership records to underlying Docket task keys (session_id + tool_name)."
+            }
+          ],
+          "kickoff_prompt": "You are executing task I6.2.\n\nObjective\n- Build a shared internal service layer that implements 8081 task listing semantics (identity-scoped and admin) with cursor-bound pagination.\n\nConstraints\n- Must satisfy `gsd-browser/docs/api/HTTP_API.md`:\n  - sort order fixed (`created_at desc`, tie-break `task_id desc`)\n  - cursor must be opaque and bound to query params; mismatches return `400` with `error.code=\\\"invalid_cursor\\\"`\n  - identity-scoped listing never returns cross-identity tasks\n\nDeliverables\n- Add `gsd_browser/optionb/ops_tasks.py` with:\n  - request/response models for list filters\n  - cursor encoding/decoding that binds to query params\n  - Redis scan/listing over task ownership keys and best-effort status hydration from Docket\n- Add unit tests for:\n  - cursor binding enforcement\n  - limit/max handling\n  - identity scoping\n\nValidation\n- `make -C gsd-browser test`",
+          "acceptance_criteria": [
+            {
+              "id": "I6.2.A",
+              "statement": "Ops task listing service returns results in the pinned order with cursor-bound pagination and correct invalid_cursor errors.",
+              "validation": {
+                "commands": ["make -C gsd-browser test"],
+                "expect_exit_code": 0
+              }
+            }
+          ]
+        },
+        {
+          "id": "I6.3a",
+          "title": "8081 management API skeleton: app + auth middleware + hardening + /healthz",
+          "status": "todo",
+          "risk": "high",
+          "deliverables": [
+            "gsd-browser/src/gsd_browser/management_api/app.py (new)",
+            "gsd-browser/src/gsd_browser/cli.py (update; add serve-management command)",
+            "gsd-browser/tests/test_management_api.py (new)"
+          ],
+          "depends_on": ["I6.1", "I5.1"],
+          "references": [
+            {
+              "path": "gsd-browser/docs/api/HTTP_API.md",
+              "purpose": "8081 v1 contract: health endpoint and shared error envelope; used as the initial skeleton target."
+            },
+            {
+              "path": "docs/adr/ADR-0014-local-http-security-hardening-model.md",
+              "purpose": "Local hardening: Origin/Host validation scope + exemptions."
+            },
+            {
+              "path": "docs/adr/ADR-0018-task-enumeration-surfaces-for-decoupled-operations.md",
+              "purpose": "Admin gating invariants and 'no loopback HTTP' wrapper rule."
+            },
+            {
+              "path": "gsd-browser/src/gsd_browser/fastmcp_v2_http.py",
+              "purpose": "Reference for ASGI app patterns and auth context usage (8080)."
+            }
+          ],
+          "kickoff_prompt": "You are executing task I6.3a.\n\nObjective\n- Establish the 8081 management REST API skeleton with:\n  - app wiring + CLI entrypoint\n  - auth middleware (JWT and optional X-API-Key)\n  - ADR-0014 local hardening middleware and exemptions\n  - `GET /healthz`\n\nConstraints\n- Keep this task small: do not implement task listing endpoints yet (those are I6.3b).\n- Auth requirements:\n  - support `Authorization: Bearer <jwt>` using the same identity mapping as 8080\n  - support `X-API-Key` only when `GSD_API_KEYS_FILE` is set\n- Apply ADR-0014 hardening and exemption rules.\n\nDeliverables\n- Add `gsd_browser/management_api/app.py` that can serve `GET /healthz` and installs auth/hardening middleware.\n- Add a CLI command to run it on port 8081 (default bind localhost).\n- Add tests validating:\n  - `GET /healthz` returns 200\n  - auth middleware rejects missing/invalid auth for `/api/*` paths (even if endpoints aren't mounted yet)\n  - hardening exemptions for `GET /healthz` and `OPTIONS *` behave per ADR-0014\n\nValidation\n- `make -C gsd-browser test`",
+          "acceptance_criteria": [
+            {
+              "id": "I6.3a.A",
+              "statement": "8081 server can start, serves /healthz, and enforces auth/hardening middleware per ADR-0014, covered by tests.",
+              "validation": {
+                "commands": [
+                  "make -C gsd-browser check",
+                  "make -C gsd-browser lint",
+                  "make -C gsd-browser test"
+                ],
+                "expect_exit_code": 0
+              }
+            }
+          ]
+        },
+        {
+          "id": "I6.3b",
+          "title": "8081 tasks endpoints: GET /api/v1/tasks and GET /api/v1/admin/tasks",
+          "status": "todo",
+          "risk": "high",
+          "deliverables": [
+            "gsd-browser/src/gsd_browser/management_api/app.py (update; add tasks endpoints)",
+            "gsd-browser/tests/test_management_api_tasks.py (new)"
+          ],
+          "depends_on": ["I6.3a", "I6.2"],
+          "references": [
+            {
+              "path": "gsd-browser/docs/api/HTTP_API.md",
+              "purpose": "Pinned 8081 tasks listing contract: endpoints, params, sorting, cursor binding, and error envelope."
+            },
+            {
+              "path": "docs/adr/ADR-0018-task-enumeration-surfaces-for-decoupled-operations.md",
+              "purpose": "Identity-scoped listing + safe-by-default admin gating invariants."
+            },
+            {
+              "path": "gsd-browser/src/gsd_browser/optionb/ops_tasks.py",
+              "purpose": "Shared service layer to back both 8081 endpoints and MCP wrapper tools."
+            }
+          ],
+          "kickoff_prompt": "You are executing task I6.3b.\n\nObjective\n- Implement the pinned 8081 task listing endpoints:\n  - `GET /api/v1/tasks` (identity-scoped)\n  - `GET /api/v1/admin/tasks` (admin; gated)\n\nConstraints\n- Implement only what is pinned in `gsd-browser/docs/api/HTTP_API.md`.\n- Admin gating must require BOTH `GSD_ADMIN_MODE=1` and `gsd:admin` scope.\n- Cursor misuse must return `400` with `error.code=\"invalid_cursor\"`.\n\nDeliverables\n- Add the two endpoints to `gsd_browser/management_api/app.py` using the shared `ops_tasks` layer.\n- Add tests validating:\n  - identity-scoped listing returns only owned tasks\n  - admin listing is forbidden unless admin mode + scope\n  - invalid cursor errors match the pinned error envelope\n\nValidation\n- `make -C gsd-browser test`",
+          "acceptance_criteria": [
+            {
+              "id": "I6.3b.A",
+              "statement": "8081 tasks endpoints match the pinned contract (identity scoping, admin gating, cursor errors), covered by tests.",
+              "validation": {
+                "commands": [
+                  "make -C gsd-browser check",
+                  "make -C gsd-browser lint",
+                  "make -C gsd-browser test"
+                ],
+                "expect_exit_code": 0
+              }
+            }
+          ]
+        },
+        {
+          "id": "I6.4",
+          "title": "MCP wrapper tools for ops: tasks_list + tasks_admin_list (shared service layer)",
+          "status": "todo",
+          "risk": "medium",
+          "deliverables": [
+            "gsd-browser/src/gsd_browser/fastmcp_v2_stdio.py (update; register wrapper tools)",
+            "gsd-browser/src/gsd_browser/contracts/v1.py (update; wrapper payload schemas if new)",
+            "gsd-browser/docs/api/MCP_TOOLS.md (update; document wrapper tools)",
+            "gsd-browser/tools/export_contract_schemas.py (run; generated jsonschema updated)",
+            "gsd-browser/tests/test_exported_jsonschema_in_sync.py (must remain passing)",
+            "gsd-browser/tests/test_wrapper_tools_tasks_list.py (new)"
+          ],
+          "depends_on": ["I6.0", "I6.2"],
+          "references": [
+            {
+              "path": "docs/adr/DECISIONS.md",
+              "purpose": "DR-WRAP-01 requires wrapper tools to call a shared internal service layer (no loopback HTTP)."
+            },
+            {
+              "path": "docs/adr/ADR-0018-task-enumeration-surfaces-for-decoupled-operations.md",
+              "purpose": "Wrapper tools may exist; must be built on shared service layer."
+            },
+            {
+              "path": "gsd-browser/docs/api/MCP_TOOLS.md",
+              "purpose": "Tool surface contract; wrapper tools must be added here with pinned payload schemas."
+            },
+            {
+              "path": "gsd-browser/src/gsd_browser/contracts/v1.py",
+              "purpose": "Machine-checkable JSON schema export gate for any new tool payloads."
+            }
+          ],
+          "kickoff_prompt": "You are executing task I6.4.\n\nObjective\n- Add MCP wrapper tools for ops surfaces (task listing) that do NOT depend on loopback calls to 8081.\n\nConstraints\n- Tool names, payload schema(s), and semantics must be pinned in `gsd-browser/docs/api/MCP_TOOLS.md` (from I6.0).\n- Wrapper tools must call `gsd_browser.optionb.ops_tasks` (or equivalent shared service layer) directly.\n- If contracts change, run the drift gate:\n  - export: `cd gsd-browser && make bootstrap && PYTHONPATH=./src ./.venv/bin/python tools/export_contract_schemas.py`\n  - enforce: `cd gsd-browser && make bootstrap && PYTHONPATH=./src ./.venv/bin/python -m pytest -q tests/test_exported_jsonschema_in_sync.py`\n\nDeliverables\n- Register wrapper tools in the FastMCP v2 runtime (stdio + HTTP) and return JSON payloads via `TextContent`.\n- Add focused unit tests verifying:\n  - identity-scoped listing returns only owned tasks\n  - admin wrapper tool is gated (requires scope + server enablement if applicable)\n\nValidation\n- `make -C gsd-browser check`",
+          "acceptance_criteria": [
+            {
+              "id": "I6.4.A",
+              "statement": "Wrapper tools exist, are documented, and return schema-valid payloads; schema export gate remains in sync.",
+              "validation": {
+                "commands": [
+                  "cd gsd-browser && make bootstrap && PYTHONPATH=./src ./.venv/bin/python tools/export_contract_schemas.py",
+                  "cd gsd-browser && make bootstrap && PYTHONPATH=./src ./.venv/bin/python -m pytest -q tests/test_exported_jsonschema_in_sync.py",
+                  "make -C gsd-browser check"
+                ],
+                "expect_exit_code": 0
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "I7",
+      "name": "Worker Topology + Maintenance Scheduling",
+      "goal": "Add a first-class worker entrypoint and wire worker-led cleanup scheduling (leadership via Redis lock) so artifacts do not accumulate indefinitely.",
+      "tasks": [
+        {
+          "id": "I7.0a",
+          "title": "Worker entrypoint: CLI command to run Docket workers (server concurrency=0 friendly)",
+          "status": "todo",
+          "risk": "high",
+          "deliverables": [
+            "gsd-browser/src/gsd_browser/cli.py (update; add worker command)",
+            "gsd-browser/docs/api/STATUS.md (update; worker entrypoint documentation)"
+          ],
+          "depends_on": ["I2.0"],
+          "references": [
+            {
+              "path": "docs/adr/ADR-0015-option-b-operational-topology-and-reference-deployment.md",
+              "purpose": "Accepted topology: server processes do not execute in prod; workers run separately."
+            },
+            {
+              "path": "gsd-browser/src/gsd_browser/fastmcp_v2_stdio.py",
+              "purpose": "FastMCP v2 runtime; worker entrypoint must run the same tool code."
+            }
+          ],
+          "kickoff_prompt": "You are executing task I7.0a.\n\nObjective\n- Add a supported worker entrypoint so operators can run server processes with `FASTMCP_DOCKET_CONCURRENCY=0` and separate worker pools with `FASTMCP_DOCKET_CONCURRENCY>0`.\n\nConstraints\n- Follow ADR-0015; if FastMCP provides a standard worker runner, use it rather than inventing a new one.\n- Keep stdio/HTTP server entrypoints unchanged.\n\nDeliverables\n- Add a CLI command (e.g. `gsd worker`) that starts the FastMCP/Docket worker loop.\n- Document the expected env vars and example commands in `gsd-browser/docs/api/STATUS.md`.\n\nValidation\n- `make -C gsd-browser test`",
+          "acceptance_criteria": [
+            {
+              "id": "I7.0a.A",
+              "statement": "A documented worker entrypoint exists and can be started independently of the MCP server process; unit tests remain passing.",
+              "validation": {
+                "commands": ["make -C gsd-browser test"],
+                "expect_exit_code": 0
+              }
+            }
+          ]
+        },
+        {
+          "id": "I7.0b",
+          "title": "Reference deployments: docker-compose for minimal and production Option B topology",
+          "status": "todo",
+          "risk": "medium",
+          "deliverables": [
+            "gsd-browser/docker/compose.minimal.yml (new)",
+            "gsd-browser/docker/compose.production.yml (new)",
+            "gsd-browser/docs/api/STATUS.md (update; reference deployment instructions)"
+          ],
+          "depends_on": ["I7.0a"],
+          "references": [
+            {
+              "path": "docs/adr/ADR-0015-option-b-operational-topology-and-reference-deployment.md",
+              "purpose": "Accepted reference deployment shapes and required components."
+            },
+            {
+              "path": "docs/adr/ADR-0016-configuration-normalization-for-redis-docket-and-env-vars.md",
+              "purpose": "Config invariants (single Redis via FASTMCP_DOCKET_URL) that reference deployments must follow."
+            },
+            {
+              "path": "gsd-browser/docs/api/FAST_MCP_V2_CANONICAL_SPEC.md",
+              "purpose": "Pinned env vars for Option B (tasks/artifacts/cleanup) used in compose files."
+            }
+          ],
+          "kickoff_prompt": "You are executing task I7.0b.\n\nObjective\n- Provide versioned, runnable reference docker-compose deployments for Option B per ADR-0015:\n  - minimal (server + worker + redis)\n  - production (server + worker pool + redis + SeaweedFS)\n\nConstraints\n- Follow canonical env var naming from `gsd-browser/docs/api/FAST_MCP_V2_CANONICAL_SPEC.md`.\n- Keep these as reference deployments (do not break existing `docker/compose.redistest.yml`).\n\nDeliverables\n- Add `gsd-browser/docker/compose.minimal.yml` and `gsd-browser/docker/compose.production.yml`.\n- Update `gsd-browser/docs/api/STATUS.md` with commands to run these deployments.\n\nValidation\n- `make -C gsd-browser check`",
+          "acceptance_criteria": [
+            {
+              "id": "I7.0b.A",
+              "statement": "Reference compose files exist for minimal and production Option B topologies and are documented in STATUS.md.",
+              "validation": {
+                "commands": [
+                  "make -C gsd-browser check",
+                  "docker compose -f gsd-browser/docker/compose.minimal.yml config",
+                  "docker compose -f gsd-browser/docker/compose.production.yml config",
+                  "docker compose -f gsd-browser/docker/compose.minimal.yml build gsd",
+                  "docker compose -f gsd-browser/docker/compose.production.yml build gsd"
+                ],
+                "expect_exit_code": 0
+              }
+            }
+          ]
+        },
+        {
+          "id": "I7.1",
+          "title": "Wire worker-led cleanup scheduling (CleanupRunner loop + leader election)",
+          "status": "todo",
+          "risk": "high",
+          "deliverables": [
+            "gsd-browser/src/gsd_browser/optionb/maintenance.py (new)",
+            "gsd-browser/src/gsd_browser/cli.py (update; enable maintenance loop in worker command)",
+            "gsd-browser/tests/integration/test_cleanup_scheduling_e2e.py (new; requires Redis harness)"
+          ],
+          "depends_on": ["I7.0a", "I3.4"],
+          "references": [
+            {
+              "path": "gsd-browser/docs/api/FAST_MCP_V2_CANONICAL_SPEC.md",
+              "purpose": "§4.3 cleanup rules + `GSD_CLEANUP_INTERVAL_S` contract."
+            },
+            {
+              "path": "docs/adr/ADR-0015-option-b-operational-topology-and-reference-deployment.md",
+              "purpose": "Worker-led maintenance decision."
+            },
+            {
+              "path": "gsd-browser/src/gsd_browser/optionb/artifact_index.py",
+              "purpose": "CleanupRunner implementation exists but is not scheduled today."
+            }
+          ],
+          "kickoff_prompt": "You are executing task I7.1.\n\nObjective\n- Ensure cleanup is actually scheduled in a supported process (worker-led) so artifacts and index records do not accumulate indefinitely.\n\nConstraints\n- Use the existing `CleanupRunner.run_once()` and its Redis lock; do not change lock semantics (canonical spec).\n- Schedule interval is `GSD_CLEANUP_INTERVAL_S` (seconds; default 300).\n- Only one worker should run cleanup per interval (leader election via lock).\n\nDeliverables\n- Add a maintenance loop module that:\n  - wakes every `GSD_CLEANUP_INTERVAL_S`\n  - calls `CleanupRunner.run_once()` and logs whether it acquired leadership\n  - tolerates failures without crashing the worker process\n- Wire the loop into the worker entrypoint.\n- Add an integration test (marked integration) that starts Redis and asserts:\n  - a cleanup cycle runs (or attempts) under test control\n  - lock prevents multiple concurrent cleanups\n\nValidation\n- `make -C gsd-browser redistest-up`\n- `make -C gsd-browser check`\n- `make -C gsd-browser redistest-down`",
+          "acceptance_criteria": [
+            {
+              "id": "I7.1.A",
+              "statement": "A worker-led maintenance loop schedules `CleanupRunner` and an integration test exercises the scheduling path under Redis.",
+              "validation": {
+                "commands": [
+                  "make -C gsd-browser redistest-up",
+                  "make -C gsd-browser check",
+                  "make -C gsd-browser redistest-down"
+                ],
+                "expect_exit_code": 0
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "I8",
+      "name": "Compat Jobs Surface (Non-SEP-1686 Clients)",
+      "goal": "Provide Codex-compatible job submission/status/result/cancel/wait tools, while preserving non-enumerability and multi-tenant isolation.",
+      "tasks": [
+        {
+          "id": "I8.0",
+          "title": "Spec pin + contracts: compat job tool payloads, job_id mapping, retention knobs",
+          "status": "todo",
+          "risk": "high",
+          "risk_notes": "Compat jobs add new public tool contracts and retention semantics; must update canonical spec, MCP_TOOLS, and exported JSON schemas together to avoid drift.",
+          "deliverables": [
+            "docs/adr/ADR-0011-compat-job-tools-contract-and-job-id-strategy.md (reference; no changes unless needed)",
+            "docs/adr/ADR-0017-job-task-retention-and-cleanup-policy.md (align language to canonical env vars if needed)",
+            "gsd-browser/docs/api/FAST_MCP_V2_CANONICAL_SPEC.md (update; job retention + identity binding invariants)",
+            "gsd-browser/docs/api/MCP_TOOLS.md (update; new tools and payload schemas)",
+            "gsd-browser/src/gsd_browser/contracts/v1.py (update; add new payload models)",
+            "gsd-browser/tools/export_contract_schemas.py (run; jsonschema updated)",
+            "gsd-browser/tests/test_exported_jsonschema_in_sync.py (must remain passing)"
+          ],
+          "depends_on": ["I6.0", "I7.0a"],
+          "references": [
+            {
+              "path": "docs/adr/ADR-0011-compat-job-tools-contract-and-job-id-strategy.md",
+              "purpose": "Accepted compat job tool surface, job_wait timeout payload, and job_id invariants."
+            },
+            {
+              "path": "docs/adr/ADR-0017-job-task-retention-and-cleanup-policy.md",
+              "purpose": "Retention/cleanup policy expectations once jobs exist; ensure env var names are pinned in canonical spec."
+            },
+            {
+              "path": "gsd-browser/src/gsd_browser/contracts/v1.py",
+              "purpose": "Authoritative contract models + schema export gate."
+            },
+            {
+              "path": "gsd-browser/tools/export_contract_schemas.py",
+              "purpose": "Drift gate export tooling."
+            }
+          ],
+          "kickoff_prompt": "You are executing task I8.0.\n\nObjective\n- Define and pin the compat jobs API surface (tools + payload schemas) and any required retention knobs so implementation can proceed without guessing.\n\nConstraints\n- Follow ADR-0011 for tool naming and required behaviors (including job_wait timeout payload).\n- If new retention env vars are introduced for jobs vs artifacts, they must be `*_SECONDS_*` and must update canonical spec and cleanup implementation in the same PR series.\n- If contracts change, run the drift gate export + enforcement test.\n\nDeliverables\n- Update `gsd-browser/docs/api/MCP_TOOLS.md` to document:\n  - `{tool}_submit` tools for each long tool\n  - `job_get`, `job_result`, `job_cancel`, `job_wait`\n  - payload schemas and version strings\n- Update `gsd-browser/src/gsd_browser/contracts/v1.py` with the new Pydantic models.\n- Run schema export and ensure `tests/test_exported_jsonschema_in_sync.py` passes.\n\nValidation\n- `cd gsd-browser && make bootstrap && PYTHONPATH=./src ./.venv/bin/python tools/export_contract_schemas.py`\n- `cd gsd-browser && make bootstrap && PYTHONPATH=./src ./.venv/bin/python -m pytest -q tests/test_exported_jsonschema_in_sync.py`\n- `make -C gsd-browser test`",
+          "acceptance_criteria": [
+            {
+              "id": "I8.0.A",
+              "statement": "Compat job tool contracts are fully specified in MCP_TOOLS and enforced by exported JSON schema sync tests.",
+              "validation": {
+                "commands": [
+                  "cd gsd-browser && make bootstrap && PYTHONPATH=./src ./.venv/bin/python tools/export_contract_schemas.py",
+                  "cd gsd-browser && make bootstrap && PYTHONPATH=./src ./.venv/bin/python -m pytest -q tests/test_exported_jsonschema_in_sync.py",
+                  "make -C gsd-browser test"
+                ],
+                "expect_exit_code": 0
+              }
+            }
+          ]
+        },
+        {
+          "id": "I8.1",
+          "title": "Job store: persist job_id → backend execution mapping with ownership",
+          "status": "todo",
+          "risk": "high",
+          "deliverables": [
+            "gsd-browser/src/gsd_browser/optionb/job_store.py (new)",
+            "gsd-browser/tests/test_job_store.py (new)"
+          ],
+          "depends_on": ["I8.0"],
+          "references": [
+            {
+              "path": "docs/adr/ADR-0011-compat-job-tools-contract-and-job-id-strategy.md",
+              "purpose": "Job ownership/mapping record requirements and job_id invariants."
+            },
+            {
+              "path": "gsd-browser/src/gsd_browser/optionb/task_ownership.py",
+              "purpose": "Existing ownership record patterns (Redis keying + TTL) to mirror for jobs."
+            },
+            {
+              "path": "gsd-browser/docs/api/FAST_MCP_V2_CANONICAL_SPEC.md",
+              "purpose": "Identity model and non-enumerability semantics to apply to jobs."
+            }
+          ],
+          "kickoff_prompt": "You are executing task I8.1.\n\nObjective\n- Implement a durable job mapping store that:\n  - generates stable `job_id`\n  - persists ownership (tenant/subject) and lookup data for the underlying execution\n  - supports session-independent `job_get|job_result|job_cancel`.\n\nConstraints\n- Job IDs must be opaque and non-guessable (ADR-0011).\n- Authorization failures must be non-enumerable (treat as not found).\n\nDeliverables\n- Add `gsd_browser/optionb/job_store.py` with:\n  - `create_job(...) -> JobRecord`\n  - `get_job(job_id) -> JobRecord|None` with ownership enforcement\n  - TTL/expiry per pinned retention knobs\n- Add unit tests.\n\nValidation\n- `make -C gsd-browser test`",
+          "acceptance_criteria": [
+            {
+              "id": "I8.1.A",
+              "statement": "Job records are persisted with ownership and can be retrieved/cancelled across sessions with non-enumerable denial semantics, covered by unit tests.",
+              "validation": {
+                "commands": ["make -C gsd-browser test"],
+                "expect_exit_code": 0
+              }
+            }
+          ]
+        },
+        {
+          "id": "I8.2a",
+          "title": "Compat jobs (part 1): submit + job_get (state/progress snapshot)",
+          "status": "todo",
+          "risk": "high",
+          "deliverables": [
+            "gsd-browser/src/gsd_browser/fastmcp_v2_stdio.py (update; register compat job tools)",
+            "gsd-browser/src/gsd_browser/optionb/compat_jobs.py (new)",
+            "gsd-browser/tests/test_compat_jobs.py (new)"
+          ],
+          "depends_on": ["I8.1", "I7.0a"],
+          "references": [
+            {
+              "path": "docs/adr/ADR-0011-compat-job-tools-contract-and-job-id-strategy.md",
+              "purpose": "Tool surface and state vocabulary for compat jobs (submit + job_get)."
+            },
+            {
+              "path": "gsd-browser/docs/api/MCP_TOOLS.md",
+              "purpose": "Pinned payload schemas for compat job tools (added in I8.0)."
+            },
+            {
+              "path": "gsd-browser/src/gsd_browser/fastmcp_v2_stdio.py",
+              "purpose": "Where to register tools; reuse existing tool implementations for final payloads."
+            }
+          ],
+          "kickoff_prompt": "You are executing task I8.2a.\n\nObjective\n- Implement the first slice of compat jobs for non-SEP-1686 clients:\n  - `{tool}_submit` (at least for `web_eval_agent` first, then expand)\n  - `job_get` returning state + progress/progress_message snapshot\n\nConstraints\n- Follow ADR-0011 state vocabulary and non-enumerability.\n- Do not implement `job_result`, `job_wait`, or `job_cancel` in this task; those are split into I8.2b/I8.2c.\n\nDeliverables\n- Implement submit + job_get in `gsd_browser/optionb/compat_jobs.py` and register tools.\n- Add unit tests for submit/get lifecycle and parameter validation.\n\nValidation\n- `make -C gsd-browser test`",
+          "acceptance_criteria": [
+            {
+              "id": "I8.2a.A",
+              "statement": "Submit and job_get work end-to-end and return schema-valid payloads (state/progress snapshot), covered by unit tests.",
+              "validation": {
+                "commands": ["make -C gsd-browser test"],
+                "expect_exit_code": 0
+              }
+            }
+          ]
+        },
+        {
+          "id": "I8.2b",
+          "title": "Compat jobs (part 2): job_result + job_wait (incl. timeout payload)",
+          "status": "todo",
+          "risk": "high",
+          "deliverables": [
+            "gsd-browser/src/gsd_browser/optionb/compat_jobs.py (update; add job_result + job_wait)",
+            "gsd-browser/tests/test_compat_jobs_result_wait.py (new)"
+          ],
+          "depends_on": ["I8.2a"],
+          "references": [
+            {
+              "path": "docs/adr/ADR-0011-compat-job-tools-contract-and-job-id-strategy.md",
+              "purpose": "job_result and job_wait contract, including pinned timeout payload `gsd.job_wait.timeout.v1`."
+            },
+            {
+              "path": "gsd-browser/docs/api/MCP_TOOLS.md",
+              "purpose": "Pinned payload schemas for job_result and job_wait (added in I8.0)."
+            }
+          ],
+          "kickoff_prompt": "You are executing task I8.2b.\n\nObjective\n- Implement:\n  - `job_result(job_id)` returning the final tool payload when terminal\n  - `job_wait(job_id, ...)` polling internally and returning either the final payload or the pinned timeout payload\n\nConstraints\n- Must follow ADR-0011 exactly, including:\n  - max_wait_s cap\n  - poll_interval_s minimum\n  - timeout payload `gsd.job_wait.timeout.v1` (no partial/ambiguous tool result)\n\nDeliverables\n- Implement job_result/job_wait in `gsd_browser/optionb/compat_jobs.py`.\n- Add focused unit tests including timeout behavior.\n\nValidation\n- `make -C gsd-browser test`",
+          "acceptance_criteria": [
+            {
+              "id": "I8.2b.A",
+              "statement": "job_result and job_wait behave per ADR-0011 (including the pinned timeout payload), covered by unit tests.",
+              "validation": {
+                "commands": ["make -C gsd-browser test"],
+                "expect_exit_code": 0
+              }
+            }
+          ]
+        },
+        {
+          "id": "I8.2c",
+          "title": "Compat jobs (part 3): job_cancel (non-enumerable cancel)",
+          "status": "todo",
+          "risk": "medium",
+          "deliverables": [
+            "gsd-browser/src/gsd_browser/optionb/compat_jobs.py (update; add job_cancel)",
+            "gsd-browser/tests/test_compat_jobs_cancel.py (new)"
+          ],
+          "depends_on": ["I8.2a"],
+          "references": [
+            {
+              "path": "docs/adr/ADR-0011-compat-job-tools-contract-and-job-id-strategy.md",
+              "purpose": "job_cancel semantics and non-enumerability requirements."
+            },
+            {
+              "path": "gsd-browser/docs/api/FAST_MCP_V2_CANONICAL_SPEC.md",
+              "purpose": "Non-enumerability rules to apply to job cancel."
+            }
+          ],
+          "kickoff_prompt": "You are executing task I8.2c.\n\nObjective\n- Implement `job_cancel(job_id)` that cancels the underlying execution and returns the pinned response.\n\nConstraints\n- Must be non-enumerable: unauthorized/nonexistent jobs should respond as not found.\n\nDeliverables\n- Implement job_cancel in `gsd_browser/optionb/compat_jobs.py`.\n- Add unit tests covering cancel of owned job and non-enumerable denial.\n\nValidation\n- `make -C gsd-browser test`",
+          "acceptance_criteria": [
+            {
+              "id": "I8.2c.A",
+              "statement": "job_cancel works and preserves non-enumerability semantics, covered by unit tests.",
+              "validation": {
+                "commands": ["make -C gsd-browser test"],
+                "expect_exit_code": 0
+              }
+            }
+          ]
+        },
+        {
+          "id": "I8.2d",
+          "title": "Compat jobs (part 4): restart resilience integration test",
+          "status": "todo",
+          "risk": "high",
+          "deliverables": [
+            "gsd-browser/tests/integration/test_compat_jobs_restart_e2e.py (new)"
+          ],
+          "depends_on": ["I8.2b", "I8.2c"],
+          "references": [
+            {
+              "path": "docs/adr/ADR-0011-compat-job-tools-contract-and-job-id-strategy.md",
+              "purpose": "Conformance tests: submit job, restart server, job_get/job_result still work (same identity)."
+            },
+            {
+              "path": "docs/adr/ADR-0015-option-b-operational-topology-and-reference-deployment.md",
+              "purpose": "Detached execution model assumptions that make restart resilience critical."
+            }
+          ],
+          "kickoff_prompt": "You are executing task I8.2d.\n\nObjective\n- Add an integration test that proves compat jobs are restart resilient:\n  - submit job\n  - restart server\n  - job_get and job_result still work for the same identity\n\nConstraints\n- Keep the test deterministic and fast; use the existing Redis harness.\n\nValidation\n- `make -C gsd-browser redistest-up`\n- `make -C gsd-browser check`\n- `make -C gsd-browser redistest-down`",
+          "acceptance_criteria": [
+            {
+              "id": "I8.2d.A",
+              "statement": "An integration test demonstrates compat jobs are restart resilient and remain identity-scoped.",
+              "validation": {
+                "commands": [
+                  "make -C gsd-browser redistest-up",
+                  "make -C gsd-browser check",
+                  "make -C gsd-browser redistest-down"
+                ],
+                "expect_exit_code": 0
+              }
+            }
+          ]
+        },
+        {
+          "id": "I8.3",
+          "title": "Spec pin: 8081 job inspection endpoints (GET /api/v1/jobs/{job_id})",
+          "status": "todo",
+          "risk": "medium",
+          "deliverables": [
+            "gsd-browser/docs/api/HTTP_API.md (update; pin job endpoint request/response + errors)",
+            "gsd-browser/docs/api/FAST_MCP_V2_CANONICAL_SPEC.md (update; reference 8081 jobs surface + auth invariants)",
+            "docs/adr/DECISIONS.md (only if new decisions are required)"
+          ],
+          "depends_on": ["I8.0", "I6.0"],
+          "references": [
+            {
+              "path": "docs/adr/ADR-0018-task-enumeration-surfaces-for-decoupled-operations.md",
+              "purpose": "8081 includes job inspection endpoints; must remain identity-scoped and safe-by-default for admin."
+            },
+            {
+              "path": "docs/adr/ADR-0011-compat-job-tools-contract-and-job-id-strategy.md",
+              "purpose": "Job state vocabulary and non-enumerability; 8081 job inspection should align with these semantics."
+            },
+            {
+              "path": "gsd-browser/docs/api/HTTP_API.md",
+              "purpose": "8081 contract doc; currently contains a placeholder for jobs. This task pins the v1 job inspection contract."
+            }
+          ],
+          "kickoff_prompt": "You are executing task I8.3.\n\nObjective\n- Pin the v1 8081 job inspection contract (`GET /api/v1/jobs/{job_id}` and any admin variant) so implementation does not guess.\n\nConstraints\n- Must align with ADR-0011 job state vocabulary and non-enumerability semantics.\n- Must align with ADR-0018 admin gating invariants and the pinned 8081 error envelope.\n\nDeliverables\n- Update `gsd-browser/docs/api/HTTP_API.md` to pin:\n  - endpoint(s) and status codes\n  - response fields (job_id, tool_name, state, progress/progress_message snapshot, timestamps when known, session_id if applicable)\n  - non-enumerable not-found semantics for unauthorized/nonexistent/expired\n  - admin gating rules for any admin endpoint\n\nValidation\n- `make -C gsd-browser check`",
+          "acceptance_criteria": [
+            {
+              "id": "I8.3.A",
+              "statement": "HTTP_API.md includes a pinned, implementable v1 contract for 8081 job inspection endpoints aligned with ADR-0011/ADR-0018.",
+              "validation": {
+                "commands": ["make -C gsd-browser check"],
+                "expect_exit_code": 0
+              }
+            }
+          ]
+        },
+        {
+          "id": "I8.4",
+          "title": "Implement 8081 job inspection endpoints (identity-scoped + admin) with tests",
+          "status": "todo",
+          "risk": "high",
+          "deliverables": [
+            "gsd-browser/src/gsd_browser/management_api/app.py (update; add job endpoints)",
+            "gsd-browser/src/gsd_browser/optionb/ops_jobs.py (new)",
+            "gsd-browser/tests/test_management_api_jobs.py (new)"
+          ],
+          "depends_on": ["I8.3", "I8.2a", "I6.3b"],
+          "references": [
+            {
+              "path": "gsd-browser/docs/api/HTTP_API.md",
+              "purpose": "Pinned 8081 job inspection contract (from I8.3)."
+            },
+            {
+              "path": "docs/adr/ADR-0011-compat-job-tools-contract-and-job-id-strategy.md",
+              "purpose": "Job state model and non-enumerability semantics."
+            },
+            {
+              "path": "docs/adr/ADR-0018-task-enumeration-surfaces-for-decoupled-operations.md",
+              "purpose": "Admin gating invariants and shared service layer requirement."
+            }
+          ],
+          "kickoff_prompt": "You are executing task I8.4.\n\nObjective\n- Implement the pinned 8081 job inspection endpoints using a shared internal service layer, and add tests.\n\nConstraints\n- Must reuse the same identity extraction/auth primitives as 8081 tasks endpoints.\n- Admin endpoints require BOTH `GSD_ADMIN_MODE=1` and `gsd:admin` scope.\n- Unauthorized vs nonexistent vs expired must be non-enumerable for non-admin callers.\n\nDeliverables\n- Add `gsd_browser/optionb/ops_jobs.py` implementing job lookup + state snapshot using the job store.\n- Update `gsd_browser/management_api/app.py` to add the pinned endpoints.\n- Add tests validating:\n  - identity-scoped callers can read their own jobs\n  - cross-identity callers get non-enumerable not-found\n  - admin endpoints are gated\n\nValidation\n- `make -C gsd-browser test`",
+          "acceptance_criteria": [
+            {
+              "id": "I8.4.A",
+              "statement": "8081 job inspection endpoints return the pinned response shape and enforce identity/admin rules, covered by tests.",
+              "validation": {
+                "commands": ["make -C gsd-browser test"],
+                "expect_exit_code": 0
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "I9",
+      "name": "Default Runtime Switch + Deprecations",
+      "goal": "Make FastMCP v2 the default runtime for stdio while preserving a documented escape hatch and ensuring non-SEP-1686 clients have compat job tools.",
+      "tasks": [
+        {
+          "id": "I9.0",
+          "title": "Spec pin: default stdio runtime + explicit legacy escape hatch",
+          "status": "todo",
+          "risk": "high",
+          "risk_notes": "Changing the default runtime is a user-facing behavioral change; must be coordinated with compat job tools and documentation to avoid breaking existing hosts.",
+          "deliverables": [
+            "gsd-browser/docs/api/STATUS.md (update; default runtime and migration guidance)",
+            "gsd-browser/docs/api/FAST_MCP_V2_CANONICAL_SPEC.md (update; pin runtime selection + escape hatch naming)",
+            "docs/planning/BACKLOG.md (update; mark default switch planning item as scheduled)"
+          ],
+          "depends_on": ["I8.2d"],
+          "references": [
+            {
+              "path": "gsd-browser/docs/api/STATUS.md",
+              "purpose": "Current implemented-vs-planned boundary; currently documents FastMCP v2 behind `GSD_USE_FASTMCP_V2=true`."
+            },
+            {
+              "path": "gsd-browser/docs/api/FAST_MCP_V2_CANONICAL_SPEC.md",
+              "purpose": "Canonical spec must pin runtime selection and any escape hatch env vars to avoid drift."
+            },
+            {
+              "path": "gsd-browser/src/gsd_browser/cli.py",
+              "purpose": "Runtime selection logic for `gsd mcp serve`."
+            },
+            {
+              "path": "docs/adr/ADR-0011-compat-job-tools-contract-and-job-id-strategy.md",
+              "purpose": "Compat job tools are required for hosts that don't implement SEP-1686; must exist before default switch."
+            }
+          ],
+          "kickoff_prompt": "You are executing task I9.0.\n\nObjective\n- Pin the runtime selection contract for `gsd mcp serve` (stdio) before changing behavior:\n  - FastMCP v2 becomes the default runtime\n  - a legacy escape hatch remains available and is explicitly named\n\nConstraints\n- Do not break non-SEP-1686 clients: compat job tools must already exist and be documented as the supported path.\n- Avoid drift: the escape hatch env var name and semantics must be pinned in the canonical spec.\n\nDeliverables\n- Update `gsd-browser/docs/api/FAST_MCP_V2_CANONICAL_SPEC.md` and `gsd-browser/docs/api/STATUS.md` to pin:\n  - the default stdio runtime\n  - the exact escape hatch mechanism (env var name and meaning)\n  - deprecation messaging for the legacy runtime\n\nValidation\n- `make -C gsd-browser check`",
+          "acceptance_criteria": [
+            {
+              "id": "I9.0.A",
+              "statement": "Canonical spec pins the stdio default runtime and a concrete legacy escape hatch (name + semantics), and docs reflect the planned change without ambiguity.",
+              "validation": {
+                "commands": ["make -C gsd-browser check"],
+                "expect_exit_code": 0
+              }
+            }
+          ]
+        },
+        {
+          "id": "I9.1",
+          "title": "Implement default runtime switch in CLI + add regression tests",
+          "status": "todo",
+          "risk": "high",
+          "deliverables": [
+            "gsd-browser/src/gsd_browser/cli.py (update; default runtime selection + escape hatch)",
+            "gsd-browser/tests/test_cli_runtime_selection.py (new)",
+            "docs/planning/BACKLOG.md (update; mark default switch as done once landed)"
+          ],
+          "depends_on": ["I9.0"],
+          "references": [
+            {
+              "path": "gsd-browser/docs/api/FAST_MCP_V2_CANONICAL_SPEC.md",
+              "purpose": "Runtime selection contract pinned in I9.0; implementation must match it."
+            },
+            {
+              "path": "gsd-browser/src/gsd_browser/cli.py",
+              "purpose": "Implement the pinned default + escape hatch behavior."
+            }
+          ],
+          "kickoff_prompt": "You are executing task I9.1.\n\nObjective\n- Implement the pinned stdio runtime selection behavior from I9.0 in `gsd-browser/src/gsd_browser/cli.py` and add regression tests.\n\nConstraints\n- Must match the pinned canonical spec exactly.\n- The escape hatch must remain explicit and documented.\n\nDeliverables\n- Update CLI runtime selection.\n- Add tests that cover:\n  - default behavior selects FastMCP v2\n  - escape hatch selects legacy runtime\n\nValidation\n- `make -C gsd-browser test`\n- `make -C gsd-browser lint`",
+          "acceptance_criteria": [
+            {
+              "id": "I9.1.A",
+              "statement": "Runtime selection defaults to FastMCP v2 and the escape hatch restores legacy behavior; tests and lint pass.",
+              "validation": {
+                "commands": ["make -C gsd-browser test", "make -C gsd-browser lint"],
                 "expect_exit_code": 0
               }
             }
