@@ -42,7 +42,7 @@ Define supported shapes explicitly:
 - Leadership is re-acquired if the leader worker dies (another worker takes over)
 
 **Configuration:**
-- `GSD_MAINTENANCE_INTERVAL` - Cleanup interval in seconds (default: 300s / 5 minutes)
+- `GSD_CLEANUP_INTERVAL_S` - Cleanup interval in seconds (default: 300s / 5 minutes)
 
 **Rationale:** Workers already connect to Redis/Docket and understand task lifecycle. One worker claims
 leadership via distributed lock and runs cleanup. This is simpler than a dedicated maintenance process
@@ -122,7 +122,7 @@ Provide versioned, runnable reference deployments (docker-compose) for different
 ## Implementation Notes
 ### Worker-led maintenance implementation
 - Implement maintenance loop in worker process with Redis-based leader election
-- Add `GSD_MAINTENANCE_INTERVAL` environment variable (default: 300 seconds)
+- Use `GSD_CLEANUP_INTERVAL_S` environment variable (default: 300 seconds)
 - Maintenance tasks:
   - Query expired jobs/tasks (based on retention windows from ADR-0017)
   - Delete job records and associated artifacts atomically

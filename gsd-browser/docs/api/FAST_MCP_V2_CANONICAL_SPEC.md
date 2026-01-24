@@ -46,6 +46,16 @@ Constraints:
 - Operators MUST choose claim mappings whose values satisfy the regex; otherwise tokens are rejected.
 - If any requirement fails, the request is unauthorized.
 
+### 1.3 Scope extraction (authoritative)
+Scope checks (ADR-0013) rely on extracting scopes from JWT claims.
+
+Extraction rules (pinned):
+- Prefer claim `scope` (string; space-separated).
+- Fallback to claim `scp`, which may be either:
+  - an array of strings, or
+  - a space-separated string.
+- Any invalid scope claim format results in “no scopes”.
+
 ## 2) Authorization rules (authoritative)
 
 ### 2.1 Non-enumerability

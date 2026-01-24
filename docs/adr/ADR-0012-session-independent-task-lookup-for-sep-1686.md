@@ -65,9 +65,13 @@ where callers need task enumeration, see ADR-0018 which defines CLI (`gsd tasks 
   - cross-tenant/subject access is non-enumerable
 
 ## Open Questions
-- If upstream FastMCP task handlers cannot be overridden cleanly, do we accept a documented limitation
-  (SEP-1686 “check later” requires stable session IDs) and route “check later” users to compat jobs?
-  (I.e., compat jobs become the “check later” story for hosts that churn sessions.)
+### Fallback if task protocol handlers cannot be overridden
+**Decision (2026-01-24):** Session-independent SEP-1686 “check later” support remains a hard
+requirement for the Option B runtime.
+
+If FastMCP upstream changes make handler override impractical, the fallback is **fail-fast** (not
+silent degradation): the Option B runtime must refuse to start (or must explicitly disable v2 and
+surface a clear error) rather than accepting session-dependent lookup behavior.
 
 ## References
 - ADR-0008: FastMCP v2 + Redis-backed MCP long-running tasks (SEP-1686)

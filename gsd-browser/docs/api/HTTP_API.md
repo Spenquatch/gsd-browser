@@ -1,20 +1,20 @@
-# GSD HTTP Management API (planned)
+# GSD HTTP Management API (8081) — v1 Contract (planned)
 
-This document describes the **management/admin REST API** intended for Option B operations
-visibility (task/job enumeration and inspection). This is **not** the MCP protocol surface.
+This document pins the **v1 contract** for the Option B management/admin REST API. This is **not**
+the MCP protocol surface (8080).
 
 Status:
 - The canonical implemented-vs-planned boundary is `gsd-browser/docs/api/STATUS.md`.
-- The management/admin REST API is defined as part of the architecture in ADR-0018, but may not be
-  fully implemented yet.
+- The 8081 REST API is defined as part of the architecture in ADR-0018 and is documented here as a
+  stable contract for the CLI and operators.
+
+ADR: `docs/adr/ADR-0018-task-enumeration-surfaces-for-decoupled-operations.md`.
 
 ## Purpose and ports
 The Option B runtime uses three distinct HTTP surfaces:
 - **5009**: streaming/dashboard server (Socket.IO, CDP control, take-control UX)
 - **8080**: MCP over HTTP transport (Streamable HTTP MCP; tool invocation; not REST)
 - **8081**: management/admin REST API (this document)
-
-ADR: `docs/adr/ADR-0018-task-enumeration-surfaces-for-decoupled-operations.md`.
 
 ## Audience
 This REST API is intended for:
@@ -32,33 +32,114 @@ Contract-level invariants (must hold):
 - Identity extraction for 8081 MUST match 8080 (same tenant/subject rules), so callers cannot be
   “a different user” depending on which port they hit.
 - All endpoints are identity-scoped by default (`tenant_id` + `subject_id`).
-- Admin/all-identities access is disabled by default and requires explicit gating + audit logging.
+- Admin (cross-identity) access is disabled by default and requires explicit gating + audit logging.
 - Unauthorized vs nonexistent vs expired resources should be non-enumerable for non-admin callers
-  (prefer “not found” semantics).
+  (prefer “not found” semantics for get-by-id).
 
 See:
 - ADR-0018 (surface split + auth invariants)
 - ADR-0014 (local HTTP hardening guidance)
-- ADR-0013 (MCP/OAuth discovery/challenge surfaces; applies primarily to MCP HTTP, but the same JWT
-  verification policy should be reused here)
+- `gsd-browser/docs/api/FAST_MCP_V2_CANONICAL_SPEC.md` (identity mapping + non-enumerability rules)
 
 ### Authentication mechanisms
-Planned supported mechanisms:
+Supported mechanisms (v1):
 - `Authorization: Bearer <jwt>` (primary; multi-tenant)
-- `X-API-Key: <key>` (optional; for automation/ops tooling; maps to an identity)
+- `X-API-Key: <key>` (optional; ops automation; maps to an identity and scopes)
 
-## Endpoints (planned)
+### Scope extraction (pinned)
+When authorizing admin endpoints (and, in the future, scope-gated endpoints), scope extraction is
+pinned as:
+- Prefer JWT claim `scope` (string; space-separated), fallback to `scp` (array of strings or
+  space-separated string).
+- Any invalid scope claim format results in “no scopes”.
 
-### List tasks
+### Identity extraction (pinned)
+HTTP identity is derived from JWT claims using the canonical mapping in
+`gsd-browser/docs/api/FAST_MCP_V2_CANONICAL_SPEC.md` (§1):
+- `tenant_id` claim name: `GSD_JWT_TENANT_ID_CLAIM` (default `tenant_id`)
+- `subject_id` claim name: `GSD_JWT_SUBJECT_ID_CLAIM` (default `sub`)
+
+### API keys (pinned)
+API keys are enabled only when `GSD_API_KEYS_FILE` is set.
+
+Request header:
+- `X-API-Key: <key>`
+
+File format:
+- JSON array of entries. Each entry maps to an identity and scopes:
+  - `tenant_id` (string)
+  - `subject_id` (string)
+  - `scopes` (string[])
+  - either:
+    - `key` (string) — plaintext (recommended only for local/dev), or
+    - `key_sha256` (string) — hex SHA-256 of the key (recommended for production)
+  - optional `label` and `created_at` for audit
+
+Example:
+```json
+[
+  {
+    "label": "ops-bot",
+    "created_at": "2026-01-24T00:00:00Z",
+    "key_sha256": "…",
+    "tenant_id": "tenant_a",
+    "subject_id": "ops_bot",
+    "scopes": ["gsd:admin"]
+  }
+]
+```
+
+## Pagination + sorting (pinned)
+Ordering is fixed in v1:
+- Sort by `created_at desc` (tie-break by `task_id desc`)
+
+Pagination is cursor-based:
+- Request: `cursor=<opaque>`
+- Response: `next_cursor=<opaque|null>`
+
+Cursor invariants:
+- Cursors are **opaque** (clients must not parse them).
+- A cursor is **bound to the query parameters** used to generate it. Reusing a cursor with different
+  filters must return `400` with `error.code="invalid_cursor"`.
+
+## Errors (pinned)
+All error responses use a stable JSON envelope:
+```json
+{
+  "error": {
+    "code": "invalid_cursor",
+    "message": "Cursor does not match query",
+    "details": { "hint": "Do not reuse cursors across filters." }
+  }
+}
+```
+
+Status code guidance:
+- `400` invalid inputs (`invalid_cursor`, `invalid_query`, `invalid_limit`, `invalid_since`, …)
+- `401` missing/invalid authentication
+- `403` authenticated but:
+  - insufficient scope, or
+  - admin endpoints disabled
+- `404` not found (used to preserve non-enumerability for get-by-id when unauthorized/nonexistent/expired)
+
+## Endpoints (v1)
+
+### Health
+`GET /healthz`
+
+Returns a small JSON object suitable for liveness/readiness checks.
+
+### List tasks (identity-scoped)
 `GET /api/v1/tasks`
 
-Query parameters (example set):
-- `status`: `running|completed|failed|cancelled` (optional)
-- `since`: ISO-8601 timestamp or duration (`1h`, `30m`, `7d`) (optional)
-- `limit`: default 100, max 1000
-- `cursor`: pagination cursor (opaque)
+Query parameters:
+- `limit` (int, optional): default `100`, max `1000`
+- `cursor` (string, optional): opaque pagination cursor
+- `status` (string, optional): `queued|running|completed|failed|cancelled`
+- `tool_name` (string, optional): comma-separated tool names (example: `web_eval_agent,web_task_agent`)
+- `since` (string, optional): RFC 3339 timestamp (preferred) or duration (`30m`, `7d`)
 
-Response (example shape):
+Response:
 ```json
 {
   "tasks": [
@@ -66,15 +147,55 @@ Response (example shape):
       "task_id": "…",
       "tool_name": "web_eval_agent",
       "status": "running",
-      "created_at": "2026-01-21T12:34:56Z",
-      "updated_at": "2026-01-21T12:35:12Z"
+      "created_at": "2026-01-24T18:12:03Z",
+      "updated_at": null,
+      "expires_at": "2026-01-24T18:27:03Z",
+      "session_id": "…"
     }
   ],
   "next_cursor": "…"
 }
 ```
 
-### Get job details
+Field notes:
+- `updated_at` MAY be `null` if the backend does not provide a reliable “last updated” timestamp.
+- `expires_at` is the task ownership/visibility expiry, not necessarily the backend task TTL.
+
+### List tasks (admin; cross-identity)
+`GET /api/v1/admin/tasks`
+
+Gating (both required):
+- Server: admin mode enabled (for example `GSD_ADMIN_MODE=1`)
+- Caller: authorized for `gsd:admin` scope
+
+Query parameters:
+- All params from `GET /api/v1/tasks`, plus:
+  - `tenant_id` (string, optional)
+  - `subject_id` (string, optional)
+  - `transport` (string, optional): `stdio|http`
+
+Response:
+```json
+{
+  "tasks": [
+    {
+      "task_id": "…",
+      "tool_name": "web_eval_agent",
+      "status": "running",
+      "created_at": "2026-01-24T18:12:03Z",
+      "updated_at": null,
+      "expires_at": "2026-01-24T18:27:03Z",
+      "session_id": "…",
+      "tenant_id": "…",
+      "subject_id": "…",
+      "transport": "http"
+    }
+  ],
+  "next_cursor": "…"
+}
+```
+
+### Get job details (planned; contract placeholder)
 `GET /api/v1/jobs/{job_id}`
 
 Notes:
@@ -82,24 +203,13 @@ Notes:
 - This endpoint is for ops/inspection; compat job interaction for MCP clients happens via MCP tools
   on port 8080.
 
-## Error semantics (recommended)
-For non-admin callers:
-- Missing/invalid auth: `401 Unauthorized`
-- Authenticated but insufficient scope: `403 Forbidden` (if using scopes)
-- Unauthorized resource (wrong tenant/subject), nonexistent, or expired: return “not found”
-  semantics (avoid distinguishability)
-
-For admin callers (explicitly gated):
-- Prefer explicit `403` vs `404` for observability when appropriate, but keep defaults strict.
-
-## Test checklist (conformance)
+## Conformance checklist (v1)
 - Same identity:
-  - can list tasks/jobs within retention window
-  - can fetch details for owned job IDs
+  - can list tasks within retention window
+  - can filter and paginate deterministically
 - Cross-tenant/subject:
-  - listing returns empty and does not leak existence
-  - get-by-id is non-enumerable (does not distinguish unauthorized vs nonexistent)
+  - listing never leaks other identities
+  - get-by-id remains non-enumerable for non-admin callers
 - Admin gating:
   - disabled by default
-  - when enabled, is auditable and requires explicit scopes/config
-
+  - when enabled, requires `gsd:admin` and emits audit logs

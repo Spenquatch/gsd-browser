@@ -132,6 +132,14 @@ reduced challenge semantics), but:
 - Add scope validation middleware to HTTP request pipeline
 - For `403 insufficient_scope` responses, include list of required scopes for the requested operation
 
+### Scope claim extraction (pinned)
+Scope extraction from JWT claims is pinned as follows:
+- Prefer claim `scope` (string; space-separated), fallback to `scp`.
+- `scp` may be either:
+  - an array of strings, or
+  - a space-separated string.
+- Any invalid scope claim format results in “no scopes” (treated as insufficient scope).
+
 ### Audience validation implementation
 - Return `403 Forbidden` for wrong audience with structured error response
 - Include `expected_audience` and `actual_audience` (from token claims) in error response body
@@ -186,7 +194,12 @@ dramatically improves operator experience and reduces misconfigurations. Audienc
 troubleshooting without security risk.
 
 ## Open Questions
-- Exact endpoint paths and whether the server supports multiple “resources” (path-aware metadata).
+### Protected Resource Metadata: multiple “resources”
+**Decision (2026-01-24):** Single protected resource per server deployment.
+
+The server supports path-aware hosting under a base path (serving
+`{base_path}/.well-known/oauth-protected-resource`), but it does not attempt to present multiple
+distinct protected resources from a single running instance (no host-based multi-resource behavior).
 
 ## References
 - `docs/planning/BACKLOG.md`

@@ -26,23 +26,29 @@ It is not, by itself, the product-level “how long users can fetch results”.
 Define and document retention windows for compat jobs and artifacts with environment-specific
 defaults.
 
-**Default retention windows:**
+**Implemented retention window (Option B today):**
+The current Option B implementation uses a single, environment-specific retention window for the
+artifact index (Redis) and associated object-store artifacts (S3-compatible). This is controlled by
+the canonical spec env vars:
+- Development: `GSD_RETENTION_SECONDS_DEV=86400` (24 hours)
+- Production: `GSD_RETENTION_SECONDS_PROD=604800` (7 days)
 
-**Development environment:**
-- Jobs: 24 hours (`GSD_JOB_RETENTION_DEV=24h`)
-- Artifacts: 12 hours (`GSD_ARTIFACT_RETENTION_DEV=12h`)
+These names and defaults are authoritative in
+`gsd-browser/docs/api/FAST_MCP_V2_CANONICAL_SPEC.md` (§8.7) and in the current implementation.
 
-**Production environment:**
-- Jobs: 7 days (`GSD_JOB_RETENTION_PROD=7d`)
-- Artifacts: 3 days (`GSD_ARTIFACT_RETENTION_PROD=3d`)
+**Planned (future; compat jobs):**
+When compat jobs are implemented (ADR-0011), we may introduce distinct job vs artifact retention
+windows. If we do, the env var names and defaults must be pinned in the canonical spec in the same
+change set (avoid drift).
 
 **Retention and cleanup relationship (job vs artifacts):**
-- Jobs and artifacts have **separately configurable retention windows** (defaults above).
-- Artifact retention may be **shorter** than job retention (to control storage).
-- When a job expires, any remaining associated artifacts (screenshots/run-events) are deleted as part of
-  the same cleanup operation (no long-lived orphans).
-- If you require artifacts to remain available for the full job retention window, set the artifact
-  retention to be >= the job retention in your deployment.
+- Today (Option B as implemented), retention is a single window applied to artifacts/index records.
+- In the future (once compat jobs exist), we may introduce separate job vs artifact windows:
+  - Artifact retention may be shorter than job retention (to control storage).
+  - When a job expires, any remaining associated artifacts should be deleted as part of the same
+    cleanup operation (no long-lived orphans).
+  - Deployments that require artifacts to remain available for the full job retention window must set
+    artifact retention >= job retention (once separate knobs exist).
 
 **Rationale for long retention:**
 - "Check later" is a core value proposition for Option B (decoupled execution)
@@ -106,22 +112,21 @@ outages from silent cleanup failures are expensive.
 
 ## Implementation Notes
 ### Retention window implementation
-- Add environment variables:
-  - `GSD_JOB_RETENTION_DEV` (default: 24h)
-  - `GSD_JOB_RETENTION_PROD` (default: 7d)
-  - `GSD_ARTIFACT_RETENTION_DEV` (default: 12h)
-  - `GSD_ARTIFACT_RETENTION_PROD` (default: 3d)
-- Parse retention values on startup (support duration formats: `h`, `d`, `s`).
-- Calculate `expires_at = created_at + retention_window` at job creation.
-- Record timestamps and expiry in ownership/mapping records (tasks + compat jobs) so cleanup is
-  deterministic.
+Implemented today:
+- `GSD_RETENTION_SECONDS_DEV` (default: `86400`)
+- `GSD_RETENTION_SECONDS_PROD` (default: `604800`)
+
+Any future job-vs-artifact split must be introduced with explicit `*_SECONDS_*` variables and must
+update the canonical spec in the same PR.
 
 ### Coupled retention implementation
 Cleanup has two responsibilities:
 
-1) **Artifact pruning** (artifact retention window):
-- Delete artifacts whose artifact retention window has elapsed (even if the job is still retained).
+Implemented today:
+1) **Artifact pruning** (single retention window):
+- Delete artifacts/index records whose retention window has elapsed.
 
+Planned (future; compat jobs):
 2) **Job expiry pruning** (job retention window):
 - Cleanup loop deletes job + any remaining artifacts together when the job expires:
   1. Query expired jobs (`expires_at < now()`).
@@ -160,8 +165,8 @@ Cleanup has two responsibilities:
 **Decision (2026-01-23):** Long retention optimized for "check later" UX.
 
 **Implementation:**
-- Development: jobs 24h, artifacts 12h
-- Production: jobs 7d, artifacts 3d
+- Development: `GSD_RETENTION_SECONDS_DEV=86400` (24h)
+- Production: `GSD_RETENTION_SECONDS_PROD=604800` (7d)
 - Configurable via environment variables
 
 **Rationale:** "Check later" is a core value proposition for Option B. Users expect results to be
@@ -172,7 +177,7 @@ available across sessions. Storage is cheap; frustration from expired results is
 **Decision (2026-01-23):** Separate retention windows, coupled cleanup on job expiry.
 
 **Implementation:**
-- Jobs and artifacts have separate retention windows (defaults: dev 24h/12h, prod 7d/3d).
+- Separate job vs artifact retention windows are a planned follow-on once compat jobs exist.
 - When the job expires, cleanup deletes the job record and any remaining artifacts together.
 - Deployments that require full “job + artifacts” availability for the job retention window must set
   artifact retention >= job retention.

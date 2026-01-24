@@ -56,7 +56,7 @@ Parameters:
 Behavior:
 - Blocks the response until job completes or timeout occurs
 - Returns job result (same schema as `job_result`) when job completes successfully
-- Returns timeout error with current job status if `max_wait_s` is exceeded
+- Returns a **timeout payload** with current job status if `max_wait_s` is exceeded
 - A timeout does **not** cancel the job; clients can continue to poll (`job_get`) and fetch later (`job_result`)
 - Implemented as internal poll loop (client makes single synchronous tool call)
 - Compatible with all MCP clients (no SEP-1686 support required)
@@ -158,8 +158,22 @@ Persist a job ownership/mapping record containing:
 - Validate `poll_interval_s` against minimum (0.5s) and reject if too low
 - Poll `job_get` internally at specified interval
 - Return job result payload (same schema as `job_result`) when job reaches terminal state
-- Return timeout error with current job status if `max_wait_s` exceeded before completion
+- Return a timeout payload with current job status if `max_wait_s` exceeded before completion
 - Log timeout events for monitoring
+
+### job_wait timeout payload (pinned)
+On timeout, `job_wait` MUST NOT return a partial/ambiguous tool result. Return a stable, versioned
+timeout payload that includes the current job state snapshot and a machine-readable error code:
+```json
+{
+  "version": "gsd.job_wait.timeout.v1",
+  "job_id": "…",
+  "state": "queued|running",
+  "progress_message": "…",
+  "progress": { "current": 5, "total": 25, "percentage": 20.0 },
+  "error": { "code": "TIMEOUT", "message": "job_wait timed out", "details": { "max_wait_s": 300 } }
+}
+```
 
 ### Structured progress implementation
 - Update `web_eval_agent` job execution to populate structured progress from agent step counts

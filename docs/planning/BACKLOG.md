@@ -162,7 +162,7 @@ Without a deployed cleanup process, S3 objects accumulate even after Redis metad
 **Action items**:
 1. Wire a maintenance loop into the worker process per ADR-0015 (worker-led leader election + scheduled run).
 2. Standardize the interval env var name and docs:
-   - ADR-0015 uses `GSD_MAINTENANCE_INTERVAL` (default: 300s).
+   - Use `GSD_CLEANUP_INTERVAL_S` (default: 300s).
 3. Ensure the maintenance loop enforces the retention policy from ADR-0017 (dev/prod defaults).
 4. Add an integration test that verifies cleanup runs in a real deployment scenario.
 

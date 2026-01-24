@@ -147,6 +147,10 @@ surfaces (5009/8080/8081):
 - Implement `/api/v1/tasks` and `/api/v1/jobs/{job_id}` (and related ops endpoints as needed).
 - Use cursor-based pagination and bounded limits.
 - Rate limiting recommended for production deployments.
+- Implementation pattern (pinned):
+  - Implement listing/inspection as a shared internal service layer.
+  - 8081 REST endpoints and MCP wrapper tools (if exposed) MUST call the same service layer.
+  - MCP wrapper tools must not depend on loopback HTTP calls to 8081.
 
 ### Redis Query Pattern
 ```python
@@ -172,14 +176,13 @@ task:by_identity:{tenant_id}:{subject_id} -> ZSET of task_ids by created_at
 
 ## Decisions on Scope
 
-### Admin mode (`--all`)
-Admin listing is supported with environment-based gating:
-- **Local development:** `--all` flag available by default (no restrictions).
-- **Server/production:** Requires `GSD_ADMIN_MODE=1` environment variable to enable `--all`.
-- Without the env var in production, `--all` returns an error indicating admin mode is disabled.
-
-This allows developers full visibility locally while preventing accidental cross-tenant enumeration
-in shared deployments.
+### Admin listing (cross-identity)
+Admin listing is supported but **safe-by-default**:
+- Use explicit admin endpoints (e.g., `/api/v1/admin/*`) rather than overloading the default identity-scoped endpoints.
+- Admin endpoints require BOTH:
+  - explicit server enablement (for example `GSD_ADMIN_MODE=1`), AND
+  - caller authorization via `gsd:admin` scope (JWT scope claim or API-key scopes).
+- Admin access must be auditable (structured logs).
 
 ### Real-time updates
 WebSocket subscriptions for task status are **out of scope for v1**. Initial implementation focuses
