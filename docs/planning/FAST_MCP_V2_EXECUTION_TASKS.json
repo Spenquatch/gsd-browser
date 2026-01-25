@@ -1134,7 +1134,7 @@
         {
           "id": "I5.3a",
           "title": "Implement 401 + insufficient_scope challenges + scope enforcement baseline (8080)",
-          "status": "todo",
+          "status": "done",
           "risk": "high",
           "deliverables": [
             "gsd-browser/src/gsd_browser/optionb/http_auth.py (new)",
