@@ -1842,7 +1842,7 @@
         {
           "id": "I8.2d",
           "title": "Compat jobs (part 4): restart resilience integration test",
-          "status": "todo",
+          "status": "done",
           "risk": "high",
           "deliverables": [
             "gsd-browser/tests/integration/test_compat_jobs_restart_e2e.py (new)"
