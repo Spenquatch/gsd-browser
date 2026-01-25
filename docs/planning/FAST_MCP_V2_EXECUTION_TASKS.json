@@ -1741,7 +1741,7 @@
         {
           "id": "I8.2a",
           "title": "Compat jobs (part 1): submit + job_get (state/progress snapshot)",
-          "status": "todo",
+          "status": "done",
           "risk": "high",
           "deliverables": [
             "gsd-browser/src/gsd_browser/fastmcp_v2_stdio.py (update; register compat job tools)",
