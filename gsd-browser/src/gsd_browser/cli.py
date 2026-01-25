@@ -38,6 +38,8 @@ _MCP_TOOLS_DISABLE_ARG = typer.Argument(..., help="Tool name(s) to disable")
 _MCP_TOOLS_SET_ENABLED_ARG = typer.Argument(None, help="Tool name(s) to allowlist")
 _MCP_TOOLS_SET_DISABLED_ARG = typer.Argument(None, help="Tool name(s) to denylist")
 
+_TRUE_ENV_VALUES = {"1", "true", "yes"}
+
 
 def _env_path_for_user_config() -> Path:
     override = (os.getenv("GSD_ENV_FILE") or "").strip()
@@ -66,6 +68,25 @@ def _print_mcp_restart_notice() -> None:
         "[yellow]Note[/yellow]: Restart your MCP host/session (e.g. Codex/Claude) for tool changes "
         "to take effect."
     )
+
+
+def _is_truthy_env(var_name: str) -> bool:
+    return str(os.environ.get(var_name, "")).strip().lower() in _TRUE_ENV_VALUES
+
+
+def _select_stdio_runtime() -> str:
+    """Return the pinned stdio runtime selection.
+
+    Pinned behavior (canonical spec §8.2.1):
+    - Default: FastMCP v2 (“Option B”) stdio runtime.
+    - Legacy escape hatch: `GSD_USE_LEGACY_MCP_RUNTIME=true`.
+    - Back-compat: `GSD_USE_FASTMCP_V2=true` may be accepted as a no-op alias and MUST NOT
+      override the legacy escape hatch.
+    """
+
+    if _is_truthy_env("GSD_USE_LEGACY_MCP_RUNTIME"):
+        return "legacy"
+    return "fastmcp_v2"
 
 
 def _validate_tool_names(tools: list[str]) -> list[str]:
@@ -146,18 +167,26 @@ def serve(
 
     setup_logging(desired_level, json_logs=desired_json)
     # IMPORTANT: MCP stdio transport uses stdout for JSON-RPC. Do not print to stdout here.
+    runtime = _select_stdio_runtime()
+    if _is_truthy_env("GSD_USE_FASTMCP_V2"):
+        typer.echo(
+            "Note: GSD_USE_FASTMCP_V2 is deprecated; the default stdio runtime is FastMCP v2. "
+            "Use GSD_USE_LEGACY_MCP_RUNTIME=true for the legacy escape hatch.",
+            err=True,
+        )
+    if runtime == "legacy":
+        typer.echo(
+            "Warning: Using legacy MCP stdio runtime (GSD_USE_LEGACY_MCP_RUNTIME=true). "
+            "SEP-1686 tasks are not supported in legacy mode.",
+            err=True,
+        )
     typer.echo(
         "Starting MCP stdio server: "
         f"llm_provider={settings.llm_provider}, model={settings.model}, "
         f"log_level={desired_level}, json_logs={desired_json}",
         err=True,
     )
-    use_fastmcp_v2 = str(os.environ.get("GSD_USE_FASTMCP_V2", "")).strip().lower() in {
-        "1",
-        "true",
-        "yes",
-    }
-    if use_fastmcp_v2:
+    if runtime == "fastmcp_v2":
         from .fastmcp_v2_stdio import apply_configured_tool_policy, run_stdio
     else:
         from .mcp_server import apply_configured_tool_policy, run_stdio

@@ -2000,7 +2000,7 @@
         {
           "id": "I9.1",
           "title": "Implement default runtime switch in CLI + add regression tests",
-          "status": "todo",
+          "status": "done",
           "risk": "high",
           "deliverables": [
             "gsd-browser/src/gsd_browser/cli.py (update; default runtime selection + escape hatch)",

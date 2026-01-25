@@ -198,6 +198,6 @@ Reduce operator confusion and prevent drift between docs and what actually runs.
 - ~~Reconcile `GSD_REDIS_URL` usage~~ **DONE**: Removed from canonical spec; all Redis usage goes
   through `FASTMCP_DOCKET_URL`. See ADR-0016 (Accepted).
 - Update status docs so they match reality (implemented vs planned boundary).
-- **SCHEDULED**: Switch the default stdio runtime for `gsd mcp serve` to FastMCP v2 (“Option B”),
+- **DONE**: Switch the default stdio runtime for `gsd mcp serve` to FastMCP v2 (“Option B”),
   with an explicit legacy escape hatch (`GSD_USE_LEGACY_MCP_RUNTIME=true`). Tracked in
   `docs/planning/FAST_MCP_V2_EXECUTION_TASKS.json` (phase I9).
