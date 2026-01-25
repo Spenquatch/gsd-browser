@@ -12,6 +12,7 @@ def _tool_names_from_docs() -> set[str]:
     root = Path(__file__).resolve().parents[2]
     doc = root / "docs" / "api" / "MCP_TOOLS.md"
     text = doc.read_text(encoding="utf-8")
+    text = text.split("\n## Tools (planned", 1)[0]
     return set(re.findall(r"^### `([^`]+)`", text, flags=re.MULTILINE))
 
 

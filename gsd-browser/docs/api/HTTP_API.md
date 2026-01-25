@@ -1,4 +1,4 @@
-# GSD HTTP Management API (8081) — v1 Contract (planned)
+# GSD HTTP Management API (8081) — v1 Contract
 
 This document pins the **v1 contract** for the Option B management/admin REST API. This is **not**
 the MCP protocol surface (8080).
@@ -47,11 +47,14 @@ Supported mechanisms (v1):
 - `X-API-Key: <key>` (optional; ops automation; maps to an identity and scopes)
 
 ### Scope extraction (pinned)
-When authorizing admin endpoints (and, in the future, scope-gated endpoints), scope extraction is
-pinned as:
+Scope extraction is pinned as:
 - Prefer JWT claim `scope` (string; space-separated), fallback to `scp` (array of strings or
   space-separated string).
 - Any invalid scope claim format results in “no scopes”.
+
+Scope-gated endpoints (v1; pinned):
+- `GET /api/v1/tasks`: requires `gsd:browser:read` OR `gsd:admin`
+- `GET /api/v1/admin/tasks`: requires `gsd:admin` (and admin enablement; see endpoint section)
 
 ### Identity extraction (pinned)
 HTTP identity is derived from JWT claims using the canonical mapping in
@@ -131,6 +134,9 @@ Returns a small JSON object suitable for liveness/readiness checks.
 
 ### List tasks (identity-scoped)
 `GET /api/v1/tasks`
+
+Authorization:
+- Requires `gsd:browser:read` OR `gsd:admin` scope.
 
 Query parameters:
 - `limit` (int, optional): default `100`, max `1000`

@@ -20,7 +20,7 @@ At the MCP protocol layer:
 
 The “tool result payload” schemas below describe the **task result** payloads.
 
-## Tools
+## Tools (implemented)
 
 ### `web_eval_agent` (task required)
 **Input**
@@ -182,3 +182,68 @@ Delivery mode matrix (authoritative):
   - `summary`: string
   - `traceback`: string|null (optional; present on failures when available)
   - `next_actions`: string[]
+
+## Tools (planned; not yet implemented in runtime)
+These tool contracts are pinned for later implementation. Do not add them to the live tool list
+until the corresponding implementation tasks are complete (see `docs/planning/FAST_MCP_V2_EXECUTION_TASKS.json`).
+
+### `tasks_list` (sync; wrapper over 8081 listing semantics)
+This tool is a convenience wrapper over the shared internal ops service layer. The listing contract
+is pinned by `gsd-browser/docs/api/HTTP_API.md` (`GET /api/v1/tasks`) and MUST match it.
+
+**Input**
+- `limit` (int, optional): default `100`, max `1000`
+- `cursor` (string, optional): opaque pagination cursor
+- `status` (string, optional): `queued|running|completed|failed|cancelled`
+- `tool_name` (string, optional): comma-separated tool names (example: `web_eval_agent,web_task_agent`)
+- `since` (string, optional): RFC 3339 timestamp (preferred) or duration (`30m`, `7d`)
+
+**Output** (`TextContent[]`, exactly 1 item)
+- JSON payload schema `gsd.tasks_list.v1`:
+  - `version`: `"gsd.tasks_list.v1"`
+  - `tasks`: array of task summary objects:
+    - `task_id` (UUID string)
+    - `tool_name` (string)
+    - `status` (string)
+    - `created_at` (RFC 3339 timestamp string)
+    - `updated_at` (RFC 3339 timestamp string|null)
+    - `expires_at` (RFC 3339 timestamp string)
+    - `session_id` (UUID string)
+  - `next_cursor` (string|null)
+  - `error` (object|null): stable error payload:
+    - `{ code: string, message: string, details: object|null }`
+
+Error semantics (pinned):
+- Invalid inputs (including cursor reuse across different filters) MUST return `tasks=[]` and a
+  non-null `error` object (for example `code="invalid_cursor"`). See `gsd-browser/docs/api/HTTP_API.md`.
+
+### `tasks_admin_list` (sync; wrapper over 8081 admin listing semantics)
+This tool is a convenience wrapper over the shared internal ops service layer. The listing contract
+is pinned by `gsd-browser/docs/api/HTTP_API.md` (`GET /api/v1/admin/tasks`) and MUST match it.
+
+Admin gating (pinned):
+- Server enablement: `GSD_ADMIN_MODE=true`
+- Caller authorization (HTTP transport only): `gsd:admin` scope
+
+**Input**
+- All params from `tasks_list`, plus:
+  - `tenant_id` (string, optional)
+  - `subject_id` (string, optional)
+  - `transport` (string, optional): `stdio|http`
+
+**Output** (`TextContent[]`, exactly 1 item)
+- JSON payload schema `gsd.tasks_admin_list.v1`:
+  - `version`: `"gsd.tasks_admin_list.v1"`
+  - `tasks`: array of admin task summary objects:
+    - all fields from `tasks_list.tasks[]`, plus:
+      - `tenant_id` (string)
+      - `subject_id` (string)
+      - `transport` (`"stdio"|"http"`)
+  - `next_cursor` (string|null)
+  - `error` (object|null): stable error payload:
+    - `{ code: string, message: string, details: object|null }`
+
+Error semantics (pinned):
+- If `GSD_ADMIN_MODE` is disabled, the tool MUST return `tasks=[]` and a non-null `error` object
+  (recommended `code="admin_disabled"`).
+- Invalid inputs MUST return `tasks=[]` and a non-null `error` object. See `gsd-browser/docs/api/HTTP_API.md`.

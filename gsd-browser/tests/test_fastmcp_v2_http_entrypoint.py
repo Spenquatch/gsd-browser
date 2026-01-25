@@ -13,6 +13,7 @@ from gsd_browser.fastmcp_v2_stdio import mcp as v2_mcp
 def _tool_names_from_docs() -> set[str]:
     root = Path(__file__).resolve().parents[1]
     text = (root / "docs" / "api" / "MCP_TOOLS.md").read_text(encoding="utf-8")
+    text = text.split("\n## Tools (planned", 1)[0]
     return set(re.findall(r"^### `([^`]+)`", text, flags=re.MULTILINE))
 
 

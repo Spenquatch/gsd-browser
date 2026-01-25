@@ -6,6 +6,19 @@ layout, progress conventions, diagnostic codes, and configuration.
 
 Status/migration boundary: `gsd-browser/docs/api/STATUS.md`.
 
+## 0) HTTP surfaces (ports) and governing docs
+
+Option B exposes three distinct HTTP surfaces:
+- **5009**: streaming/dashboard server (Socket.IO, CDP control, take-control UX)
+  - Governing doc: `gsd-browser/docs/STREAMING.md`
+- **8080**: MCP-over-HTTP transport (Streamable HTTP MCP; tool invocation; not REST)
+  - Governing docs:
+    - this canonical spec (`gsd-browser/docs/api/FAST_MCP_V2_CANONICAL_SPEC.md`)
+    - tool contract: `gsd-browser/docs/api/MCP_TOOLS.md`
+    - task method contract: `gsd-browser/docs/api/MCP_TASKS.md`
+- **8081**: management/admin REST API (enumeration/inspection for ops; not MCP)
+  - Governing doc (pinned v1 contract): `gsd-browser/docs/api/HTTP_API.md`
+
 ## 1) Identity model (authoritative)
 
 All authorization decisions are made using a normalized identity:
@@ -110,6 +123,28 @@ The server MUST emit structured logs for:
 - Task access denied (includes `task_id`, caller identity, and stored owner identity)
 - Artifact list queries (`get_screenshots`, `get_run_events`) (includes `session_id`, filters, caller identity)
 - Presigned URL issuance (includes `artifact_id`, expiry, caller identity)
+
+### 2.5 Task enumeration surfaces (8081 REST + MCP wrapper tools)
+8081 (REST) and the MCP wrapper tools (`tasks_list`, `tasks_admin_list`) are *enumeration* surfaces
+and MUST be safe-by-default.
+
+Scope requirements (pinned):
+- 8081 identity-scoped listing: `GET /api/v1/tasks`
+  - requires authentication (Bearer JWT or `X-API-Key`)
+  - requires `gsd:browser:read` OR `gsd:admin`
+- 8081 admin listing: `GET /api/v1/admin/tasks`
+  - requires authentication (Bearer JWT or `X-API-Key`)
+  - requires server enablement `GSD_ADMIN_MODE=true`, AND
+  - requires `gsd:admin`
+- MCP wrapper tool: `tasks_list`
+  - requires `gsd:browser:read` OR `gsd:admin` (HTTP transport; §9.5)
+- MCP wrapper tool: `tasks_admin_list`
+  - requires server enablement `GSD_ADMIN_MODE=true`, AND
+  - requires `gsd:admin` (HTTP transport; §9.5)
+
+All listing/inspection logic MUST be implemented once as a shared internal service layer; both 8081
+REST endpoints and MCP wrapper tools MUST call the shared layer and MUST NOT depend on loopback HTTP
+calls to 8081 (DR-WRAP-01).
 
 ## 3) Task semantics + persistence
 
@@ -510,6 +545,12 @@ SeaweedFS (via its S3 gateway). See `docs/adr/ADR-0009-distributed-artifact-stor
 - `GSD_RETENTION_SECONDS_PROD` (int; default: `604800`)
 - `GSD_CLEANUP_INTERVAL_S` (int; default: `300`)
 
+### 8.8 8081 management API: API keys + admin gating
+- `GSD_API_KEYS_FILE` (string|null): when set, 8081 MAY accept `X-API-Key` and map keys to
+  `{tenant_id, subject_id, scopes[]}` as documented in `gsd-browser/docs/api/HTTP_API.md`.
+- `GSD_ADMIN_MODE` (bool; default: `false`): server enablement switch for admin enumeration surfaces
+  (8081 `/api/v1/admin/*` and MCP wrapper tools that are admin-only).
+
 ## 9) HTTP OAuth discovery + challenges + scope enforcement (8080 MCP HTTP)
 
 This section pins the MCP-compliant HTTP authorization surfaces for the 8080 MCP-over-HTTP service
@@ -619,6 +660,10 @@ Operation → required scope (pinned):
   - require `gsd:browser:execute` OR `gsd:admin`
 - `get_screenshots`, `get_run_events`:
   - require `gsd:browser:read` OR `gsd:admin`
+- `tasks_list`:
+  - require `gsd:browser:read` OR `gsd:admin`
+- `tasks_admin_list`:
+  - require `gsd:admin`
 - MCP task methods (HTTP mode only):
   - `tasks/get`, `tasks/result`: require `gsd:browser:read` OR `gsd:admin`
   - `tasks/cancel`: require `gsd:browser:execute` OR `gsd:admin`
