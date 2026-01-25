@@ -27,6 +27,7 @@ KNOWN_MCP_TOOLS: tuple[str, ...] = (
     "job_get",
     "job_result",
     "job_wait",
+    "job_cancel",
     "get_run_events",
     "setup_browser_state",
     "get_screenshots",

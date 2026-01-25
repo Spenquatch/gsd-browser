@@ -13,6 +13,7 @@ from fastmcp.server.tasks.keys import build_task_key
 from mcp.types import TextContent
 
 from ..contracts.v1 import (
+    JobCancelPayloadV1,
     JobGetPayloadV1,
     JobProgressV1,
     JobResultNotReadyErrorV1,
@@ -419,4 +420,105 @@ async def job_wait(
             message="job_wait timed out",
             details=JobWaitTimeoutErrorDetailsV1(max_wait_s=int(max_wait_s)),
         ),
+    )
+
+
+async def job_cancel(*, job_id: str) -> JobCancelPayloadV1:
+    """Cancel a compat job (non-enumerable)."""
+
+    try:
+        job_uuid = _parse_uuid4(job_id, name="job_id")
+    except ValueError as exc:
+        return JobCancelPayloadV1(
+            version="gsd.job_cancel.v1",
+            job_id=None,
+            found=False,
+            state=None,
+            error=OpsErrorPayloadV1(code="invalid_job_id", message=str(exc), details=None),
+        )
+
+    record = await get_job(str(job_uuid))
+    if record is None:
+        return JobCancelPayloadV1(
+            version="gsd.job_cancel.v1",
+            job_id=job_uuid,
+            found=False,
+            state=None,
+            error=None,
+        )
+
+    docket = _current_docket.get()
+    if docket is None:
+        return JobCancelPayloadV1(
+            version="gsd.job_cancel.v1",
+            job_id=job_uuid,
+            found=True,
+            state=None,
+            error=OpsErrorPayloadV1(
+                code="backend_unavailable",
+                message="Docket is required for compat job cancellation",
+                details=None,
+            ),
+        )
+
+    task_key = build_task_key(record.session_id, record.task_id, "tool", record.tool_name)
+    execution = await docket.get_execution(task_key)
+    if execution is None:
+        return JobCancelPayloadV1(
+            version="gsd.job_cancel.v1",
+            job_id=job_uuid,
+            found=True,
+            state=None,
+            error=OpsErrorPayloadV1(
+                code="execution_not_found",
+                message="Job execution not found",
+                details=None,
+            ),
+        )
+
+    await execution.sync()
+    state_before = _job_state_from_execution(execution.state)
+    if state_before in {"completed", "failed", "cancelled"}:
+        return JobCancelPayloadV1(
+            version="gsd.job_cancel.v1",
+            job_id=job_uuid,
+            found=True,
+            state=state_before,
+            error=None,
+        )
+
+    try:
+        await docket.cancel(task_key)
+    except Exception as exc:  # noqa: BLE001
+        logger.exception(
+            "compat_job_cancel_failed",
+            extra={
+                "job_id": str(job_uuid),
+                "task_id": record.task_id,
+                "tool_name": record.tool_name,
+            },
+        )
+        return JobCancelPayloadV1(
+            version="gsd.job_cancel.v1",
+            job_id=job_uuid,
+            found=True,
+            state=state_before,
+            error=OpsErrorPayloadV1(
+                code="cancel_failed",
+                message="Failed to cancel job",
+                details={"error": str(exc)},
+            ),
+        )
+
+    await execution.sync()
+    state_after = _job_state_from_execution(execution.state)
+    if state_after in {"queued", "running"}:
+        state_after = "cancelled"
+
+    return JobCancelPayloadV1(
+        version="gsd.job_cancel.v1",
+        job_id=job_uuid,
+        found=True,
+        state=state_after,
+        error=None,
     )

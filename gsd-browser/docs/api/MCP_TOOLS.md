@@ -175,6 +175,21 @@ Non-enumerability:
     - `progress`: `{current:int, total:int, percentage:float} | null`
     - `error`: `{code:"TIMEOUT", message:string, details:{max_wait_s:int}}`
 
+### `job_cancel` (sync; compat job cancel)
+**Input**
+- `job_id` (string, required)
+
+**Output** (`TextContent[]`, exactly 1 item)
+- JSON payload schema `gsd.job_cancel.v1`:
+  - `version`: `"gsd.job_cancel.v1"`
+  - `job_id`: UUID string|null (echo of input)
+  - `found`: boolean
+  - `state`: `"queued" | "running" | "completed" | "failed" | "cancelled" | null`
+  - `error`: `{code:string, message:string, details:object|null} | null`
+
+Non-enumerability:
+- If the job does not exist or is owned by a different tenant/subject, return `found=false` and `error=null`.
+
 ### `get_run_events` (sync)
 **Input**
 - `session_id` (UUID string, required)
@@ -342,23 +357,4 @@ Error semantics (pinned):
 These tool contracts are pinned for later implementation. Do not add them to the live tool list
 until the corresponding implementation tasks are complete (see `docs/planning/FAST_MCP_V2_EXECUTION_TASKS.json`).
 
-### Compat jobs (non-SEP-1686 clients)
-Some MCP hosts do not implement SEP-1686 tasks. Compat jobs provide a synchronous tool surface for
-“submit + poll + fetch + cancel” workflows while preserving non-enumerability and tenant/subject
-authZ (ADR-0011; canonical invariants: `gsd-browser/docs/api/FAST_MCP_V2_CANONICAL_SPEC.md` §3.6).
-
-State vocabulary (pinned): `queued|running|completed|failed|cancelled`.
-
-#### `job_cancel` (sync)
-Input:
-- `job_id` (string, required)
-
-Output: JSON payload schema `gsd.job_cancel.v1` (in a single `TextContent`):
-- `version`: `"gsd.job_cancel.v1"`
-- `job_id`: UUID string|null (echo of input)
-- `found`: boolean
-- `state`: `"queued" | "running" | "completed" | "failed" | "cancelled" | null`
-- `error`: `{code:string, message:string, details:object|null} | null`
-
-Non-enumerability:
-- If the job does not exist or is owned by a different tenant/subject, return `found=false` and `error=null`.
+(No additional planned tools at this time; see `docs/planning/FAST_MCP_V2_EXECUTION_TASKS.json`.)

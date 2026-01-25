@@ -469,6 +469,18 @@ async def job_wait(
     return _json_text(payload)
 
 
+@mcp.tool(name="job_cancel")
+async def job_cancel(
+    job_id: str,
+    ctx: Context | None = None,
+) -> list[TextContent]:
+    from .optionb.compat_jobs import job_cancel as compat_job_cancel
+
+    with _docket_scope(ctx):
+        payload = await _call_with_identity(compat_job_cancel, job_id=job_id)
+    return _json_text(payload.model_dump(mode="json"))
+
+
 @mcp.tool(name="get_run_events")
 async def get_run_events(
     session_id: str = "",
