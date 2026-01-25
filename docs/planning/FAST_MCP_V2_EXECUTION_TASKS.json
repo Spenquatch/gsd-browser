@@ -1778,7 +1778,7 @@
         {
           "id": "I8.2b",
           "title": "Compat jobs (part 2): job_result + job_wait (incl. timeout payload)",
-          "status": "todo",
+          "status": "done",
           "risk": "high",
           "deliverables": [
             "gsd-browser/src/gsd_browser/optionb/compat_jobs.py (update; add job_result + job_wait)",
