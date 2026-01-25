@@ -5,10 +5,11 @@ import os
 from collections.abc import Awaitable, Callable, Mapping
 from typing import Any
 
-from starlette.responses import Response
+from starlette.responses import JSONResponse, Response
 
 from ..http_base_path import detect_base_path
 from ..http_oauth_metadata import PROTECTED_RESOURCE_METADATA_PATH
+from .identity import JwtAudienceMismatch
 
 
 def _env(name: str) -> str:
@@ -148,8 +149,7 @@ class HttpAuthMiddleware:
     This middleware enforces the baseline challenge semantics pinned in the canonical spec:
     - 401 (missing/invalid token) with `resource_metadata=...`
     - 403 (authenticated but insufficient scope) with `error=\"insufficient_scope\"`
-
-    Wrong-audience explicit handling is intentionally deferred (task I5.3b).
+    - 403 (wrong audience/resource binding) with `error=\"invalid_token\"` + JSON body
     """
 
     def __init__(self, app: Any, *, verifier: Any) -> None:
@@ -180,7 +180,28 @@ class HttpAuthMiddleware:
             await response(scope, receive, send)
             return
 
-        access_token = await self._verifier.verify_token(token)
+        access_token: Any | None = None
+        audience_mismatch: JwtAudienceMismatch | None = None
+        verify_with_details = getattr(self._verifier, "verify_token_with_audience_details", None)
+        if callable(verify_with_details):
+            access_token, audience_mismatch = await verify_with_details(token)
+        else:
+            access_token = await self._verifier.verify_token(token)
+
+        if audience_mismatch is not None:
+            response = JSONResponse(
+                {
+                    "error": "invalid_token",
+                    "error_description": "Token audience does not match protected resource",
+                    "expected_audience": audience_mismatch.expected_audience,
+                    "actual_audience": audience_mismatch.actual_audience,
+                },
+                status_code=403,
+                headers={"WWW-Authenticate": 'Bearer error="invalid_token"'},
+            )
+            await response(scope, receive, send)
+            return
+
         if access_token is None:
             challenge = f'Bearer resource_metadata="{_resource_metadata_path(headers)}"'
             response = Response(status_code=401, headers={"WWW-Authenticate": challenge})

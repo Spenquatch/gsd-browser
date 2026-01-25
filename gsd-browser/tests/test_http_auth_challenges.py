@@ -7,6 +7,7 @@ from starlette.testclient import TestClient
 
 from gsd_browser.fastmcp_v2_http import build_http_app
 from gsd_browser.fastmcp_v2_stdio import mcp as v2_mcp
+from gsd_browser.optionb.identity import JwtAudienceMismatch
 
 
 def _configure_required_http_env(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -43,18 +44,27 @@ def test_http_auth_insufficient_scope_execute_tool_returns_403_with_scope_listin
 
     app = build_http_app()
 
-    async def _fake_verify_token(token: str) -> object | None:
+    async def _fake_verify_token_with_audience_details(
+        token: str,
+    ) -> tuple[object | None, JwtAudienceMismatch | None]:
         if token != "token-read-only":
-            return None
-        return types.SimpleNamespace(
-            claims={
-                "tenant_id": "tenant",
-                "sub": "subject",
-                "scope": "gsd:browser:read",
-            }
+            return None, None
+        return (
+            types.SimpleNamespace(
+                claims={
+                    "tenant_id": "tenant",
+                    "sub": "subject",
+                    "scope": "gsd:browser:read",
+                }
+            ),
+            None,
         )
 
-    monkeypatch.setattr(v2_mcp.auth, "verify_token", _fake_verify_token)
+    monkeypatch.setattr(
+        v2_mcp.auth,
+        "verify_token_with_audience_details",
+        _fake_verify_token_with_audience_details,
+    )
 
     with TestClient(app) as client:
         resp = client.post(
@@ -81,18 +91,27 @@ def test_http_auth_insufficient_scope_read_tool_returns_403_with_scope_listing(
 
     app = build_http_app()
 
-    async def _fake_verify_token(token: str) -> object | None:
+    async def _fake_verify_token_with_audience_details(
+        token: str,
+    ) -> tuple[object | None, JwtAudienceMismatch | None]:
         if token != "token-execute-only":
-            return None
-        return types.SimpleNamespace(
-            claims={
-                "tenant_id": "tenant",
-                "sub": "subject",
-                "scope": "gsd:browser:execute",
-            }
+            return None, None
+        return (
+            types.SimpleNamespace(
+                claims={
+                    "tenant_id": "tenant",
+                    "sub": "subject",
+                    "scope": "gsd:browser:execute",
+                }
+            ),
+            None,
         )
 
-    monkeypatch.setattr(v2_mcp.auth, "verify_token", _fake_verify_token)
+    monkeypatch.setattr(
+        v2_mcp.auth,
+        "verify_token_with_audience_details",
+        _fake_verify_token_with_audience_details,
+    )
 
     with TestClient(app) as client:
         resp = client.post(
@@ -111,3 +130,39 @@ def test_http_auth_insufficient_scope_read_tool_returns_403_with_scope_listing(
         'Bearer error="insufficient_scope", scope="gsd:browser:read gsd:admin"'
     )
 
+
+def test_http_auth_wrong_audience_returns_403_with_pinned_invalid_token_body(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _configure_required_http_env(monkeypatch)
+
+    app = build_http_app()
+
+    async def _fake_verify_token_with_audience_details(
+        token: str,
+    ) -> tuple[object | None, JwtAudienceMismatch | None]:
+        if token != "token-wrong-aud":
+            return None, None
+        return None, JwtAudienceMismatch(expected_audience="gsd", actual_audience="other")
+
+    monkeypatch.setattr(
+        v2_mcp.auth,
+        "verify_token_with_audience_details",
+        _fake_verify_token_with_audience_details,
+    )
+
+    with TestClient(app) as client:
+        resp = client.post(
+            "/mcp",
+            headers={"Authorization": "Bearer token-wrong-aud"},
+            json={"jsonrpc": "2.0", "id": 1, "method": "tools/list", "params": {}},
+        )
+
+    assert resp.status_code == 403
+    assert resp.headers["www-authenticate"] == 'Bearer error="invalid_token"'
+    assert resp.json() == {
+        "error": "invalid_token",
+        "error_description": "Token audience does not match protected resource",
+        "expected_audience": "gsd",
+        "actual_audience": "other",
+    }

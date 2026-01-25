@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import json
 import os
 import re
+import time
 from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
+from authlib.jose.errors import JoseError
 from fastmcp.server.auth import AccessToken
 from fastmcp.server.auth.providers.jwt import JWTVerifier
 
@@ -19,6 +22,12 @@ class Identity:
     tenant_id: str
     subject_id: str
     transport: Transport
+
+
+@dataclass(frozen=True, slots=True)
+class JwtAudienceMismatch:
+    expected_audience: str
+    actual_audience: str
 
 
 STDIO_IDENTITY = Identity(tenant_id="local", subject_id="local", transport="stdio")
@@ -65,6 +74,15 @@ def identity_from_claims(
     return Identity(tenant_id=tenant_id, subject_id=subject_id, transport="http")
 
 
+def _stringify_audience_claim(value: Any) -> str:
+    if isinstance(value, str):
+        return value
+    try:
+        return json.dumps(value)
+    except TypeError:
+        return str(value)
+
+
 class GsdJwtVerifier(JWTVerifier):
     """JWT verifier that also enforces canonical identity claim mapping rules."""
 
@@ -88,9 +106,115 @@ class GsdJwtVerifier(JWTVerifier):
         self._subject_id_claim = str(subject_id_claim).strip() or "sub"
 
     async def verify_token(self, token: str) -> AccessToken | None:
-        access_token = await super().verify_token(token)
-        if access_token is None:
-            return None
+        access_token, _audience_mismatch = await self.verify_token_with_audience_details(token)
+        return access_token
+
+    async def verify_token_with_audience_details(
+        self, token: str
+    ) -> tuple[AccessToken | None, JwtAudienceMismatch | None]:
+        """Verify a token and preserve audience mismatch details.
+
+        Returns:
+        - (AccessToken, None) when valid and identity claims map cleanly.
+        - (None, JwtAudienceMismatch) when token is otherwise valid but fails audience binding.
+        - (None, None) for all other invalid token failures.
+        """
+
+        try:
+            verification_key = await self._get_verification_key(token)
+            claims_raw = self.jwt.decode(token, verification_key)
+            claims: dict[str, Any] = dict(claims_raw)
+        except JoseError:
+            self.logger.debug("Token validation failed: JWT signature/format invalid")
+            return None, None
+        except Exception as exc:  # noqa: BLE001
+            self.logger.debug("Token validation failed: %s", str(exc))
+            return None, None
+
+        client_id = claims.get("client_id") or claims.get("azp") or claims.get("sub") or "unknown"
+
+        exp = claims.get("exp")
+        if exp is not None and not isinstance(exp, (int, float)):
+            self.logger.debug(
+                "Token validation failed: exp claim not numeric for client %s",
+                client_id,
+            )
+            self.logger.info("Bearer token rejected for client %s", client_id)
+            return None, None
+
+        if exp is not None and exp < time.time():
+            self.logger.debug("Token validation failed: expired token for client %s", client_id)
+            self.logger.info("Bearer token rejected for client %s", client_id)
+            return None, None
+
+        if self.issuer:
+            iss = claims.get("iss")
+            issuer_valid = False
+            if isinstance(self.issuer, list):
+                issuer_valid = iss in self.issuer
+            else:
+                issuer_valid = iss == self.issuer
+
+            if not issuer_valid:
+                self.logger.debug(
+                    "Token validation failed: issuer mismatch for client %s",
+                    client_id,
+                )
+                self.logger.info("Bearer token rejected for client %s", client_id)
+                return None, None
+
+        if self.audience:
+            aud = claims.get("aud")
+
+            audience_valid = False
+            if isinstance(self.audience, list):
+                expected_list = cast(list[str], self.audience)
+                if isinstance(aud, list):
+                    audience_valid = any(expected in aud for expected in expected_list)
+                else:
+                    audience_valid = aud in expected_list
+            else:
+                expected = cast(str, self.audience)
+                if isinstance(aud, list):
+                    audience_valid = expected in aud
+                else:
+                    audience_valid = aud == expected
+
+            if not audience_valid:
+                self.logger.debug(
+                    "Token validation failed: audience mismatch for client %s",
+                    client_id,
+                )
+                self.logger.info("Bearer token rejected for client %s", client_id)
+                return (
+                    None,
+                    JwtAudienceMismatch(
+                        expected_audience=_stringify_audience_claim(self.audience),
+                        actual_audience=_stringify_audience_claim(aud),
+                    ),
+                )
+
+        scopes = self._extract_scopes(claims)
+
+        if self.required_scopes:
+            token_scopes = set(scopes)
+            required_scopes = set(self.required_scopes)
+            if not required_scopes.issubset(token_scopes):
+                self.logger.debug(
+                    "Token missing required scopes. Has: %s, Required: %s",
+                    token_scopes,
+                    required_scopes,
+                )
+                self.logger.info("Bearer token rejected for client %s", client_id)
+                return None, None
+
+        access_token = AccessToken(
+            token=token,
+            client_id=str(client_id),
+            scopes=scopes,
+            expires_at=int(exp) if isinstance(exp, (int, float)) else None,
+            claims=claims,
+        )
 
         try:
             _ = identity_from_claims(
@@ -99,6 +223,6 @@ class GsdJwtVerifier(JWTVerifier):
                 subject_id_claim=self._subject_id_claim,
             )
         except ValueError:
-            return None
+            return None, None
 
-        return access_token
+        return access_token, None
