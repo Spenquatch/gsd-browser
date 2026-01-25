@@ -55,6 +55,8 @@ Scope extraction is pinned as:
 Scope-gated endpoints (v1; pinned):
 - `GET /api/v1/tasks`: requires `gsd:browser:read` OR `gsd:admin`
 - `GET /api/v1/admin/tasks`: requires `gsd:admin` (and admin enablement; see endpoint section)
+- `GET /api/v1/jobs/{job_id}`: requires `gsd:browser:read` OR `gsd:admin`
+- `GET /api/v1/admin/jobs/{job_id}`: requires `gsd:admin` (and admin enablement; see endpoint section)
 
 ### Identity extraction (pinned)
 HTTP identity is derived from JWT claims using the canonical mapping in
@@ -201,18 +203,99 @@ Response:
 }
 ```
 
-### Get job details (planned; contract placeholder)
+### Get job details (identity-scoped)
 `GET /api/v1/jobs/{job_id}`
 
-Notes:
-- `job_id` refers to the compat jobs contract (ADR-0011).
-- This endpoint is for ops/inspection; compat job interaction for MCP clients happens via MCP tools
-  on port 8080.
+Authorization:
+- Requires `gsd:browser:read` OR `gsd:admin` scope.
+
+Path parameters:
+- `job_id` (string, required): UUIDv4 string (compat jobs; ADR-0011).
+
+Non-enumerability (pinned):
+- For non-admin callers, return `404` for any of:
+  - job does not exist
+  - job is expired (past retention / record TTL)
+  - job exists but is owned by a different tenant/subject
+
+Response (`200`):
+```json
+{
+  "job": {
+    "job_id": "…",
+    "task_id": "…",
+    "tool_name": "web_eval_agent",
+    "state": "running",
+    "progress_message": "Completed step 5 of 25: Navigating to login page",
+    "progress": { "current": 5, "total": 25, "percentage": 20.0 },
+    "session_id": "…",
+    "created_at": "2026-01-24T18:12:03Z",
+    "started_at": "2026-01-24T18:12:10Z",
+    "updated_at": "2026-01-24T18:12:44Z",
+    "finished_at": null,
+    "expires_at": "2026-01-24T19:12:03Z"
+  }
+}
+```
+
+Field notes:
+- `state` vocabulary is pinned by ADR-0011: `queued|running|completed|failed|cancelled`.
+- `progress_message` is always present (string); it MAY be empty if no progress is available.
+- `progress` MAY be `null` when structured progress is unknown/unavailable.
+- Timestamp fields are RFC 3339 strings or `null` when unknown.
+- This endpoint is an inspection surface and does **not** return the final tool payload. For final
+  payload retrieval, use the compat jobs tools (`job_result` / `job_wait`) on the MCP surface (8080).
+
+Errors:
+- `400` with `error.code="invalid_job_id"` when `job_id` is not a UUID.
+- `401` for missing/invalid authentication.
+- `403` for insufficient scope.
+- `404` for non-enumerable “not found” semantics (see above).
+
+### Get job details (admin; cross-identity)
+`GET /api/v1/admin/jobs/{job_id}`
+
+Gating (both required):
+- Server: admin mode enabled (for example `GSD_ADMIN_MODE=1`)
+- Caller: authorized for `gsd:admin` scope
+
+Path parameters:
+- `job_id` (string, required): UUIDv4 string.
+
+Response (`200`):
+```json
+{
+  "job": {
+    "job_id": "…",
+    "task_id": "…",
+    "tool_name": "web_eval_agent",
+    "state": "running",
+    "progress_message": "…",
+    "progress": null,
+    "session_id": "…",
+    "created_at": "2026-01-24T18:12:03Z",
+    "started_at": null,
+    "updated_at": null,
+    "finished_at": null,
+    "expires_at": "2026-01-24T19:12:03Z",
+    "tenant_id": "…",
+    "subject_id": "…",
+    "transport": "http"
+  }
+}
+```
+
+Errors:
+- `400` with `error.code="invalid_job_id"` when `job_id` is not a UUID.
+- `401` for missing/invalid authentication.
+- `403` for insufficient scope OR admin endpoints disabled.
+- `404` when no such job exists (or is expired per retention).
 
 ## Conformance checklist (v1)
 - Same identity:
   - can list tasks within retention window
   - can filter and paginate deterministically
+  - can inspect a known `job_id` via `GET /api/v1/jobs/{job_id}` during retention
 - Cross-tenant/subject:
   - listing never leaks other identities
   - get-by-id remains non-enumerable for non-admin callers

@@ -124,15 +124,23 @@ The server MUST emit structured logs for:
 - Artifact list queries (`get_screenshots`, `get_run_events`) (includes `session_id`, filters, caller identity)
 - Presigned URL issuance (includes `artifact_id`, expiry, caller identity)
 
-### 2.5 Task enumeration surfaces (8081 REST + MCP wrapper tools)
-8081 (REST) and the MCP wrapper tools (`tasks_list`, `tasks_admin_list`) are *enumeration* surfaces
-and MUST be safe-by-default.
+### 2.5 Task enumeration + job inspection surfaces (8081 REST + MCP wrapper tools)
+8081 (REST) and the MCP wrapper tools (`tasks_list`, `tasks_admin_list`) are *enumeration* surfaces.
+In addition, 8081 exposes a compat-jobs inspection surface (`GET /api/v1/jobs/{job_id}`) that MUST
+preserve the same non-enumerability and admin-gating invariants.
 
 Scope requirements (pinned):
 - 8081 identity-scoped listing: `GET /api/v1/tasks`
   - requires authentication (Bearer JWT or `X-API-Key`)
   - requires `gsd:browser:read` OR `gsd:admin`
 - 8081 admin listing: `GET /api/v1/admin/tasks`
+  - requires authentication (Bearer JWT or `X-API-Key`)
+  - requires server enablement `GSD_ADMIN_MODE=true`, AND
+  - requires `gsd:admin`
+- 8081 identity-scoped job inspection: `GET /api/v1/jobs/{job_id}`
+  - requires authentication (Bearer JWT or `X-API-Key`)
+  - requires `gsd:browser:read` OR `gsd:admin`
+- 8081 admin job inspection: `GET /api/v1/admin/jobs/{job_id}`
   - requires authentication (Bearer JWT or `X-API-Key`)
   - requires server enablement `GSD_ADMIN_MODE=true`, AND
   - requires `gsd:admin`

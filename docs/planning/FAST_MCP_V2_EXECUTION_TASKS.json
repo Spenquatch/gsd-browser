@@ -1877,7 +1877,7 @@
         {
           "id": "I8.3",
           "title": "Spec pin: 8081 job inspection endpoints (GET /api/v1/jobs/{job_id})",
-          "status": "todo",
+          "status": "done",
           "risk": "medium",
           "deliverables": [
             "gsd-browser/docs/api/HTTP_API.md (update; pin job endpoint request/response + errors)",
