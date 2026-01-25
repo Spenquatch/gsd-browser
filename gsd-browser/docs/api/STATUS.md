@@ -47,7 +47,9 @@ FastMCP v2 (Option B) runtime.
 - A management/admin REST API (port 8081) is implemented (ADR-0018):
   - `/healthz`
   - `GET /api/v1/tasks` (identity-scoped)
+  - `GET /api/v1/jobs/{job_id}` (identity-scoped)
   - `GET /api/v1/admin/tasks` (admin-gated; requires `GSD_ADMIN_MODE=1` + `gsd:admin`)
+  - `GET /api/v1/admin/jobs/{job_id}` (admin-gated; requires `GSD_ADMIN_MODE=1` + `gsd:admin`)
 
 ### Planned (not yet implemented in runtime)
 - Switch the default stdio runtime to `fastmcp` v2 (remove feature flag default-off behavior).
@@ -57,8 +59,7 @@ FastMCP v2 (Option B) runtime.
 - MCP-compliant HTTP OAuth discovery/challenge surfaces (RFC 9728 `resource_metadata`, `WWW-Authenticate`
   semantics, step-up scopes, resource indicators / audience binding). (ADR-0013 Accepted; not implemented yet;
   spec: `gsd-browser/docs/api/FAST_MCP_V2_CANONICAL_SPEC.md` §9.)
-- Expand the management/admin REST API (port 8081) with job inspection endpoints and wire CLI surfaces
-  (e.g., `gsd tasks list`) to it.
+- Wire CLI surfaces (e.g., `gsd tasks list`) to the management/admin REST API (port 8081).
   - Optionally also expose MCP tool wrappers for enumeration/inspection (proxying the same underlying
     identity-scoped logic), for clients that want a synchronous “list” workflow without using 8081.
 

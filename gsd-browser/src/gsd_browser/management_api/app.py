@@ -26,6 +26,7 @@ from ..optionb.identity import (
     get_jwt_tenant_id_claim_name,
     identity_from_claims,
 )
+from ..optionb.ops_jobs import OpsJobsServiceError, get_ops_jobs_service
 from ..optionb.ops_tasks import (
     OpsAdminTasksListQuery,
     OpsTasksListQuery,
@@ -336,6 +337,106 @@ async def _admin_list_tasks(request: Request) -> Response:
         )
 
 
+async def _get_job(request: Request) -> Response:
+    identity, scopes = _require_identity_and_scopes(request)
+    try:
+        _require_ops_scopes(scopes, required=("gsd:browser:read", "gsd:admin"))
+
+        job_id = str(request.path_params.get("job_id") or "")
+        docket = cast(Docket, request.app.state.docket)
+        with _docket_scope(docket):
+            service = get_ops_jobs_service()
+            response = await service.get_job(identity=identity, job_id=job_id)
+
+        if response is None:
+            return _error_response(
+                status_code=404,
+                code="not_found",
+                message="Not found",
+                details={},
+            )
+
+        return JSONResponse(response.model_dump(mode="json"))
+    except OpsJobsServiceError as exc:
+        return _error_response(
+            status_code=400,
+            code=exc.code,
+            message=exc.message,
+            details=exc.details,
+        )
+    except OpsTasksServiceError as exc:
+        status_code = 403 if exc.code == "forbidden" else 400
+        return _error_response(
+            status_code=status_code,
+            code=exc.code,
+            message=exc.message,
+            details=exc.details,
+        )
+
+
+async def _admin_get_job(request: Request) -> Response:
+    identity, scopes = _require_identity_and_scopes(request)
+    try:
+        _require_ops_scopes(scopes, required=("gsd:admin",))
+        if not _admin_mode_enabled():
+            logger.warning(
+                "audit.admin_api_access_denied",
+                extra={
+                    "endpoint": "/api/v1/admin/jobs/{job_id}",
+                    "reason": "admin_mode_disabled",
+                    "caller_tenant_id": identity.tenant_id,
+                    "caller_subject_id": identity.subject_id,
+                    "caller_transport": identity.transport,
+                },
+            )
+            raise OpsTasksServiceError(
+                code="forbidden",
+                message="Admin endpoints are disabled",
+                details={},
+            )
+
+        logger.info(
+            "audit.admin_job_get",
+            extra={
+                "endpoint": "/api/v1/admin/jobs/{job_id}",
+                "caller_tenant_id": identity.tenant_id,
+                "caller_subject_id": identity.subject_id,
+                "caller_transport": identity.transport,
+            },
+        )
+
+        job_id = str(request.path_params.get("job_id") or "")
+        docket = cast(Docket, request.app.state.docket)
+        with _docket_scope(docket):
+            service = get_ops_jobs_service()
+            response = await service.admin_get_job(job_id=job_id)
+
+        if response is None:
+            return _error_response(
+                status_code=404,
+                code="not_found",
+                message="Not found",
+                details={},
+            )
+
+        return JSONResponse(response.model_dump(mode="json"))
+    except OpsJobsServiceError as exc:
+        return _error_response(
+            status_code=400,
+            code=exc.code,
+            message=exc.message,
+            details=exc.details,
+        )
+    except OpsTasksServiceError as exc:
+        status_code = 403 if exc.code == "forbidden" else 400
+        return _error_response(
+            status_code=status_code,
+            code=exc.code,
+            message=exc.message,
+            details=exc.details,
+        )
+
+
 def build_management_app() -> Starlette:
     """Build the 8081 management REST API app (HTTP_API.md)."""
 
@@ -344,7 +445,9 @@ def build_management_app() -> Starlette:
         routes=[
             Route("/healthz", _healthz, methods=["GET"]),
             Route("/api/v1/tasks", _list_tasks, methods=["GET"]),
+            Route("/api/v1/jobs/{job_id:str}", _get_job, methods=["GET"]),
             Route("/api/v1/admin/tasks", _admin_list_tasks, methods=["GET"]),
+            Route("/api/v1/admin/jobs/{job_id:str}", _admin_get_job, methods=["GET"]),
         ]
     )
 

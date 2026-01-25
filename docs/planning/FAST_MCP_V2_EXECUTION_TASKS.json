@@ -1914,7 +1914,7 @@
         {
           "id": "I8.4",
           "title": "Implement 8081 job inspection endpoints (identity-scoped + admin) with tests",
-          "status": "todo",
+          "status": "done",
           "risk": "high",
           "deliverables": [
             "gsd-browser/src/gsd_browser/management_api/app.py (update; add job endpoints)",
