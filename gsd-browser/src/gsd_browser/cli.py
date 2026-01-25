@@ -444,6 +444,46 @@ def serve_browser(
     run_streaming_server(settings=settings, host=host, port=port)
 
 
+@app.command("serve-management")
+def serve_management(
+    host: str = typer.Option("127.0.0.1", "--host", help="Bind host for the management API"),
+    port: int = typer.Option(
+        8081,
+        "--port",
+        help="Bind port for the management API (default 8081)",
+    ),
+    log_level: str | None = typer.Option(
+        None, "--log-level", help="Override log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)"
+    ),
+    json_logs: bool = typer.Option(
+        False, "--json-logs", is_flag=True, help="Emit structured JSON logs"
+    ),
+    text_logs: bool = typer.Option(
+        False, "--text-logs", is_flag=True, help="Force human-friendly logs"
+    ),
+) -> None:
+    """Start the 8081 management REST API server."""
+    settings = load_settings(strict=False)
+    desired_level = log_level or settings.log_level
+    if json_logs and text_logs:
+        console.print("[red]Cannot use --json-logs and --text-logs together[/red]")
+        raise typer.Exit(code=1)
+    if json_logs:
+        desired_json = True
+    elif text_logs:
+        desired_json = False
+    else:
+        desired_json = settings.json_logs
+
+    setup_logging(desired_level, json_logs=desired_json)
+
+    import uvicorn
+
+    from .management_api.app import build_management_app
+
+    uvicorn.run(build_management_app(), host=host, port=port, log_level="info")
+
+
 @app.command()
 def diagnose() -> None:
     """Run lightweight environment diagnostics."""
