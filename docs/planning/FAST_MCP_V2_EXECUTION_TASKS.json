@@ -1033,13 +1033,13 @@
           ]
         },
         {
-          "id": "I5.1",
-          "title": "Shared helpers: scope extraction + base-path normalization (unit-tested)",
-          "status": "todo",
-          "risk": "medium",
-          "deliverables": [
-            "gsd-browser/src/gsd_browser/optionb/scopes.py (new)",
-            "gsd-browser/src/gsd_browser/http_base_path.py (new)",
+	          "id": "I5.1",
+	          "title": "Shared helpers: scope extraction + base-path normalization (unit-tested)",
+	          "status": "done",
+	          "risk": "medium",
+	          "deliverables": [
+	            "gsd-browser/src/gsd_browser/optionb/scopes.py (new)",
+	            "gsd-browser/src/gsd_browser/http_base_path.py (new)",
             "gsd-browser/tests/test_http_scopes.py (new)",
             "gsd-browser/tests/test_http_base_path.py (new)"
           ],
