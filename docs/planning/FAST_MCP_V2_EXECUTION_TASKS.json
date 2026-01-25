@@ -1705,7 +1705,7 @@
         {
           "id": "I8.1",
           "title": "Job store: persist job_id → backend execution mapping with ownership",
-          "status": "todo",
+          "status": "done",
           "risk": "high",
           "deliverables": [
             "gsd-browser/src/gsd_browser/optionb/job_store.py (new)",
