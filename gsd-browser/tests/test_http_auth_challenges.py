@@ -28,6 +28,7 @@ def test_http_auth_missing_token_returns_401_with_resource_metadata(
     with TestClient(app) as client:
         resp = client.post(
             "/mcp",
+            headers={"Host": "localhost", "Origin": "http://localhost"},
             json={"jsonrpc": "2.0", "id": 1, "method": "tools/list", "params": {}},
         )
 
@@ -69,7 +70,11 @@ def test_http_auth_insufficient_scope_execute_tool_returns_403_with_scope_listin
     with TestClient(app) as client:
         resp = client.post(
             "/mcp",
-            headers={"Authorization": "Bearer token-read-only"},
+            headers={
+                "Authorization": "Bearer token-read-only",
+                "Host": "localhost",
+                "Origin": "http://localhost",
+            },
             json={
                 "jsonrpc": "2.0",
                 "id": 1,
@@ -116,7 +121,11 @@ def test_http_auth_insufficient_scope_read_tool_returns_403_with_scope_listing(
     with TestClient(app) as client:
         resp = client.post(
             "/mcp",
-            headers={"Authorization": "Bearer token-execute-only"},
+            headers={
+                "Authorization": "Bearer token-execute-only",
+                "Host": "localhost",
+                "Origin": "http://localhost",
+            },
             json={
                 "jsonrpc": "2.0",
                 "id": 1,
@@ -154,7 +163,11 @@ def test_http_auth_wrong_audience_returns_403_with_pinned_invalid_token_body(
     with TestClient(app) as client:
         resp = client.post(
             "/mcp",
-            headers={"Authorization": "Bearer token-wrong-aud"},
+            headers={
+                "Authorization": "Bearer token-wrong-aud",
+                "Host": "localhost",
+                "Origin": "http://localhost",
+            },
             json={"jsonrpc": "2.0", "id": 1, "method": "tools/list", "params": {}},
         )
 

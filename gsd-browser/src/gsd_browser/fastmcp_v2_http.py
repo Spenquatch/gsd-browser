@@ -74,6 +74,16 @@ def build_http_app() -> StarletteWithLifespan:
     from .optionb.http_auth import HttpAuthMiddleware
 
     app.add_middleware(HttpAuthMiddleware, verifier=mcp.auth)
+
+    from .optionb.http_hardening import (
+        LocalHttpHardeningMiddleware,
+        load_local_http_hardening_config_from_env,
+    )
+
+    app.add_middleware(
+        LocalHttpHardeningMiddleware,
+        config=load_local_http_hardening_config_from_env(),
+    )
     return app
 
 

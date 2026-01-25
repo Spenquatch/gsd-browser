@@ -1221,7 +1221,7 @@
         {
           "id": "I5.4",
           "title": "Local HTTP hardening for 8080 MCP endpoints (Origin/Host validation + exemptions)",
-          "status": "todo",
+          "status": "done",
           "risk": "high",
           "deliverables": [
             "gsd-browser/src/gsd_browser/optionb/http_hardening.py (new)",

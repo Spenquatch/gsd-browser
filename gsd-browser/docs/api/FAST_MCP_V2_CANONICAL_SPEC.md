@@ -628,3 +628,15 @@ Local HTTP hardening (ADR-0014) MUST NOT apply Origin/Host validation to:
 - `GET /.well-known/*`
 - `GET /healthz`
 - `OPTIONS *`
+
+### 9.7 Local hardening configuration (pinned)
+Local hardening configuration knobs (ADR-0014) are pinned as:
+- `GSD_HTTP_ALLOWED_ORIGINS` (string; optional): comma-separated list of allowed Origin values.
+  - If unset/empty, the default allowlist is: `http://localhost`, `http://127.0.0.1`, `http://[::1]`.
+  - Origin entries without an explicit port MUST match all ports for that host+scheme.
+- `GSD_HTTP_ALLOW_NULL_ORIGIN` (bool; default `false`): when `true`, the server MAY accept `Origin: null`.
+
+Host validation (ADR-0014) MUST:
+- validate `Host` (and, when present, `X-Forwarded-Host`) against an allowlist derived from:
+  - the loopback defaults above (`localhost`, `127.0.0.1`, `[::1]`), plus
+  - the hostnames present in the configured `GSD_HTTP_ALLOWED_ORIGINS` list.
