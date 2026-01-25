@@ -1312,11 +1312,11 @@
         {
           "id": "I6.1",
           "title": "API key registry: load/validate file + constant-time lookup (unit-tested)",
-          "status": "todo",
+          "status": "done",
           "risk": "medium",
           "deliverables": [
             "gsd-browser/src/gsd_browser/optionb/api_keys.py (new)",
-            "gsd-browser/tests/test_api_keys.py (new)"
+            "gsd-browser/tests/test_optionb_api_keys.py (new)"
           ],
           "depends_on": ["I6.0", "I5.1"],
           "references": [
