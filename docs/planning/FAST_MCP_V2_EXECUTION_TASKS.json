@@ -1352,7 +1352,7 @@
         {
           "id": "I6.2",
           "title": "Shared ops service layer: list tasks with cursor-bound pagination",
-          "status": "todo",
+          "status": "done",
           "risk": "high",
           "deliverables": [
             "gsd-browser/src/gsd_browser/optionb/ops_tasks.py (new)",
