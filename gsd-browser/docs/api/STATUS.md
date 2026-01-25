@@ -11,6 +11,13 @@ FastMCP v2 (Option B) runtime.
 - FastMCP v2 requires Redis/Valkey via `FASTMCP_DOCKET_URL` (even on stdio).
 - A FastMCP v2 HTTP (ASGI) entrypoint is implemented when `GSD_TRANSPORT=http` and JWT config is present.
   - HTTP transport is configured as stateless (`stateless_http=True`) so clients do not need to reuse `mcp-session-id` headers across calls.
+- A supported external worker entrypoint exists for Option B via `gsd worker`:
+  - Server process can be run with `FASTMCP_DOCKET_CONCURRENCY=0` (does not execute tasks).
+  - Worker process(es) can be run with `FASTMCP_DOCKET_CONCURRENCY>0` (executes queued work).
+  - Both must share the same Docket backend (`FASTMCP_DOCKET_URL`, `FASTMCP_DOCKET_NAME`).
+  - Example (two-process topology):
+    - `GSD_USE_FASTMCP_V2=true FASTMCP_DOCKET_CONCURRENCY=0 gsd serve`
+    - `GSD_USE_FASTMCP_V2=true FASTMCP_DOCKET_CONCURRENCY=4 gsd worker`
 - Tool responses follow the JSON payload schemas documented in `gsd-browser/docs/api/MCP_TOOLS.md`.
 - SEP-1686 long-running tasks are implemented for long tools in the FastMCP v2 runtime:
   - long tools are task-required in v2
@@ -38,8 +45,9 @@ FastMCP v2 (Option B) runtime.
 - Switch the default stdio runtime to `fastmcp` v2 (remove feature flag default-off behavior).
 - Add a Codex-compatible “compat jobs” tool surface (submit/status/result/cancel/wait) for MCP hosts that do
   not implement SEP-1686.
-- Decouple execution from the MCP server process by running work in external Docket workers by default
-  (server concurrency=0, separate workers>0).
+- Default production guidance: decouple execution from the MCP server process by running work in external
+  Docket workers by default (server concurrency=0, separate workers>0). (`gsd worker` exists; reference
+  deployments and default guidance are still in progress.)
 - MCP-compliant HTTP OAuth discovery/challenge surfaces (RFC 9728 `resource_metadata`, `WWW-Authenticate`
   semantics, step-up scopes, resource indicators / audience binding). (ADR-0013 Accepted; not implemented yet;
   spec: `gsd-browser/docs/api/FAST_MCP_V2_CANONICAL_SPEC.md` §9.)

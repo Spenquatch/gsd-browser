@@ -1532,7 +1532,7 @@
         {
           "id": "I7.0a",
           "title": "Worker entrypoint: CLI command to run Docket workers (server concurrency=0 friendly)",
-          "status": "todo",
+          "status": "done",
           "risk": "high",
           "deliverables": [
             "gsd-browser/src/gsd_browser/cli.py (update; add worker command)",

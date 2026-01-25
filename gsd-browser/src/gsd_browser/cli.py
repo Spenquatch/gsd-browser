@@ -164,6 +164,93 @@ def serve(
     run_stdio()
 
 
+@app.command()
+def worker(
+    log_level: str | None = typer.Option(
+        None, "--log-level", help="Override log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)"
+    ),
+    json_logs: bool = typer.Option(
+        False, "--json-logs", is_flag=True, help="Emit structured JSON logs"
+    ),
+    text_logs: bool = typer.Option(
+        False, "--text-logs", is_flag=True, help="Force human-friendly logs"
+    ),
+    llm_provider: str | None = typer.Option(
+        None,
+        "--llm-provider",
+        help="LLM provider (anthropic, chatbrowseruse, openai, ollama)",
+    ),
+    llm_model: str | None = typer.Option(None, "--llm-model", help="Override LLM model name"),
+    ollama_host: str | None = typer.Option(None, "--ollama-host", help="Override OLLAMA_HOST"),
+) -> None:
+    """Start a FastMCP/Docket worker process (Option B runtime)."""
+    import asyncio
+
+    overrides: dict[str, str] = {}
+    if llm_provider is not None:
+        overrides["GSD_LLM_PROVIDER"] = llm_provider
+    if llm_model is not None:
+        overrides["GSD_MODEL"] = llm_model
+    if ollama_host is not None:
+        overrides["OLLAMA_HOST"] = ollama_host
+
+    settings = load_settings(env=overrides or None)
+
+    desired_level = log_level or settings.log_level
+    if json_logs and text_logs:
+        console.print("[red]Cannot use --json-logs and --text-logs together[/red]")
+        raise typer.Exit(code=1)
+    if json_logs:
+        desired_json = True
+    elif text_logs:
+        desired_json = False
+    else:
+        desired_json = settings.json_logs
+
+    setup_logging(desired_level, json_logs=desired_json)
+
+    # Worker entrypoint always uses FastMCP v2 (Option B).
+    from .fastmcp_v2_stdio import apply_configured_tool_policy, mcp
+
+    apply_configured_tool_policy(settings=settings)
+
+    import fastmcp
+
+    docket_url = str(fastmcp.settings.docket.url)
+    if docket_url.startswith("memory://"):
+        console.print(
+            "[bold red]✗ In-memory Docket backend not supported for workers[/bold red]\n\n"
+            "A worker runs as a separate process, so it must use a distributed Docket backend.\n\n"
+            "[bold]Fix:[/bold]\n"
+            "  export FASTMCP_DOCKET_URL=redis://localhost:6379/0\n"
+        )
+        raise typer.Exit(code=1)
+
+    concurrency = int(fastmcp.settings.docket.concurrency)
+    if concurrency <= 0:
+        console.print(
+            "[yellow]Warning[/yellow]: FASTMCP_DOCKET_CONCURRENCY is <= 0; this worker will not "
+            "execute tasks."
+        )
+
+    async def run_worker_forever() -> None:
+        async with mcp._lifespan_manager():
+            console.print(
+                f"[bold green]✓[/bold green] Starting worker for [cyan]{mcp.name}[/cyan]"
+            )
+            console.print(f"  Docket: {fastmcp.settings.docket.name}")
+            console.print(f"  Backend: {fastmcp.settings.docket.url}")
+            console.print(f"  Concurrency: {fastmcp.settings.docket.concurrency}")
+            while True:
+                await asyncio.sleep(3600)
+
+    try:
+        asyncio.run(run_worker_forever())
+    except KeyboardInterrupt:
+        console.print("\n[yellow]Worker stopped[/yellow]")
+        raise typer.Exit(code=0) from None
+
+
 @app.command("list-tools")
 def list_tools() -> None:
     """Print known MCP tool names and the currently advertised set (after policy)."""
