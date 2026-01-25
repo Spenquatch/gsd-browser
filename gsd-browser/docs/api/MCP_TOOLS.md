@@ -81,6 +81,65 @@ Same input shape and output schema as `web_eval_agent`, but with:
 - `version`: `"gsd.web_task_agent_github.v1"`
 - `tool`: `"web_task_agent_github"` (added by wrapper)
 
+### `web_eval_agent_submit` (sync; compat job submit)
+Submit `web_eval_agent` work for clients that do not implement SEP-1686 tasks.
+
+**Input**
+- Same input shape as `web_eval_agent` (without SEP-1686 task metadata).
+
+**Output** (`TextContent[]`, exactly 1 item)
+- JSON payload schema `gsd.job_submit.v1`:
+  - `version`: `"gsd.job_submit.v1"`
+  - `job_id`: UUID string|null
+  - `tool_name`: string
+  - `state`: `"queued"`
+  - `session_id`: UUID string|null
+  - `created_at`: number|null (epoch seconds)
+  - `expires_at`: number|null (epoch seconds)
+  - `error`: `{code:string, message:string, details:object|null} | null`
+
+### `web_task_agent_submit` (sync; compat job submit)
+Same as `web_eval_agent_submit`, but submits `web_task_agent` work.
+
+**Input**
+- Same input shape as `web_task_agent`.
+
+**Output**
+- `gsd.job_submit.v1`
+
+### `web_task_agent_github_submit` (sync; compat job submit)
+Same as `web_eval_agent_submit`, but submits `web_task_agent_github` work.
+
+**Input**
+- Same input shape as `web_task_agent_github`.
+
+**Output**
+- `gsd.job_submit.v1`
+
+### `job_get` (sync; compat job status snapshot)
+**Input**
+- `job_id` (string, required; UUID)
+
+**Output** (`TextContent[]`, exactly 1 item)
+- JSON payload schema `gsd.job_get.v1`:
+  - `version`: `"gsd.job_get.v1"`
+  - `job_id`: UUID string|null (echo of input)
+  - `found`: boolean
+  - `tool_name`: string|null
+  - `state`: `"queued" | "running" | "completed" | "failed" | "cancelled" | null`
+  - `progress_message`: string (always present; empty when `found=false`)
+  - `progress`: `{current:int, total:int, percentage:float} | null`
+  - `session_id`: UUID string|null
+  - `created_at`: number|null (epoch seconds)
+  - `started_at`: number|null (epoch seconds)
+  - `updated_at`: number|null (epoch seconds)
+  - `finished_at`: number|null (epoch seconds)
+  - `expires_at`: number|null (epoch seconds)
+  - `error`: `{code:string, message:string, details:object|null} | null`
+
+Non-enumerability:
+- If the job does not exist or is owned by a different tenant/subject, return `found=false` and `error=null`.
+
 ### `get_run_events` (sync)
 **Input**
 - `session_id` (UUID string, required)
@@ -254,49 +313,6 @@ Some MCP hosts do not implement SEP-1686 tasks. Compat jobs provide a synchronou
 authZ (ADR-0011; canonical invariants: `gsd-browser/docs/api/FAST_MCP_V2_CANONICAL_SPEC.md` §3.6).
 
 State vocabulary (pinned): `queued|running|completed|failed|cancelled`.
-
-#### `{tool_name}_submit` (sync; long-tool submission)
-Submit tools schedule long work and return a stable `job_id` immediately.
-
-Submit tools (pinned):
-- `web_eval_agent_submit`
-- `web_task_agent_submit`
-- `web_task_agent_github_submit`
-
-Input: same input shape as the corresponding long tool (`web_eval_agent`, `web_task_agent`, `web_task_agent_github`).
-
-Output: JSON payload schema `gsd.job_submit.v1` (in a single `TextContent`):
-- `version`: `"gsd.job_submit.v1"`
-- `job_id`: UUID string|null
-- `tool_name`: string
-- `state`: `"queued"`
-- `session_id`: UUID string|null
-- `created_at`: number (epoch seconds)
-- `expires_at`: number (epoch seconds)
-- `error`: `{code:string, message:string, details:object|null} | null`
-
-#### `job_get` (sync; status/progress snapshot)
-Input:
-- `job_id` (string, required)
-
-Output: JSON payload schema `gsd.job_get.v1` (in a single `TextContent`):
-- `version`: `"gsd.job_get.v1"`
-- `job_id`: UUID string|null (echo of input)
-- `found`: boolean
-- `tool_name`: string|null
-- `state`: `"queued" | "running" | "completed" | "failed" | "cancelled" | null`
-- `progress_message`: string (always present; empty when `found=false`)
-- `progress`: `{current:int, total:int, percentage:float} | null`
-- `session_id`: UUID string|null
-- `created_at`: number|null (epoch seconds)
-- `started_at`: number|null (epoch seconds)
-- `updated_at`: number|null (epoch seconds)
-- `finished_at`: number|null (epoch seconds)
-- `expires_at`: number|null (epoch seconds)
-- `error`: `{code:string, message:string, details:object|null} | null`
-
-Non-enumerability:
-- If the job does not exist or is owned by a different tenant/subject, return `found=false` and `error=null`.
 
 #### `job_result` (sync; final payload when ready)
 Input:

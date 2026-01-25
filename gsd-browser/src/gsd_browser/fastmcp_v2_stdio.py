@@ -332,6 +332,108 @@ async def web_task_agent_github(
         return result
 
 
+@mcp.tool(name="web_eval_agent_submit")
+async def web_eval_agent_submit(
+    url: str,
+    task: str,
+    ctx: Context | None = None,
+    headless_browser: bool = False,
+    mode: str | None = None,
+    budget_s: float | None = None,
+    max_steps: int | None = None,
+    step_timeout_s: float | None = None,
+) -> list[TextContent]:
+    from .optionb.compat_jobs import submit_job
+
+    with _docket_scope(ctx):
+        payload = await _call_with_identity(
+            submit_job,
+            tool_name="web_eval_agent",
+            arguments={
+                "url": url,
+                "task": task,
+                "headless_browser": headless_browser,
+                "mode": mode,
+                "budget_s": budget_s,
+                "max_steps": max_steps,
+                "step_timeout_s": step_timeout_s,
+            },
+        )
+    return _json_text(payload.model_dump(mode="json"))
+
+
+@mcp.tool(name="web_task_agent_submit")
+async def web_task_agent_submit(
+    url: str,
+    task: str,
+    ctx: Context | None = None,
+    headless_browser: bool = False,
+    mode: str | None = None,
+    budget_s: float | None = None,
+    max_steps: int | None = None,
+    step_timeout_s: float | None = None,
+) -> list[TextContent]:
+    from .optionb.compat_jobs import submit_job
+
+    with _docket_scope(ctx):
+        payload = await _call_with_identity(
+            submit_job,
+            tool_name="web_task_agent",
+            arguments={
+                "url": url,
+                "task": task,
+                "headless_browser": headless_browser,
+                "mode": mode,
+                "budget_s": budget_s,
+                "max_steps": max_steps,
+                "step_timeout_s": step_timeout_s,
+            },
+        )
+    return _json_text(payload.model_dump(mode="json"))
+
+
+@mcp.tool(name="web_task_agent_github_submit")
+async def web_task_agent_github_submit(
+    url: str,
+    task: str,
+    ctx: Context | None = None,
+    headless_browser: bool = False,
+    mode: str | None = None,
+    budget_s: float | None = None,
+    max_steps: int | None = None,
+    step_timeout_s: float | None = None,
+) -> list[TextContent]:
+    from .optionb.compat_jobs import submit_job
+
+    with _docket_scope(ctx):
+        payload = await _call_with_identity(
+            submit_job,
+            tool_name="web_task_agent_github",
+            arguments={
+                "url": url,
+                "task": task,
+                "headless_browser": headless_browser,
+                "mode": mode,
+                "budget_s": budget_s,
+                "max_steps": max_steps,
+                "step_timeout_s": step_timeout_s,
+            },
+        )
+    return _json_text(payload.model_dump(mode="json"))
+
+
+@mcp.tool(name="job_get")
+async def job_get(
+    job_id: str,
+    ctx: Context | None = None,
+) -> list[TextContent]:
+    from .optionb.compat_jobs import job_get as compat_job_get
+
+    with _docket_scope(ctx):
+        payload = await _call_with_identity(compat_job_get, job_id=job_id)
+    return _json_text(payload.model_dump(mode="json"))
+
+
 @mcp.tool(name="get_run_events")
 async def get_run_events(
     session_id: str = "",
