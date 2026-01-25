@@ -7,6 +7,8 @@ from gsd_browser.contracts.v1 import (
     GetRunEventsPayloadV1,
     GetScreenshotsPayloadV1,
     SetupBrowserStatePayloadV1,
+    TasksAdminListPayloadV1,
+    TasksListPayloadV1,
     WebEvalAgentPayloadV1,
     WebTaskAgentGitHubPayloadV1,
     WebTaskAgentPayloadV1,
@@ -28,6 +30,8 @@ def test_exported_jsonschema_files_are_in_sync() -> None:
         "gsd.get_run_events.v1.schema.json": GetRunEventsPayloadV1.model_json_schema(),
         "gsd.get_screenshots.v1.schema.json": GetScreenshotsPayloadV1.model_json_schema(),
         "gsd.setup_browser_state.v1.schema.json": SetupBrowserStatePayloadV1.model_json_schema(),
+        "gsd.tasks_list.v1.schema.json": TasksListPayloadV1.model_json_schema(),
+        "gsd.tasks_admin_list.v1.schema.json": TasksAdminListPayloadV1.model_json_schema(),
     }
 
     for filename, schema in expected.items():
@@ -37,4 +41,3 @@ def test_exported_jsonschema_files_are_in_sync() -> None:
             f"Schema file out of date: {path}\n"
             "Run `./.venv/bin/python tools/export_contract_schemas.py` and commit the results."
         )
-

@@ -166,3 +166,39 @@ class SetupBrowserStatePayloadV1(ContractModel):
     summary: str
     traceback: str | None = None
     next_actions: list[str]
+
+
+class OpsErrorPayloadV1(ContractModel):
+    code: str = Field(min_length=1, max_length=120)
+    message: str = Field(min_length=1, max_length=500)
+    details: dict[str, Any] | None = None
+
+
+class TasksListItemV1(ContractModel):
+    task_id: UUID
+    tool_name: str = Field(min_length=1, max_length=200)
+    status: Literal["queued", "running", "completed", "failed", "cancelled"]
+    created_at: str = Field(min_length=1, max_length=64)
+    updated_at: str | None = Field(default=None, max_length=64)
+    expires_at: str = Field(min_length=1, max_length=64)
+    session_id: UUID
+
+
+class TasksListPayloadV1(ContractModel):
+    version: Literal["gsd.tasks_list.v1"]
+    tasks: list[TasksListItemV1] = Field(max_length=1000)
+    next_cursor: str | None
+    error: OpsErrorPayloadV1 | None
+
+
+class TasksAdminListItemV1(TasksListItemV1):
+    tenant_id: str = Field(min_length=1, max_length=200)
+    subject_id: str = Field(min_length=1, max_length=200)
+    transport: Literal["stdio", "http"]
+
+
+class TasksAdminListPayloadV1(ContractModel):
+    version: Literal["gsd.tasks_admin_list.v1"]
+    tasks: list[TasksAdminListItemV1] = Field(max_length=1000)
+    next_cursor: str | None
+    error: OpsErrorPayloadV1 | None

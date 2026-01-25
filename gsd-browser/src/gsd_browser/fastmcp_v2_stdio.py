@@ -10,7 +10,9 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
 from collections.abc import Awaitable, Callable
+from contextlib import contextmanager
 from typing import TYPE_CHECKING, TypeVar
 
 from fastmcp import Context
@@ -45,6 +47,10 @@ T = TypeVar("T")
 
 if TYPE_CHECKING:
     from .optionb.identity import Identity
+
+
+def _json_text(payload: object) -> list[TextContent]:
+    return [TextContent(type="text", text=json.dumps(payload, ensure_ascii=False))]
 
 
 def _terminal_phase_from_result(result: list[TextContent]) -> tuple[str, str]:
@@ -98,6 +104,48 @@ async def _call_with_identity(
     identity = _resolve_identity_for_current_call()
     with identity_scope(identity):
         return await fn(**kwargs)
+
+
+def _admin_mode_enabled() -> bool:
+    raw = str(os.environ.get("GSD_ADMIN_MODE", "")).strip().lower()
+    return raw in {"1", "true", "yes", "y"}
+
+
+@contextmanager
+def _docket_scope(ctx: Context | None) -> object:
+    from fastmcp.server.dependencies import _current_docket
+
+    docket = None
+    if ctx is not None:
+        try:
+            docket = ctx.fastmcp.docket  # type: ignore[union-attr]
+        except Exception:  # noqa: BLE001
+            docket = None
+
+    token = None
+    if docket is not None:
+        token = _current_docket.set(docket)
+    try:
+        yield
+    finally:
+        if token is not None:
+            _current_docket.reset(token)
+
+
+def _require_http_scopes(*, required: tuple[str, ...]) -> None:
+    from fastmcp.server.dependencies import get_access_token
+
+    from .optionb.scopes import extract_scopes_from_claims, has_any_scope
+
+    access_token = get_access_token()
+    if access_token is None:
+        return
+
+    scopes = extract_scopes_from_claims(getattr(access_token, "claims", {}) or {})
+    if has_any_scope(scopes, required):
+        return
+
+    raise PermissionError("insufficient_scope")
 
 
 def apply_configured_tool_policy(*, settings: Settings) -> None:
@@ -372,6 +420,176 @@ async def get_screenshots(
         include_images=include_images,
         ctx=ctx,  # type: ignore[arg-type]
     )
+
+
+@mcp.tool(name="tasks_list")
+async def tasks_list(
+    limit: int | None = None,
+    cursor: str | None = None,
+    status: str | None = None,
+    tool_name: str | None = None,
+    since: str | None = None,
+    ctx: Context | None = None,
+) -> list[TextContent]:
+    from pydantic import ValidationError
+
+    from .optionb.ops_tasks import OpsTasksListQuery, OpsTasksServiceError, get_ops_tasks_service
+
+    try:
+        _require_http_scopes(required=("gsd:browser:read", "gsd:admin"))
+        query = OpsTasksListQuery(
+            limit=limit,
+            cursor=cursor,
+            status=status,  # type: ignore[arg-type]
+            tool_name=tool_name,
+            since=since,
+        )
+    except PermissionError:
+        payload = {
+            "version": "gsd.tasks_list.v1",
+            "tasks": [],
+            "next_cursor": None,
+            "error": {
+                "code": "forbidden",
+                "message": "Insufficient scope",
+                "details": {"required_scopes": ["gsd:browser:read", "gsd:admin"]},
+            },
+        }
+        return _json_text(payload)
+    except ValidationError as exc:
+        payload = {
+            "version": "gsd.tasks_list.v1",
+            "tasks": [],
+            "next_cursor": None,
+            "error": {
+                "code": "invalid_query",
+                "message": "Invalid query",
+                "details": {"errors": exc.errors()},
+            },
+        }
+        return _json_text(payload)
+
+    identity = _resolve_identity_for_current_call()
+    try:
+        with _docket_scope(ctx):
+            service = get_ops_tasks_service()
+            response = await service.list_tasks(identity=identity, query=query)
+        body = response.model_dump(mode="json")
+        payload = {
+            "version": "gsd.tasks_list.v1",
+            "tasks": body.get("tasks", []),
+            "next_cursor": body.get("next_cursor"),
+            "error": None,
+        }
+        return _json_text(payload)
+    except OpsTasksServiceError as exc:
+        payload = {
+            "version": "gsd.tasks_list.v1",
+            "tasks": [],
+            "next_cursor": None,
+            "error": {
+                "code": exc.code,
+                "message": exc.message,
+                "details": exc.details or None,
+            },
+        }
+        return _json_text(payload)
+
+
+@mcp.tool(name="tasks_admin_list")
+async def tasks_admin_list(
+    limit: int | None = None,
+    cursor: str | None = None,
+    status: str | None = None,
+    tool_name: str | None = None,
+    since: str | None = None,
+    tenant_id: str | None = None,
+    subject_id: str | None = None,
+    transport: str | None = None,
+    ctx: Context | None = None,
+) -> list[TextContent]:
+    from pydantic import ValidationError
+
+    from .optionb.ops_tasks import (
+        OpsAdminTasksListQuery,
+        OpsTasksServiceError,
+        get_ops_tasks_service,
+    )
+
+    if not _admin_mode_enabled():
+        payload = {
+            "version": "gsd.tasks_admin_list.v1",
+            "tasks": [],
+            "next_cursor": None,
+            "error": {
+                "code": "admin_disabled",
+                "message": "Admin endpoints are disabled",
+                "details": None,
+            },
+        }
+        return _json_text(payload)
+
+    try:
+        _require_http_scopes(required=("gsd:admin",))
+        query = OpsAdminTasksListQuery(
+            limit=limit,
+            cursor=cursor,
+            status=status,  # type: ignore[arg-type]
+            tool_name=tool_name,
+            since=since,
+            tenant_id=tenant_id,
+            subject_id=subject_id,
+            transport=transport,  # type: ignore[arg-type]
+        )
+    except PermissionError:
+        payload = {
+            "version": "gsd.tasks_admin_list.v1",
+            "tasks": [],
+            "next_cursor": None,
+            "error": {
+                "code": "forbidden",
+                "message": "Insufficient scope",
+                "details": {"required_scopes": ["gsd:admin"]},
+            },
+        }
+        return _json_text(payload)
+    except ValidationError as exc:
+        payload = {
+            "version": "gsd.tasks_admin_list.v1",
+            "tasks": [],
+            "next_cursor": None,
+            "error": {
+                "code": "invalid_query",
+                "message": "Invalid query",
+                "details": {"errors": exc.errors()},
+            },
+        }
+        return _json_text(payload)
+
+    try:
+        with _docket_scope(ctx):
+            service = get_ops_tasks_service()
+            response = await service.admin_list_tasks(query=query)
+        body = response.model_dump(mode="json")
+        payload = {
+            "version": "gsd.tasks_admin_list.v1",
+            "tasks": body.get("tasks", []),
+            "next_cursor": body.get("next_cursor"),
+            "error": None,
+        }
+        return _json_text(payload)
+    except OpsTasksServiceError as exc:
+        payload = {
+            "version": "gsd.tasks_admin_list.v1",
+            "tasks": [],
+            "next_cursor": None,
+            "error": {
+                "code": exc.code,
+                "message": exc.message,
+                "details": exc.details or None,
+            },
+        }
+        return _json_text(payload)
 
 
 def run_stdio() -> None:

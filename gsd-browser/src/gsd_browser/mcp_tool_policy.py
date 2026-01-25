@@ -24,6 +24,8 @@ KNOWN_MCP_TOOLS: tuple[str, ...] = (
     "get_run_events",
     "setup_browser_state",
     "get_screenshots",
+    "tasks_list",
+    "tasks_admin_list",
 )
 
 

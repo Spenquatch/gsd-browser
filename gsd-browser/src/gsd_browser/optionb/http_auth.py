@@ -65,6 +65,7 @@ _EXECUTE_TOOLS: set[str] = {
 _READ_TOOLS: set[str] = {
     "get_screenshots",
     "get_run_events",
+    "tasks_list",
 }
 
 _SCOPE_EXECUTE = "gsd:browser:execute"
@@ -91,6 +92,8 @@ def _required_scope_string_for_mcp_payload(payload: object) -> str | None:
             return _SCOPE_STRING_EXECUTE_OR_ADMIN
         if tool_name in _READ_TOOLS:
             return _SCOPE_STRING_READ_OR_ADMIN
+        if tool_name == "tasks_admin_list":
+            return _SCOPE_ADMIN
         return None
 
     if method in {"tasks/get", "tasks/result"}:

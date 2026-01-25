@@ -183,10 +183,6 @@ Delivery mode matrix (authoritative):
   - `traceback`: string|null (optional; present on failures when available)
   - `next_actions`: string[]
 
-## Tools (planned; not yet implemented in runtime)
-These tool contracts are pinned for later implementation. Do not add them to the live tool list
-until the corresponding implementation tasks are complete (see `docs/planning/FAST_MCP_V2_EXECUTION_TASKS.json`).
-
 ### `tasks_list` (sync; wrapper over 8081 listing semantics)
 This tool is a convenience wrapper over the shared internal ops service layer. The listing contract
 is pinned by `gsd-browser/docs/api/HTTP_API.md` (`GET /api/v1/tasks`) and MUST match it.
@@ -247,3 +243,7 @@ Error semantics (pinned):
 - If `GSD_ADMIN_MODE` is disabled, the tool MUST return `tasks=[]` and a non-null `error` object
   (recommended `code="admin_disabled"`).
 - Invalid inputs MUST return `tasks=[]` and a non-null `error` object. See `gsd-browser/docs/api/HTTP_API.md`.
+
+## Tools (planned; not yet implemented in runtime)
+These tool contracts are pinned for later implementation. Do not add them to the live tool list
+until the corresponding implementation tasks are complete (see `docs/planning/FAST_MCP_V2_EXECUTION_TASKS.json`).

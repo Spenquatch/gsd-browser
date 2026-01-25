@@ -1475,14 +1475,14 @@
           ]
         },
         {
-          "id": "I6.4",
-          "title": "MCP wrapper tools for ops: tasks_list + tasks_admin_list (shared service layer)",
-          "status": "todo",
-          "risk": "medium",
-          "deliverables": [
-            "gsd-browser/src/gsd_browser/fastmcp_v2_stdio.py (update; register wrapper tools)",
-            "gsd-browser/src/gsd_browser/contracts/v1.py (update; wrapper payload schemas if new)",
-            "gsd-browser/docs/api/MCP_TOOLS.md (update; document wrapper tools)",
+      "id": "I6.4",
+      "title": "MCP wrapper tools for ops: tasks_list + tasks_admin_list (shared service layer)",
+      "status": "done",
+      "risk": "medium",
+      "deliverables": [
+        "gsd-browser/src/gsd_browser/fastmcp_v2_stdio.py (update; register wrapper tools)",
+        "gsd-browser/src/gsd_browser/contracts/v1.py (update; wrapper payload schemas if new)",
+        "gsd-browser/docs/api/MCP_TOOLS.md (update; document wrapper tools)",
             "gsd-browser/tools/export_contract_schemas.py (run; generated jsonschema updated)",
             "gsd-browser/tests/test_exported_jsonschema_in_sync.py (must remain passing)",
             "gsd-browser/tests/test_wrapper_tools_tasks_list.py (new)"

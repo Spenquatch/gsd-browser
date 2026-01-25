@@ -19,6 +19,8 @@ def main() -> int:
         GetRunEventsPayloadV1,
         GetScreenshotsPayloadV1,
         SetupBrowserStatePayloadV1,
+        TasksAdminListPayloadV1,
+        TasksListPayloadV1,
         WebEvalAgentPayloadV1,
         WebTaskAgentGitHubPayloadV1,
         WebTaskAgentPayloadV1,
@@ -33,6 +35,8 @@ def main() -> int:
         "gsd.get_run_events.v1.schema.json": GetRunEventsPayloadV1.model_json_schema(),
         "gsd.get_screenshots.v1.schema.json": GetScreenshotsPayloadV1.model_json_schema(),
         "gsd.setup_browser_state.v1.schema.json": SetupBrowserStatePayloadV1.model_json_schema(),
+        "gsd.tasks_list.v1.schema.json": TasksListPayloadV1.model_json_schema(),
+        "gsd.tasks_admin_list.v1.schema.json": TasksAdminListPayloadV1.model_json_schema(),
     }
 
     for name, schema in schemas.items():
