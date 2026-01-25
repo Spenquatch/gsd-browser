@@ -1564,7 +1564,7 @@
         {
           "id": "I7.0b",
           "title": "Reference deployments: docker-compose for minimal and production Option B topology",
-          "status": "todo",
+          "status": "done",
           "risk": "medium",
           "deliverables": [
             "gsd-browser/docker/compose.minimal.yml (new)",
