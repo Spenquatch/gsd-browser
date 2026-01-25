@@ -1392,7 +1392,7 @@
         {
           "id": "I6.3a",
           "title": "8081 management API skeleton: app + auth middleware + hardening + /healthz",
-          "status": "todo",
+          "status": "done",
           "risk": "high",
           "deliverables": [
             "gsd-browser/src/gsd_browser/management_api/app.py (new)",
