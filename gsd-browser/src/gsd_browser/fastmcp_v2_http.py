@@ -70,6 +70,10 @@ def build_http_app() -> StarletteWithLifespan:
     from .http_oauth_metadata import mount_oauth_protected_resource_metadata_routes
 
     mount_oauth_protected_resource_metadata_routes(app)
+
+    from .optionb.http_auth import HttpAuthMiddleware
+
+    app.add_middleware(HttpAuthMiddleware, verifier=mcp.auth)
     return app
 
 
