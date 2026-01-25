@@ -1269,7 +1269,7 @@
         {
           "id": "I6.0",
           "title": "Spec pin: 8081 management REST API v1 + API keys + wrapper MCP tools",
-          "status": "todo",
+          "status": "done",
           "risk": "high",
           "risk_notes": "HTTP_API.md pins the 8081 contract but canonical spec does not reference 8081 or API key configuration yet; wrapper tools also require pinned naming/payload shapes.",
           "deliverables": [
