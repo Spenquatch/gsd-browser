@@ -34,11 +34,12 @@ FastMCP v2 (Option B) runtime.
   - task lookup is session-independent (create in one session, fetch/cancel in another) via persisted
     ownership records (ADR-0012 Accepted)
   - progress notifications are emitted during agent work
-- Compat jobs are partially implemented for non-SEP-1686 clients (ADR-0011):
+- Compat jobs are implemented for non-SEP-1686 clients (ADR-0011):
   - `{tool}_submit` tools (`web_eval_agent_submit`, `web_task_agent_submit`, `web_task_agent_github_submit`)
   - `job_get` (state/progress snapshot)
   - `job_result` (final payload when terminal; otherwise not-ready payload)
   - `job_wait` (wait/poll convenience; timeout payload `gsd.job_wait.timeout.v1`)
+  - `job_cancel` (non-enumerable cancel)
 - Distributed artifact storage is implemented (S3-compatible object store + Redis index) and is used when
   the required S3 env vars are configured.
 - Worker-led artifact cleanup/retention enforcement is scheduled in `gsd worker` using the distributed lock
@@ -50,7 +51,6 @@ FastMCP v2 (Option B) runtime.
 
 ### Planned (not yet implemented in runtime)
 - Switch the default stdio runtime to `fastmcp` v2 (remove feature flag default-off behavior).
-- Finish the compat jobs tool surface (`job_cancel`) for MCP hosts that do not implement SEP-1686.
 - Default production guidance: decouple execution from the MCP server process by running work in external
   Docket workers by default (server concurrency=0, separate workers>0). (Reference deployments exist under
   `gsd-browser/docker/compose.*.yml`; see “Implemented today”.)

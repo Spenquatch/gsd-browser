@@ -1810,7 +1810,7 @@
         {
           "id": "I8.2c",
           "title": "Compat jobs (part 3): job_cancel (non-enumerable cancel)",
-          "status": "todo",
+          "status": "done",
           "risk": "medium",
           "deliverables": [
             "gsd-browser/src/gsd_browser/optionb/compat_jobs.py (update; add job_cancel)",
