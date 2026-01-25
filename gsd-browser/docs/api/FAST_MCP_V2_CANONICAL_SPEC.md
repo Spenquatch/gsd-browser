@@ -577,6 +577,20 @@ All configuration is via environment variables.
   - if `stdio`: server starts stdio transport only
   - if `http`: server starts HTTP transport only and requires JWT auth config
 
+### 8.2.1 Stdio runtime selection (pinned)
+When running stdio (including `gsd mcp serve`), the MCP runtime selection is pinned as:
+- Default: FastMCP v2 (“Option B”) stdio runtime.
+- Legacy escape hatch: set `GSD_USE_LEGACY_MCP_RUNTIME=true` to force the legacy SDK runtime
+  (`mcp.server.fastmcp`).
+  - Note: the legacy runtime does not implement SEP-1686 tasks and runs tools synchronously; when the
+    escape hatch is used, the Option B semantics in this canonical spec do not apply.
+
+Back-compat/deprecation (pinned):
+- `GSD_USE_FASTMCP_V2=true` is deprecated (historical opt-in flag); it MAY be accepted as a
+  no-op/alias for “use v2” and MUST NOT override `GSD_USE_LEGACY_MCP_RUNTIME=true`.
+- The legacy stdio runtime is deprecated and is retained only as an emergency escape hatch; it will
+  be removed in a future release.
+
 ### 8.3 JWT auth (required for `GSD_TRANSPORT=http`)
 - `GSD_JWT_JWKS_URL` (string; required)
 - `GSD_JWT_ISSUER` (string; required)

@@ -1958,7 +1958,7 @@
         {
           "id": "I9.0",
           "title": "Spec pin: default stdio runtime + explicit legacy escape hatch",
-          "status": "todo",
+          "status": "done",
           "risk": "high",
           "risk_notes": "Changing the default runtime is a user-facing behavioral change; must be coordinated with compat job tools and documentation to avoid breaking existing hosts.",
           "deliverables": [

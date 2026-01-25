@@ -52,7 +52,14 @@ FastMCP v2 (Option B) runtime.
   - `GET /api/v1/admin/jobs/{job_id}` (admin-gated; requires `GSD_ADMIN_MODE=1` + `gsd:admin`)
 
 ### Planned (not yet implemented in runtime)
-- Switch the default stdio runtime to `fastmcp` v2 (remove feature flag default-off behavior).
+- Switch the default stdio runtime for `gsd mcp serve` to FastMCP v2 (“Option B”).
+  - Legacy escape hatch (pinned): set `GSD_USE_LEGACY_MCP_RUNTIME=true` to force the legacy SDK
+    runtime (`mcp.server.fastmcp`).
+  - Deprecation (pinned):
+    - `GSD_USE_FASTMCP_V2=true` becomes deprecated (no longer needed to opt in) and will be removed
+      after a transition window.
+    - The legacy stdio runtime is deprecated and will be removed in a future release; non-SEP-1686
+      clients must use the compat job tools surface instead of relying on synchronous tool execution.
 - Default production guidance: decouple execution from the MCP server process by running work in external
   Docket workers by default (server concurrency=0, separate workers>0). (Reference deployments exist under
   `gsd-browser/docker/compose.*.yml`; see “Implemented today”.)
