@@ -1655,7 +1655,7 @@
         {
           "id": "I8.0",
           "title": "Spec pin + contracts: compat job tool payloads, job_id mapping, retention knobs",
-          "status": "todo",
+          "status": "done",
           "risk": "high",
           "risk_notes": "Compat jobs add new public tool contracts and retention semantics; must update canonical spec, MCP_TOOLS, and exported JSON schemas together to avoid drift.",
           "deliverables": [
