@@ -25,6 +25,8 @@ KNOWN_MCP_TOOLS: tuple[str, ...] = (
     "web_task_agent_github",
     "web_task_agent_github_submit",
     "job_get",
+    "job_result",
+    "job_wait",
     "get_run_events",
     "setup_browser_state",
     "get_screenshots",

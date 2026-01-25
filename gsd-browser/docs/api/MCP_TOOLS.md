@@ -140,6 +140,41 @@ Same as `web_eval_agent_submit`, but submits `web_task_agent_github` work.
 Non-enumerability:
 - If the job does not exist or is owned by a different tenant/subject, return `found=false` and `error=null`.
 
+### `job_result` (sync; compat final payload when ready)
+**Input**
+- `job_id` (string, required)
+
+**Output**
+- If the job is terminal (`completed|failed|cancelled`) and visible to the caller:
+  - return the final tool payload (same schema as the corresponding tool; same as `tasks/result`).
+- Otherwise (including `queued|running`):
+  - return a stable “not ready” payload: `gsd.job_result.not_ready.v1`:
+    - `version`: `"gsd.job_result.not_ready.v1"`
+    - `job_id`: UUID string|null (echo of input)
+    - `found`: boolean
+    - `state`: `"queued" | "running" | null`
+    - `progress_message`: string (always present; empty when `found=false`)
+    - `progress`: `{current:int, total:int, percentage:float} | null`
+    - `error`: `{code:"NOT_READY", message:string, details:object|null} | null`
+
+### `job_wait` (sync; wait-but-don’t-cancel convenience)
+**Input**
+- `job_id` (string, required)
+- `max_wait_s` (int, optional, default `300`, max `3600`)
+- `poll_interval_s` (number, optional, default `2.0`, min `0.5`)
+
+**Output**
+- If the job reaches a terminal state within `max_wait_s`:
+  - return the final tool payload (same schema as `job_result` success case).
+- On timeout:
+  - return the stable timeout payload `gsd.job_wait.timeout.v1` (ADR-0011):
+    - `version`: `"gsd.job_wait.timeout.v1"`
+    - `job_id`: UUID string
+    - `state`: `"queued" | "running"`
+    - `progress_message`: string
+    - `progress`: `{current:int, total:int, percentage:float} | null`
+    - `error`: `{code:"TIMEOUT", message:string, details:{max_wait_s:int}}`
+
 ### `get_run_events` (sync)
 **Input**
 - `session_id` (UUID string, required)
@@ -314,23 +349,6 @@ authZ (ADR-0011; canonical invariants: `gsd-browser/docs/api/FAST_MCP_V2_CANONIC
 
 State vocabulary (pinned): `queued|running|completed|failed|cancelled`.
 
-#### `job_result` (sync; final payload when ready)
-Input:
-- `job_id` (string, required)
-
-Output:
-- If the job is terminal (`completed|failed|cancelled`) and visible to the caller:
-  - return the final tool payload (same schema as the corresponding tool; same as `tasks/result`).
-- Otherwise (including `queued|running`):
-  - return a stable “not ready” payload: `gsd.job_result.not_ready.v1`:
-    - `version`: `"gsd.job_result.not_ready.v1"`
-    - `job_id`: UUID string|null (echo of input)
-    - `found`: boolean
-    - `state`: `"queued" | "running" | null`
-    - `progress_message`: string (always present; empty when `found=false`)
-    - `progress`: `{current:int, total:int, percentage:float} | null`
-    - `error`: `{code:"NOT_READY", message:string, details:object|null} | null`
-
 #### `job_cancel` (sync)
 Input:
 - `job_id` (string, required)
@@ -344,21 +362,3 @@ Output: JSON payload schema `gsd.job_cancel.v1` (in a single `TextContent`):
 
 Non-enumerability:
 - If the job does not exist or is owned by a different tenant/subject, return `found=false` and `error=null`.
-
-#### `job_wait` (sync; wait-but-don’t-cancel convenience)
-Input:
-- `job_id` (string, required)
-- `max_wait_s` (int, optional, default `300`, max `3600`)
-- `poll_interval_s` (number, optional, default `2.0`, min `0.5`)
-
-Output:
-- If the job reaches a terminal state within `max_wait_s`:
-  - return the final tool payload (same schema as `job_result` success case).
-- On timeout:
-  - return the stable timeout payload `gsd.job_wait.timeout.v1` (ADR-0011):
-    - `version`: `"gsd.job_wait.timeout.v1"`
-    - `job_id`: UUID string
-    - `state`: `"queued" | "running"`
-    - `progress_message`: string
-    - `progress`: `{current:int, total:int, percentage:float} | null`
-    - `error`: `{code:"TIMEOUT", message:string, details:{max_wait_s:int}}`

@@ -434,6 +434,41 @@ async def job_get(
     return _json_text(payload.model_dump(mode="json"))
 
 
+@mcp.tool(name="job_result")
+async def job_result(
+    job_id: str,
+    ctx: Context | None = None,
+) -> list[TextContent]:
+    from .optionb.compat_jobs import job_result as compat_job_result
+
+    with _docket_scope(ctx):
+        payload = await _call_with_identity(compat_job_result, job_id=job_id)
+    if hasattr(payload, "model_dump"):
+        return _json_text(payload.model_dump(mode="json"))
+    return _json_text(payload)
+
+
+@mcp.tool(name="job_wait")
+async def job_wait(
+    job_id: str,
+    max_wait_s: int = 300,
+    poll_interval_s: float = 2.0,
+    ctx: Context | None = None,
+) -> list[TextContent]:
+    from .optionb.compat_jobs import job_wait as compat_job_wait
+
+    with _docket_scope(ctx):
+        payload = await _call_with_identity(
+            compat_job_wait,
+            job_id=job_id,
+            max_wait_s=max_wait_s,
+            poll_interval_s=poll_interval_s,
+        )
+    if hasattr(payload, "model_dump"):
+        return _json_text(payload.model_dump(mode="json"))
+    return _json_text(payload)
+
+
 @mcp.tool(name="get_run_events")
 async def get_run_events(
     session_id: str = "",
