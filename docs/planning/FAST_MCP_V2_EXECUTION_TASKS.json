@@ -1093,7 +1093,7 @@
         {
           "id": "I5.2",
           "title": "Expose RFC 9728 Protected Resource Metadata endpoints on 8080",
-          "status": "todo",
+          "status": "done",
           "risk": "high",
           "deliverables": [
             "gsd-browser/src/gsd_browser/fastmcp_v2_http.py (update; mount /.well-known routes)",
