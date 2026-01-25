@@ -20,6 +20,10 @@ FastMCP v2 (Option B) runtime.
   - progress notifications are emitted during agent work
 - Distributed artifact storage is implemented (S3-compatible object store + Redis index) and is used when
   the required S3 env vars are configured.
+- A management/admin REST API (port 8081) is implemented (ADR-0018):
+  - `/healthz`
+  - `GET /api/v1/tasks` (identity-scoped)
+  - `GET /api/v1/admin/tasks` (admin-gated; requires `GSD_ADMIN_MODE=1` + `gsd:admin`)
 
 ### Implemented but not deployed
 - **Artifact cleanup/retention enforcement**: `CleanupRunner` exists in `optionb/artifact_index.py` and is
@@ -39,8 +43,8 @@ FastMCP v2 (Option B) runtime.
 - MCP-compliant HTTP OAuth discovery/challenge surfaces (RFC 9728 `resource_metadata`, `WWW-Authenticate`
   semantics, step-up scopes, resource indicators / audience binding). (ADR-0013 Accepted; not implemented yet;
   spec: `gsd-browser/docs/api/FAST_MCP_V2_CANONICAL_SPEC.md` §9.)
-- Add the management/admin REST API (port 8081) for identity-scoped task/job enumeration and inspection
-  (ADR-0018 Accepted), and wire CLI surfaces (e.g., `gsd tasks list`) to it.
+- Expand the management/admin REST API (port 8081) with job inspection endpoints and wire CLI surfaces
+  (e.g., `gsd tasks list`) to it.
   - Optionally also expose MCP tool wrappers for enumeration/inspection (proxying the same underlying
     identity-scoped logic), for clients that want a synchronous “list” workflow without using 8081.
 
