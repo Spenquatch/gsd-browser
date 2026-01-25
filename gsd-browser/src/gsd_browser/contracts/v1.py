@@ -174,6 +174,81 @@ class OpsErrorPayloadV1(ContractModel):
     details: dict[str, Any] | None = None
 
 
+class JobProgressV1(ContractModel):
+    current: int = Field(ge=0)
+    total: int = Field(ge=0)
+    percentage: float = Field(ge=0.0, le=100.0)
+
+
+class JobSubmitPayloadV1(ContractModel):
+    version: Literal["gsd.job_submit.v1"]
+    job_id: UUID | None
+    tool_name: str | None = Field(default=None, max_length=200)
+    state: Literal["queued"] | None = None
+    session_id: UUID | None = None
+    created_at: float | None = None
+    expires_at: float | None = None
+    error: OpsErrorPayloadV1 | None = None
+
+
+class JobGetPayloadV1(ContractModel):
+    version: Literal["gsd.job_get.v1"]
+    job_id: UUID | None
+    found: bool
+    tool_name: str | None = Field(default=None, max_length=200)
+    state: Literal["queued", "running", "completed", "failed", "cancelled"] | None = None
+    progress_message: str = Field(default="", max_length=2000)
+    progress: JobProgressV1 | None = None
+    session_id: UUID | None = None
+    created_at: float | None = None
+    started_at: float | None = None
+    updated_at: float | None = None
+    finished_at: float | None = None
+    expires_at: float | None = None
+    error: OpsErrorPayloadV1 | None = None
+
+
+class JobResultNotReadyErrorV1(OpsErrorPayloadV1):
+    code: Literal["NOT_READY"]
+
+
+class JobResultNotReadyPayloadV1(ContractModel):
+    version: Literal["gsd.job_result.not_ready.v1"]
+    job_id: UUID | None
+    found: bool
+    state: Literal["queued", "running"] | None = None
+    progress_message: str = Field(default="", max_length=2000)
+    progress: JobProgressV1 | None = None
+    error: JobResultNotReadyErrorV1 | None = None
+
+
+class JobCancelPayloadV1(ContractModel):
+    version: Literal["gsd.job_cancel.v1"]
+    job_id: UUID | None
+    found: bool
+    state: Literal["queued", "running", "completed", "failed", "cancelled"] | None = None
+    error: OpsErrorPayloadV1 | None = None
+
+
+class JobWaitTimeoutErrorDetailsV1(ContractModel):
+    max_wait_s: int = Field(ge=0)
+
+
+class JobWaitTimeoutErrorV1(ContractModel):
+    code: Literal["TIMEOUT"]
+    message: str = Field(min_length=1, max_length=500)
+    details: JobWaitTimeoutErrorDetailsV1
+
+
+class JobWaitTimeoutPayloadV1(ContractModel):
+    version: Literal["gsd.job_wait.timeout.v1"]
+    job_id: UUID
+    state: Literal["queued", "running"]
+    progress_message: str = Field(min_length=1, max_length=2000)
+    progress: JobProgressV1 | None = None
+    error: JobWaitTimeoutErrorV1
+
+
 class TasksListItemV1(ContractModel):
     task_id: UUID
     tool_name: str = Field(min_length=1, max_length=200)

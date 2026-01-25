@@ -1,0 +1,101 @@
+{
+  "$defs": {
+    "OpsErrorPayloadV1": {
+      "additionalProperties": true,
+      "properties": {
+        "code": {
+          "maxLength": 120,
+          "minLength": 1,
+          "title": "Code",
+          "type": "string"
+        },
+        "details": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Details"
+        },
+        "message": {
+          "maxLength": 500,
+          "minLength": 1,
+          "title": "Message",
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "message"
+      ],
+      "title": "OpsErrorPayloadV1",
+      "type": "object"
+    }
+  },
+  "additionalProperties": true,
+  "properties": {
+    "error": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/OpsErrorPayloadV1"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "found": {
+      "title": "Found",
+      "type": "boolean"
+    },
+    "job_id": {
+      "anyOf": [
+        {
+          "format": "uuid",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Job Id"
+    },
+    "state": {
+      "anyOf": [
+        {
+          "enum": [
+            "queued",
+            "running",
+            "completed",
+            "failed",
+            "cancelled"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "State"
+    },
+    "version": {
+      "const": "gsd.job_cancel.v1",
+      "title": "Version",
+      "type": "string"
+    }
+  },
+  "required": [
+    "version",
+    "job_id",
+    "found"
+  ],
+  "title": "JobCancelPayloadV1",
+  "type": "object"
+}

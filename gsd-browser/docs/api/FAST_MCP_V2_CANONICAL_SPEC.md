@@ -218,6 +218,72 @@ Cancellation is cooperative and MUST be enforced by the tool implementation:
 - The running tool MUST check for cancellation between agent steps and must stop work when cancelled.
 - The tool MUST release resources in `finally` blocks (close pages/contexts; stop streaming).
 
+### 3.6 Compat jobs (non-SEP-1686 clients; pinned contract)
+Some MCP hosts do not implement SEP-1686 tasks. For those hosts, Option B exposes a **compat jobs**
+tool surface (ADR-0011) that provides durable “submit + check later” semantics without requiring
+task support in the client.
+
+Job identifiers (pinned):
+- `job_id` MUST be a UUIDv4 string.
+- `job_id` MUST be opaque and MUST NOT embed tenant/subject identity.
+- `job_id` is NOT an authorization boundary.
+
+Authorization (pinned):
+- For `job_get`, `job_result`, `job_cancel`, `job_wait`, the server MUST load the JobRecord (below)
+  and enforce `(tenant_id, subject_id)` match.
+- If no JobRecord exists OR the caller is not authorized, return non-enumerable “not found” semantics.
+
+#### 3.6.1 Job mapping record (Redis; required)
+In addition to Docket’s internal task storage, `gsd` MUST persist a durable job mapping record for
+each compat job.
+
+Redis key format (string keys, no spaces):
+- `gsd:v1:jobs:{job_id}:record`
+
+Value format:
+- UTF-8 JSON object (JobRecord), stored as a single JSON string value.
+
+JobRecord schema:
+```json
+{
+  "version": "gsd.job_record.v1",
+  "job_id": "<uuid>",
+  "task_id": "<uuid>",
+  "tenant_id": "<tenant_id>",
+  "subject_id": "<subject_id>",
+  "transport": "stdio|http",
+  "tool_name": "web_eval_agent|web_task_agent|web_task_agent_github",
+  "created_at_ms": 1730000000000,
+  "expires_at_ms": 1730086400000,
+  "session_id": "<uuid>"
+}
+```
+
+Notes:
+- `task_id` is the underlying backend execution identifier (Docket task key) used to look up status
+  and results.
+- `session_id` MUST be pre-allocated and persisted at submit time for reliable “check while running”
+  access to `get_run_events` / `get_screenshots` (ADR-0011).
+
+TTL behavior (pinned):
+- The Redis key TTL MUST be set to expire at `expires_at_ms`.
+- On completion, the TTL remains unchanged (job lookup remains valid until expiry).
+
+#### 3.6.2 Retention/expiry (pinned)
+Compat job retention is controlled by the same retention window used for artifacts today:
+- Select retention seconds from `GSD_RETENTION_SECONDS_DEV` / `GSD_RETENTION_SECONDS_PROD` based on
+  `GSD_DEPLOYMENT_ENV` (§8.1, §8.7).
+- Set `expires_at_ms = created_at_ms + retention_seconds*1000` at submit time.
+
+After expiry:
+- Treat the job as “not found” (non-enumerable).
+
+#### 3.6.3 `job_wait` bounds (pinned)
+Parameter bounds (ADR-0011):
+- `max_wait_s` default 300, maximum 3600 (server MUST reject larger values)
+- `poll_interval_s` default 2.0, minimum 0.5 (server MUST reject smaller values)
+- On timeout, `job_wait` MUST return a versioned timeout payload: `version="gsd.job_wait.timeout.v1"`
+
 ## 4) Artifact storage + index
 
 ### 4.1 Artifact kinds

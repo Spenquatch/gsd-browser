@@ -18,6 +18,11 @@ def main() -> int:
     from gsd_browser.contracts.v1 import (
         GetRunEventsPayloadV1,
         GetScreenshotsPayloadV1,
+        JobCancelPayloadV1,
+        JobGetPayloadV1,
+        JobResultNotReadyPayloadV1,
+        JobSubmitPayloadV1,
+        JobWaitTimeoutPayloadV1,
         SetupBrowserStatePayloadV1,
         TasksAdminListPayloadV1,
         TasksListPayloadV1,
@@ -37,6 +42,11 @@ def main() -> int:
         "gsd.setup_browser_state.v1.schema.json": SetupBrowserStatePayloadV1.model_json_schema(),
         "gsd.tasks_list.v1.schema.json": TasksListPayloadV1.model_json_schema(),
         "gsd.tasks_admin_list.v1.schema.json": TasksAdminListPayloadV1.model_json_schema(),
+        "gsd.job_submit.v1.schema.json": JobSubmitPayloadV1.model_json_schema(),
+        "gsd.job_get.v1.schema.json": JobGetPayloadV1.model_json_schema(),
+        "gsd.job_result.not_ready.v1.schema.json": JobResultNotReadyPayloadV1.model_json_schema(),
+        "gsd.job_cancel.v1.schema.json": JobCancelPayloadV1.model_json_schema(),
+        "gsd.job_wait.timeout.v1.schema.json": JobWaitTimeoutPayloadV1.model_json_schema(),
     }
 
     for name, schema in schemas.items():
