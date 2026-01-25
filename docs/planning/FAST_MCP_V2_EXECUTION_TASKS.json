@@ -1437,7 +1437,7 @@
         {
           "id": "I6.3b",
           "title": "8081 tasks endpoints: GET /api/v1/tasks and GET /api/v1/admin/tasks",
-          "status": "todo",
+          "status": "done",
           "risk": "high",
           "deliverables": [
             "gsd-browser/src/gsd_browser/management_api/app.py (update; add tasks endpoints)",
