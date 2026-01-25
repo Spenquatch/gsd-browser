@@ -1177,12 +1177,12 @@
           ]
         },
         {
-          "id": "I5.3b",
-          "title": "Add wrong-audience explicit 403 (preserve JWT verification error cause)",
-          "status": "todo",
-          "risk": "high",
-          "risk_notes": "To return a reliable 403 for wrong audience, JWT verification must preserve/return the failure cause instead of collapsing all failures into None; this may require refactoring identity/auth integration with FastMCP.",
-          "deliverables": [
+	          "id": "I5.3b",
+	          "title": "Add wrong-audience explicit 403 (preserve JWT verification error cause)",
+	          "status": "done",
+	          "risk": "high",
+	          "risk_notes": "To return a reliable 403 for wrong audience, JWT verification must preserve/return the failure cause instead of collapsing all failures into None; this may require refactoring identity/auth integration with FastMCP.",
+	          "deliverables": [
             "gsd-browser/src/gsd_browser/optionb/identity.py (update; preserve audience-mismatch cause)",
             "gsd-browser/src/gsd_browser/optionb/http_auth.py (update; map wrong-audience → 403)",
             "gsd-browser/tests/test_http_auth_challenges.py (update; add wrong-audience case)"
