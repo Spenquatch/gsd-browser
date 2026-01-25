@@ -1607,7 +1607,7 @@
         {
           "id": "I7.1",
           "title": "Wire worker-led cleanup scheduling (CleanupRunner loop + leader election)",
-          "status": "todo",
+          "status": "done",
           "risk": "high",
           "deliverables": [
             "gsd-browser/src/gsd_browser/optionb/maintenance.py (new)",

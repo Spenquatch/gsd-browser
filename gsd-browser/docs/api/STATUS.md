@@ -36,19 +36,12 @@ FastMCP v2 (Option B) runtime.
   - progress notifications are emitted during agent work
 - Distributed artifact storage is implemented (S3-compatible object store + Redis index) and is used when
   the required S3 env vars are configured.
+- Worker-led artifact cleanup/retention enforcement is scheduled in `gsd worker` using the distributed lock
+  defined in the canonical spec (§4.3) and the `GSD_CLEANUP_INTERVAL_S` interval (ADR-0015).
 - A management/admin REST API (port 8081) is implemented (ADR-0018):
   - `/healthz`
   - `GET /api/v1/tasks` (identity-scoped)
   - `GET /api/v1/admin/tasks` (admin-gated; requires `GSD_ADMIN_MODE=1` + `gsd:admin`)
-
-### Implemented but not deployed
-- **Artifact cleanup/retention enforcement**: `CleanupRunner` exists in `optionb/artifact_index.py` and is
-  fully tested, but **no process currently schedules it**. S3 objects and Redis index entries will
-  accumulate until a maintenance entrypoint is deployed. The canonical spec (§4.3 "Cleanup rules") documents
-  this as "required", but worker-led maintenance is not wired/deployed yet (ADR-0015 Accepted).
-  - Operators requiring cleanup today must invoke `CleanupRunner.run_once()` manually or via external
-    scheduling (cron, k8s CronJob, etc.).
-  - See ADR-0015 (operational topology) and ADR-0017 (retention policy) for the accepted defaults.
 
 ### Planned (not yet implemented in runtime)
 - Switch the default stdio runtime to `fastmcp` v2 (remove feature flag default-off behavior).

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import subprocess
 import sys
@@ -25,6 +26,7 @@ from .mcp_tool_policy import (
 from .user_config import default_env_path, ensure_env_file, update_env_file
 
 console = Console()
+logger = logging.getLogger("gsd_browser.cli")
 app = typer.Typer(help="GSD MCP server CLI", invoke_without_command=True)
 mcp_tools_app = typer.Typer(help="Manage MCP tool exposure (enable/disable tools)")
 app.add_typer(mcp_tools_app, name="mcp-tools")
@@ -185,6 +187,7 @@ def worker(
 ) -> None:
     """Start a FastMCP/Docket worker process (Option B runtime)."""
     import asyncio
+    import contextlib
 
     overrides: dict[str, str] = {}
     if llm_provider is not None:
@@ -235,14 +238,44 @@ def worker(
 
     async def run_worker_forever() -> None:
         async with mcp._lifespan_manager():
+            from .optionb.artifact_index import ArtifactIndexStore, CleanupRunner
+            from .optionb.maintenance import run_cleanup_maintenance_loop
+            from .optionb.s3_client import get_s3_client, has_complete_s3_config
+
+            docket = mcp.docket
+
+            def delete_s3(bucket: str, key: str) -> None:
+                if not has_complete_s3_config():
+                    raise RuntimeError("S3 config is required for artifact cleanup")
+                s3 = get_s3_client()
+                if str(bucket).strip() and str(bucket).strip() != s3.bucket:
+                    logger.warning(
+                        "maintenance.cleanup.s3_bucket_mismatch",
+                        extra={"record_bucket": bucket, "configured_bucket": s3.bucket},
+                    )
+                s3.delete(key=str(key))
+
+            cleanup_runner = CleanupRunner(
+                index=ArtifactIndexStore(docket_getter=lambda: docket),
+                delete_s3=delete_s3,
+            )
+            maintenance_task = asyncio.create_task(
+                run_cleanup_maintenance_loop(cleanup_runner),
+                name="gsd_optionb_cleanup_maintenance",
+            )
             console.print(
                 f"[bold green]✓[/bold green] Starting worker for [cyan]{mcp.name}[/cyan]"
             )
             console.print(f"  Docket: {fastmcp.settings.docket.name}")
             console.print(f"  Backend: {fastmcp.settings.docket.url}")
             console.print(f"  Concurrency: {fastmcp.settings.docket.concurrency}")
-            while True:
-                await asyncio.sleep(3600)
+            try:
+                while True:
+                    await asyncio.sleep(3600)
+            finally:
+                maintenance_task.cancel()
+                with contextlib.suppress(asyncio.CancelledError):
+                    await maintenance_task
 
     try:
         asyncio.run(run_worker_forever())

@@ -107,10 +107,10 @@ docker-run:
 	docker run --rm -e ANTHROPIC_API_KEY=$${ANTHROPIC_API_KEY} gsd:dev
 
 redistest-up:
-	docker compose -f docker/compose.redistest.yml up -d
+	./scripts/redistest_harness.sh up
 
 redistest-down:
-	docker compose -f docker/compose.redistest.yml down -v
+	./scripts/redistest_harness.sh down
 
 redistest-logs:
-	docker compose -f docker/compose.redistest.yml logs -f --tail=200
+	./scripts/redistest_harness.sh logs
