@@ -278,7 +278,9 @@ that records the decision).
 
 **Decision (2026-01-24)**
 - Choose **Option A**.
-- 8081 API keys are enabled only when `GSD_API_KEYS_FILE` is set.
+- API keys are a first-class supported mechanism for direct API automation on 8081.
+- In the v1 reference implementation, 8081 API keys are configured via `GSD_API_KEYS_FILE` (no
+  implicit defaults).
 - The key registry format is pinned (JSON array of entries mapping to identity + scopes), and
   production deployments should prefer `key_sha256` entries.
 
@@ -356,3 +358,21 @@ that records the decision).
 - Choose **Option A**.
 - Implement listing/inspection logic once as a shared internal service layer; both 8081 REST endpoints
   and MCP wrapper tools call into it. MCP wrappers must not depend on loopback HTTP calls.
+
+---
+
+## DR-AUTH-01: End-user remote auth productization (token acquisition, client config, stdio shim)
+
+**Status:** Resolved (2026-01-25)
+
+**Decision**
+We standardize the productization direction as:
+- Primary path: direct remote MCP-over-HTTP with `Authorization: Bearer <token>`.
+- Provide explicit onboarding guidance and config snippet generation for major MCP clients.
+- Implement a stdio→remote-HTTP proxy shim for stdio-only/legacy clients, but defer it until after
+  the mainline remote-HTTP auth + onboarding work is complete.
+
+This decision is recorded in:
+- `docs/adr/ADR-0019-remote-auth-token-acquisition-and-login-ux.md`
+- `docs/adr/ADR-0020-remote-mcp-client-configuration-and-token-delivery.md`
+- `docs/adr/ADR-0021-stdio-remote-proxy-shim-for-legacy-clients.md`

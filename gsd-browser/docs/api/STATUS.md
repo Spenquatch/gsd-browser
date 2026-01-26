@@ -27,6 +27,9 @@ FastMCP v2 (Option B) runtime.
     - `docker compose -f gsd-browser/docker/compose.production.yml down -v`
   - Note: these reference compose files include placeholder JWT settings; for real HTTP usage you must set
     `GSD_JWT_JWKS_URL`, `GSD_JWT_ISSUER`, and `GSD_JWT_AUDIENCE` (see `gsd-browser/docs/api/FAST_MCP_V2_CANONICAL_SPEC.md` §8.3).
+  - Note: the reference compose files also include a management API service (`gsd-mgmt`, port 8081).
+    API key auth for 8081 is configured via `GSD_API_KEYS_FILE` and the example registry file
+    `gsd-browser/docker/api_keys.example.json` (see `gsd-browser/docs/api/HTTP_API.md`).
 - Tool responses follow the JSON payload schemas documented in `gsd-browser/docs/api/MCP_TOOLS.md`.
 - SEP-1686 long-running tasks are implemented for long tools in the FastMCP v2 runtime:
   - long tools are task-required in v2

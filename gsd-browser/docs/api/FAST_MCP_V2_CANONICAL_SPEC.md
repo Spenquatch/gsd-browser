@@ -634,8 +634,10 @@ SeaweedFS (via its S3 gateway). See `docs/adr/ADR-0009-distributed-artifact-stor
 - `GSD_CLEANUP_INTERVAL_S` (int; default: `300`)
 
 ### 8.8 8081 management API: API keys + admin gating
-- `GSD_API_KEYS_FILE` (string|null): when set, 8081 MAY accept `X-API-Key` and map keys to
-  `{tenant_id, subject_id, scopes[]}` as documented in `gsd-browser/docs/api/HTTP_API.md`.
+- API keys are a **first-class** supported mechanism for direct API usage/automation on 8081.
+- `GSD_API_KEYS_FILE` (string|null): v1 reference mechanism to configure API keys.
+  - When set, 8081 MUST accept `X-API-Key` and map keys to `{tenant_id, subject_id, scopes[]}` as
+    documented in `gsd-browser/docs/api/HTTP_API.md`.
 - `GSD_ADMIN_MODE` (bool; default: `false`): server enablement switch for admin enumeration surfaces
   (8081 `/api/v1/admin/*` and MCP wrapper tools that are admin-only).
 

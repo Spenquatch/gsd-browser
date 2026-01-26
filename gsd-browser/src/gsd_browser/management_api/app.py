@@ -109,7 +109,7 @@ def _optional_jwt_verifier() -> GsdJwtVerifier | None:
 
 
 class ManagementAuthMiddleware:
-    """Auth middleware for the 8081 management REST API (JWT and optional X-API-Key)."""
+    """Auth middleware for the 8081 management REST API (JWT and X-API-Key)."""
 
     def __init__(
         self,

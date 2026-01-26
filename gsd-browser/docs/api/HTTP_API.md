@@ -16,6 +16,48 @@ The Option B runtime uses three distinct HTTP surfaces:
 - **8080**: MCP over HTTP transport (Streamable HTTP MCP; tool invocation; not REST)
 - **8081**: management/admin REST API (this document)
 
+## Direct API usage (without MCP)
+This document describes the **8081 REST API**, which is usable directly from any HTTP client (curl,
+SDKs, CI jobs) without involving MCP protocol/clients.
+
+Notes:
+- The endpoints in this document are **inspection/enumeration** surfaces. They do not replace the
+  MCP tool surface (8080) for browser automation.
+- This document assumes **root hosting** (paths like `/api/v1/...`). If you host behind a reverse
+  proxy under a base path, prepend that base path to the routes.
+
+### Quickstart (curl)
+Set your base URL and credentials:
+```bash
+export GSD_BASE_URL="http://localhost:8081"
+export GSD_TOKEN="..."   # Bearer JWT or developer token (see ADR-0019)
+```
+
+Health check:
+```bash
+curl -sS "${GSD_BASE_URL}/healthz"
+```
+
+List your tasks:
+```bash
+curl -sS -H "Authorization: Bearer ${GSD_TOKEN}" \\
+  "${GSD_BASE_URL}/api/v1/tasks?limit=50"
+```
+
+Inspect a job (by known `job_id`):
+```bash
+export JOB_ID="..."
+curl -sS -H "Authorization: Bearer ${GSD_TOKEN}" \\
+  "${GSD_BASE_URL}/api/v1/jobs/${JOB_ID}"
+```
+
+API key auth (first-class; recommended for automations):
+```bash
+export GSD_API_KEY="..."
+curl -sS -H "X-API-Key: ${GSD_API_KEY}" \\
+  "${GSD_BASE_URL}/api/v1/tasks?limit=50"
+```
+
 ## Audience
 This REST API is intended for:
 - the CLI (`gsd tasks list`, `gsd jobs get`, etc.)
@@ -44,7 +86,7 @@ See:
 ### Authentication mechanisms
 Supported mechanisms (v1):
 - `Authorization: Bearer <jwt>` (primary; multi-tenant)
-- `X-API-Key: <key>` (optional; ops automation; maps to an identity and scopes)
+- `X-API-Key: <key>` (first-class; recommended for non-MCP automation; maps to an identity and scopes)
 
 ### Scope extraction (pinned)
 Scope extraction is pinned as:
@@ -65,7 +107,11 @@ HTTP identity is derived from JWT claims using the canonical mapping in
 - `subject_id` claim name: `GSD_JWT_SUBJECT_ID_CLAIM` (default `sub`)
 
 ### API keys (pinned)
-API keys are enabled only when `GSD_API_KEYS_FILE` is set.
+API keys are a first-class supported mechanism for direct API usage and automation.
+
+In this repo (v1 reference implementation), API keys are configured via `GSD_API_KEYS_FILE`.
+Deployments that want to support API-key-based automation MUST provide an API key registry source;
+`GSD_API_KEYS_FILE` is the supported v1 mechanism.
 
 Request header:
 - `X-API-Key: <key>`
@@ -93,6 +139,9 @@ Example:
   }
 ]
 ```
+
+Example file location (reference deployments):
+- `gsd-browser/docker/api_keys.example.json` (valid empty registry: `[]`)
 
 ## Pagination + sorting (pinned)
 Ordering is fixed in v1:

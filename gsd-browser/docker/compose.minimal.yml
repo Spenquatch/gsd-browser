@@ -84,6 +84,47 @@ services:
       retries: 20
     restart: unless-stopped
 
+  gsd-mgmt:
+    image: gsd-browser:local
+    depends_on:
+      valkey:
+        condition: service_healthy
+    environment:
+      - GSD_DEPLOYMENT_ENV=${GSD_DEPLOYMENT_ENV:-dev}
+      - FASTMCP_DOCKET_URL=redis://valkey:6379/0
+      - FASTMCP_DOCKET_NAME=${FASTMCP_DOCKET_NAME:-gsd}
+
+      # Auth (same identity rules as 8080; HTTP_API.md).
+      - GSD_JWT_JWKS_URL=${GSD_JWT_JWKS_URL:-http://localhost:8000/.well-known/jwks.json}
+      - GSD_JWT_ISSUER=${GSD_JWT_ISSUER:-https://issuer.example}
+      - GSD_JWT_AUDIENCE=${GSD_JWT_AUDIENCE:-gsd}
+      - GSD_JWT_TENANT_ID_CLAIM=${GSD_JWT_TENANT_ID_CLAIM:-tenant_id}
+      - GSD_JWT_SUBJECT_ID_CLAIM=${GSD_JWT_SUBJECT_ID_CLAIM:-sub}
+
+      # API keys (first-class automation mechanism for 8081; HTTP_API.md).
+      - GSD_API_KEYS_FILE=/etc/gsd/api_keys.json
+    volumes:
+      - ./api_keys.example.json:/etc/gsd/api_keys.json:ro
+    ports:
+      - "8081:8081"
+    entrypoint: ["uvicorn"]
+    command:
+      [
+        "gsd_browser.management_api.app:app",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "8081",
+        "--log-level",
+        "info"
+      ]
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8081/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+
   gsd-worker:
     image: gsd-browser:local
     depends_on:
