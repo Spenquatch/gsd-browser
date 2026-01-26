@@ -120,7 +120,8 @@ collection and retrieval must be designed for distributed execution now.
   - `url_expires_at` (epoch seconds)
   - `content_type` and `size_bytes` when known
 
-## Open Questions
+## Resolved Questions
+
 Resolved (concrete decisions):
 - Artifact delivery (phased):
   - Phase 1 default: inline artifact delivery via MCP payloads for compatibility.
@@ -148,7 +149,8 @@ Resolved (concrete decisions):
   6) Policy: deny cross-tenant access via bucket/IAM policy
   7) Concurrency: parallel reads/writes (multi-worker simulation)
 
-Remaining open questions: none (for this ADR).
+## Open Questions
+None (artifact storage decisions pinned).
 
 ## References
 - ADR-0003: CDP-first browser-use integration (artifact expectations)

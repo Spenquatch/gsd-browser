@@ -1,7 +1,7 @@
 # ADR-0007: CLI contract cleanup + rename `gsd-browser` to `gsd`
 
 ## Status
-Accepted
+Deprecated
 
 ## Context
 The current CLI surface of `gsd-browser` has grown organically. It mixes:
@@ -136,10 +136,11 @@ Minimum required help entry points:
 - Ensure help pages include examples and call out restart requirement for tool exposure changes.
 
 ## Open Questions
-- Should `gsd config set` be renamed to `gsd config configure` for familiarity, or is `set` preferred?
-- Do we want `gsd mcp tools allow|deny` as the canonical verbs, or keep `set-enabled|set-disabled`?
-- Should we adopt a “preset toolset” layer (e.g. `gsd mcp tools preset safe`)?
-- Should `gsd dev …` be hidden from default docs, or still listed in `gsd --help`?
+None (ADR deprecated; the CLI has shipped and is the source of truth).
+
+## Notes
+This ADR is kept for historical context only. The canonical CLI entrypoint is:
+- `gsd-browser/src/gsd_browser/gsd_cli.py`
 
 ## References
 - Current CLI: `gsd-browser/src/gsd_browser/cli.py`

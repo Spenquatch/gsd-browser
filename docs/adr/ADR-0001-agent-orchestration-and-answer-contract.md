@@ -1,7 +1,7 @@
 # ADR-0001: Agent orchestration and “return answer” contract
 
 ## Status
-Proposed
+Deprecated
 
 ## Context
 We want any MCP-capable LLM client (Codex, Claude Code, etc.) to be able to delegate tasks to `gsd-browser` and receive back a useful, human-readable answer.
@@ -85,9 +85,7 @@ Testing requirements (conceptual):
 - Regression tests to ensure `web_eval_agent` does not include image payloads in the default response.
 
 ## Open Questions
-1. Do we want to support an explicit structured output mode (Pydantic schema) for extraction tasks?
-2. Should the tool expose multiple response modes (`compact` vs `dev`) as an argument, or as a config default?
-3. Should the tool return “answer only” for certain task types, or always return a structured report object (with `result` + `summary`)?
+None (ADR deprecated; the tool contract is pinned elsewhere).
 
 ## References
 - Upstream architecture (sunset; GitHub): `Operative-Sh/web-eval-agent`
@@ -96,3 +94,8 @@ Testing requirements (conceptual):
 - Current stub: `gsd-browser/src/gsd_browser/mcp_server.py`
 - Current artifact channel: `gsd-browser/src/gsd_browser/screenshot_manager.py`, `gsd-browser/src/gsd_browser/streaming/*`
 - browser-use API references: `browser-use/browser-use` (DeepWiki: AgentHistoryList in `browser_use/agent/views.py`; callbacks in `browser_use/agent/service.py`)
+
+## Notes
+This ADR is kept for historical context only. The current canonical contracts are:
+- `gsd-browser/docs/api/MCP_TOOLS.md` (tool I/O schemas)
+- `gsd-browser/docs/api/FAST_MCP_V2_CANONICAL_SPEC.md` (tasks/artifacts/authZ/progress/codes/config)

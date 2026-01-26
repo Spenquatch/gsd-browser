@@ -1,7 +1,7 @@
 # ADR-0004: Real-world sanity harness + quality gates (reports + screenshots)
 
 ## Status
-Proposed
+Deprecated
 
 ## Context
 Unit tests can validate contracts (JSON shape, bounds, gating rules), but they cannot ensure the tool “feels like a browser agent” in real usage.
@@ -105,9 +105,11 @@ Continue to enforce deterministic CI gates with:
 The harness should be used to drive iteration, not to block CI by default.
 
 ## Open Questions
-1. Do we want a small set of “blessed” scenarios that must be run before merging into `main`?
-2. Should we add provider-specific scenario sets (e.g., one tuned for `chatbrowseruse`)?
-3. Where should artifacts be stored by default (repo-local `artifacts/` vs `~/.config/gsd-browser/`), and should we auto-prune?
+None (ADR deprecated; the harness is implemented and maintained outside this ADR).
+
+## Notes
+This ADR is kept for historical context only. The current real-world sanity harness lives in:
+- `gsd-browser/src/gsd_browser/real_world_sanity.py`
 
 ## References
 - `docs/adr/ADR-0001-agent-orchestration-and-answer-contract.md`

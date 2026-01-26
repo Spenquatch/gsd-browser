@@ -97,7 +97,8 @@ Each task record must include (at minimum):
 - On authorization failure, prefer non-enumerable behavior (treat as “not found”) unless a
   deployment explicitly opts into a `403` policy for observability.
 
-## Open Questions
+## Resolved Questions
+
 Resolved (concrete decisions):
 - Tool modes:
   - `web_eval_agent`, `web_task_agent`, `web_task_agent_github`: `taskSupport="required"` (always run as tasks).
@@ -110,7 +111,8 @@ Resolved (concrete decisions):
   - Task status/result access is authorized by authenticated identity/tenant (not by session only).
   - Session scoping may remain an additional guard, but is not the primary authorization boundary.
 
-Remaining open questions: none (for this ADR).
+## Open Questions
+None (task model decisions pinned).
 
 ## References
 - MCP long-running tasks protocol (SEP-1686): `tasks/get`, `tasks/result`, `tasks/cancel`

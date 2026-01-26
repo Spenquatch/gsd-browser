@@ -1,7 +1,7 @@
 # ADR-0002: Operator dashboard streaming + true “take control”
 
 ## Status
-Proposed
+Accepted
 
 ## Context
 `gsd-browser` includes a dashboard with streaming (`/stream`) and control state (`/ctrl`) plus optional auth/rate limiting:
@@ -40,28 +40,55 @@ Tradeoffs / risks:
 - Must avoid introducing stdout noise that breaks MCP.
 
 ## Implementation Notes (non-code)
-Proposed architecture:
-- Maintain an “active run registry” keyed by `session_id`:
-  - current Playwright `Page` (or CDP session handle)
-  - streaming mode, timestamps, and whether an agent run is in-flight
-  - pause gate handle
-- Add new `/ctrl` socket events (names TBD):
-  - `input/click`, `input/move`, `input/wheel`, `input/keydown`, `input/keyup`, `input/type`
-- Implement routing:
-  - Prefer CDP (`Input.dispatchMouseEvent`, `Input.dispatchKeyEvent`) when CDP session exists.
-  - Fallback to Playwright (`page.mouse`, `page.keyboard`) if CDP is unavailable.
-- Pause integration:
-  - The agent orchestration loop checks `wait_until_unpaused()` between steps.
-  - When control is taken, it can optionally auto-pause the agent (policy decision).
+Implemented architecture:
+- A single `ControlState` instance tracks:
+  - current holder socket id (`holder_sid`)
+  - paused state (`paused`)
+  - active run session (`active_session_id`) for routing control input
+- Control input events are queued in-memory and drained by the running tool loop which dispatches them
+  to the active browser-use CDP session (preferred) via `Input.dispatch*` commands.
+
+Pinned `/ctrl` socket events (current implementation):
+- `control_state` (server → client): broadcasts holder/paused/active_session state
+- `take_control` / `release_control`
+- `pause_agent` / `resume_agent`
+- Input events (client → server; queued only when held + paused):
+  - `input_click`, `input_move`, `input_wheel`
+  - `input_keydown`, `input_keyup`, `input_type`
+
+Pause integration:
+- The agent orchestration loop calls `wait_until_unpaused()` between steps.
+- Taking control auto-pauses by default (configurable via `GSD_AUTO_PAUSE_ON_TAKE_CONTROL`).
 
 Observability:
 - Emit structured security logs on rejected events (non-holder, rate-limited, unauth).
 - Provide `/healthz` additions that help ops debug: current holder, paused, active session ids (optional, consider privacy).
 
+## Resolved Questions
+
+### Take control vs pause behavior
+**Decision (2026-01-25):** Taking control auto-pauses by default, while still exposing explicit
+Pause/Resume controls.
+
+Implementation:
+- `GSD_AUTO_PAUSE_ON_TAKE_CONTROL` defaults to `true`.
+
+### Input events while running
+**Decision (2026-01-25):** Control input is accepted only when **paused**.
+
+Rationale:
+- Prevents operator input and agent actions from racing each other.
+- Matches current enforcement (requests are rejected when not paused).
+
+### Multiple concurrent runs with one dashboard instance
+**Decision (2026-01-25):** One active session is controllable at a time (single `active_session_id`).
+
+Behavior:
+- The most recent run sets the active session for routing control input.
+- Concurrent sessions may still stream/record artifacts, but control is routed only to the active one.
+
 ## Open Questions
-1. Do we require “Take Control” to automatically pause the agent, or keep them separate buttons?
-2. Should input events be allowed only when paused, or also while running (potentially dangerous)?
-3. How do we handle multiple concurrent `web_eval_agent` runs with one dashboard instance?
+None (control plane behavior pinned).
 
 ## References
 - Local reference behavior: `~/web-agent/webEvalAgent/src/browser_manager.py` and `~/web-agent/webEvalAgent/src/browser_utils.py` (CDP input dispatch + pause functions)

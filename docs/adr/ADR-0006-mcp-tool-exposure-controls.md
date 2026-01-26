@@ -1,7 +1,7 @@
 # ADR-0006: MCP tool exposure controls (env + config + CLI)
 
 ## Status
-Proposed
+Deprecated
 
 ## Context
 `gsd-browser` currently advertises a fixed set of MCP tools (e.g. `web_eval_agent`, `setup_browser_state`) to any MCP client that connects.
@@ -67,11 +67,14 @@ Shell environment variables still override `.env` values.
 - Provide a minimal test that applies a policy to a `FastMCP` instance and asserts `list_tools` output.
 
 ## Open Questions
-- Do we want a `GSD_BROWSER_MCP_TOOLSET=<preset>` layer (e.g. `safe`, `default`, `dev`) on top of allow/deny lists?
-- Should unknown tool names be a hard error when set via CLI, while remaining warnings when set via env?
+None (ADR deprecated; tool exposure controls are implemented and the env var names changed).
+
+## Notes
+This ADR is kept for historical context only. Current tool exposure controls are implemented via:
+- env vars: `GSD_MCP_ENABLED_TOOLS`, `GSD_MCP_DISABLED_TOOLS`
+- CLI: `gsd mcp tools ...` in `gsd-browser/src/gsd_browser/gsd_cli.py`
 
 ## References
 - `docs/adr/README.md`
 - `gsd-browser/src/gsd_browser/mcp_server.py`
 - `gsd-browser/src/gsd_browser/mcp_tool_policy.py`
-

@@ -193,13 +193,15 @@ allowlist/denylist) provides additional fine-grained enforcement within scope bo
 dramatically improves operator experience and reduces misconfigurations. Audience hints enable rapid
 troubleshooting without security risk.
 
-## Open Questions
 ### Protected Resource Metadata: multiple “resources”
 **Decision (2026-01-24):** Single protected resource per server deployment.
 
 The server supports path-aware hosting under a base path (serving
 `{base_path}/.well-known/oauth-protected-resource`), but it does not attempt to present multiple
 distinct protected resources from a single running instance (no host-based multi-resource behavior).
+
+## Open Questions
+None (auth surface decisions pinned).
 
 ## References
 - `docs/planning/BACKLOG.md`

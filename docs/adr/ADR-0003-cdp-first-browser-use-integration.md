@@ -1,7 +1,7 @@
 # ADR-0003: CDP-first browser-use integration (streaming, screenshots, events, lifecycle)
 
 ## Status
-Proposed
+Deprecated
 
 ## Context
 `gsd-browser` is intended to be a practical MCP “browser agent tool”:
@@ -151,10 +151,13 @@ Work:
   - when resumed, drain/clear queued input events to avoid accidental replay.
 
 ## Open Questions
-1. Should we enable browser-use judge mode in `gsd-browser` by default for non-localhost, or keep it opt-in?
-2. What is the desired default tool budget (seconds) for MCP clients, and do we allow per-call override?
-3. Do we want two streaming modes in production (`cdp` vs screenshot sampling) or always CDP-first?
-4. What are the “top 10” real sites we expect this tool to work on without special auth state?
+None (ADR deprecated; implementation and contracts have moved).
+
+## Notes
+This ADR is kept for historical context only. Current streaming/control behavior lives in:
+- `gsd-browser/src/gsd_browser/streaming/server.py`
+- `gsd-browser/docs/api/MCP_TOOLS.md`
+- `gsd-browser/docs/api/FAST_MCP_V2_CANONICAL_SPEC.md`
 
 ## References
 - `docs/adr/ADR-0001-agent-orchestration-and-answer-contract.md`
