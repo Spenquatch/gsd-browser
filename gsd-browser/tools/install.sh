@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
-# Install gsd globally via pipx
+# Dev install: install gsd globally via pipx, start required dev containers,
+# and write required runtime env vars into the stable ~/.gsd/.env config so
+# `gsd` works from any directory.
 set -euo pipefail
 
 PACKAGE="gsd"           # PyPI package name (for pipx)
@@ -10,6 +12,10 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 MANIFEST_DIR="$HOME/.gsd"
 MANIFEST_FILE="$MANIFEST_DIR/install.json"
 
+VALKEY_CONTAINER_NAME="${GSD_VALKEY_CONTAINER_NAME:-gsd-valkey}"
+VALKEY_IMAGE="${GSD_VALKEY_IMAGE:-valkey/valkey:7.2-alpine}"
+FASTMCP_DOCKET_URL_VALUE="${FASTMCP_DOCKET_URL_VALUE:-redis://localhost:6379/0}"
+
 # Reduce pip noise that can break JSON parsing in some pipx flows.
 export PYTHONUTF8="${PYTHONUTF8:-1}"
 export PYTHONIOENCODING="${PYTHONIOENCODING:-utf-8}"
@@ -19,6 +25,85 @@ export PIP_NO_COLOR="${PIP_NO_COLOR:-1}"
 export PIP_PROGRESS_BAR="${PIP_PROGRESS_BAR:-off}"
 
 mkdir -p "$MANIFEST_DIR"
+
+upsert_env_kv() {
+  local env_path="$1"
+  local key="$2"
+  local value="$3"
+
+  python3 - <<PY
+from __future__ import annotations
+
+import os
+from pathlib import Path
+
+path = Path(os.environ["ENV_PATH"]).expanduser()
+key = os.environ["KEY"]
+value = os.environ["VALUE"]
+
+path.parent.mkdir(parents=True, exist_ok=True)
+lines = []
+if path.exists():
+    lines = path.read_text(encoding="utf-8").splitlines()
+
+out = []
+seen = False
+for line in lines:
+    stripped = line.strip()
+    if stripped.startswith("#") or "=" not in stripped:
+        out.append(line)
+        continue
+    k = stripped.split("=", 1)[0].strip()
+    if k == key:
+        out.append(f"{key}={value}")
+        seen = True
+    else:
+        out.append(line)
+
+if not seen:
+    if out and out[-1].strip() != "":
+        out.append("")
+    out.append("# Added by gsd install")
+    out.append(f"{key}={value}")
+
+path.write_text("\n".join(out) + "\n", encoding="utf-8")
+try:
+    path.chmod(0o600)
+except OSError:
+    pass
+PY
+}
+
+ensure_valkey_container() {
+  if ! command -v docker >/dev/null 2>&1; then
+    echo "docker is required to start Valkey (Redis-compatible) for FastMCP v2." >&2
+    echo "Install Docker and ensure the daemon is running, then re-run this script." >&2
+    exit 1
+  fi
+  if ! docker info >/dev/null 2>&1; then
+    echo "docker daemon is not reachable; start Docker and re-run this script." >&2
+    exit 1
+  fi
+
+  if docker ps --format '{{.Names}}' | grep -qx "$VALKEY_CONTAINER_NAME"; then
+    echo "Valkey container already running: $VALKEY_CONTAINER_NAME"
+    return
+  fi
+
+  if docker ps -a --format '{{.Names}}' | grep -qx "$VALKEY_CONTAINER_NAME"; then
+    echo "Starting Valkey container: $VALKEY_CONTAINER_NAME"
+    docker start "$VALKEY_CONTAINER_NAME" >/dev/null
+    return
+  fi
+
+  echo "Creating Valkey container: $VALKEY_CONTAINER_NAME"
+  docker run -d \
+    --name "$VALKEY_CONTAINER_NAME" \
+    --restart unless-stopped \
+    -p 127.0.0.1:6379:6379 \
+    "$VALKEY_IMAGE" \
+    valkey-server --save "" --appendonly no >/dev/null
+}
 
 resolve_bin() {
   local name="$1"
@@ -78,8 +163,10 @@ else:  # pragma: no cover
 PY
 )
 
+ensure_valkey_container
+
 echo "Installing $PACKAGE v$VERSION via pipx..."
-pipx install --force "$ROOT_DIR"
+pipx install --force --editable "${ROOT_DIR}[dev]"
 
 BIN="$(resolve_bin "$CANONICAL_CLI")"
 CLI_STYLE="canonical"
@@ -100,6 +187,9 @@ if [ -n "$BIN" ] && [ -x "$BIN" ]; then
     "$BIN" init-env >/dev/null || true
   fi
   echo "Config path: $HOME/.gsd/.env"
+  echo "Writing required FastMCP v2 env var: FASTMCP_DOCKET_URL=$FASTMCP_DOCKET_URL_VALUE"
+  ENV_PATH="$HOME/.gsd/.env" KEY="FASTMCP_DOCKET_URL" VALUE="$FASTMCP_DOCKET_URL_VALUE" \
+    upsert_env_kv "$HOME/.gsd/.env" "FASTMCP_DOCKET_URL" "$FASTMCP_DOCKET_URL_VALUE"
   if [ "$CLI_STYLE" = "canonical" ]; then
     echo "Tip: run '$CANONICAL_CLI config set' to add API keys."
   else
@@ -190,4 +280,7 @@ Path("$MANIFEST_FILE").write_text(json.dumps(manifest, indent=2))
 print(f"Manifest written to $MANIFEST_FILE")
 PY
 
-echo "Installation complete. Run 'gsd mcp serve' or 'gsd dev diagnose'."
+echo "Installation complete."
+echo "- Valkey container: $VALKEY_CONTAINER_NAME (port 6379)"
+echo "- Config: $HOME/.gsd/.env (includes FASTMCP_DOCKET_URL)"
+echo "Run: 'gsd mcp serve' or 'gsd dev diagnose'."

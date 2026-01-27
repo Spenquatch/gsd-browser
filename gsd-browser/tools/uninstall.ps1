@@ -10,6 +10,8 @@ $OutputEncoding = [Console]::OutputEncoding
 $env:PYTHONIOENCODING = "utf-8"
 $env:PYTHONUTF8 = "1"
 
+$valkeyContainerName = if ($env:GSD_VALKEY_CONTAINER_NAME) { $env:GSD_VALKEY_CONTAINER_NAME } else { "gsd-valkey" }
+
 function Resolve-Python {
   $python = Get-Command python -ErrorAction SilentlyContinue
   if ($python) {
@@ -64,6 +66,19 @@ if (Test-Path $manifestFile) {
 if ($PurgeConfig -and (Test-Path $configDir)) {
   Remove-Item -Recurse -Force $configDir
   Write-Host "Removed config dir $configDir"
+}
+
+try {
+  $docker = Get-Command docker -ErrorAction SilentlyContinue
+  if ($docker) {
+    $exists = & docker ps -a --format "{{.Names}}" | Where-Object { $_ -eq $valkeyContainerName }
+    if ($exists) {
+      Write-Host "Removing Valkey container: $valkeyContainerName"
+      & docker rm -f $valkeyContainerName | Out-Null
+    }
+  }
+} catch {
+  # best-effort
 }
 
 Write-Host "Uninstall complete."

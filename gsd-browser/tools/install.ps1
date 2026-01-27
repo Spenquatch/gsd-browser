@@ -10,6 +10,10 @@ $env:PIP_NO_PYTHON_VERSION_WARNING = "1"
 $env:PIP_NO_COLOR = "1"
 $env:PIP_PROGRESS_BAR = "off"
 
+$valkeyContainerName = if ($env:GSD_VALKEY_CONTAINER_NAME) { $env:GSD_VALKEY_CONTAINER_NAME } else { "gsd-valkey" }
+$valkeyImage = if ($env:GSD_VALKEY_IMAGE) { $env:GSD_VALKEY_IMAGE } else { "valkey/valkey:7.2-alpine" }
+$docketUrl = if ($env:FASTMCP_DOCKET_URL_VALUE) { $env:FASTMCP_DOCKET_URL_VALUE } else { "redis://localhost:6379/0" }
+
 function Resolve-Python {
   $python = Get-Command python -ErrorAction SilentlyContinue
   if ($python) {
@@ -85,7 +89,7 @@ function Invoke-PipxInstallFromSource {
   )
 
   Invoke-Exe -Exe $PythonExe -Args @(
-    "-m", "pipx", "install", "--python", $PythonExe, "--force", $SourceDir
+    "-m", "pipx", "install", "--python", $PythonExe, "--force", "--editable", "$SourceDir[dev]"
   )
 }
 
@@ -111,6 +115,29 @@ New-Item -ItemType Directory -Force -Path $manifestDir | Out-Null
 $pythonCmd = Resolve-Python
 $pythonExe = ($pythonCmd.Exe | Out-String).Trim().Trim('"')
 $pythonPrefix = $pythonCmd.Prefix
+
+# Ensure Valkey (Redis-compatible) is running for FastMCP v2 stdio.
+if (-not (Get-Command docker -ErrorAction SilentlyContinue)) {
+  throw "docker is required to start Valkey for FastMCP v2. Install Docker and ensure the daemon is running."
+}
+& docker info *> $null
+if ($LASTEXITCODE -ne 0) {
+  throw "docker daemon is not reachable; start Docker and re-run this script."
+}
+
+$running = & docker ps --format "{{.Names}}" | Where-Object { $_ -eq $valkeyContainerName }
+if ($running) {
+  Write-Host "Valkey container already running: $valkeyContainerName"
+} else {
+  $exists = & docker ps -a --format "{{.Names}}" | Where-Object { $_ -eq $valkeyContainerName }
+  if ($exists) {
+    Write-Host "Starting Valkey container: $valkeyContainerName"
+    & docker start $valkeyContainerName | Out-Null
+  } else {
+    Write-Host "Creating Valkey container: $valkeyContainerName"
+    & docker run -d --name $valkeyContainerName --restart unless-stopped -p 127.0.0.1:6379:6379 $valkeyImage valkey-server --save "" --appendonly no | Out-Null
+  }
+}
 
 # If we're running through a shim (pyenv), prefer the real interpreter path for pipx.
 $pythonExe = Resolve-RealPythonExe -PythonExe $pythonExe -PythonPrefix $pythonPrefix
@@ -182,3 +209,36 @@ Write-Host "  gsd config init"
 Write-Host "  gsd config set --anthropic-api-key <...>"
 Write-Host "  gsd browser ensure --write-config"
 Write-Host "  gsd mcp config --format json"
+
+# Ensure FASTMCP_DOCKET_URL is present in the stable config file for running from any directory.
+$envPath = Join-Path $HOME ".gsd\.env"
+if (-not (Test-Path $envPath)) {
+  & gsd config init *> $null
+}
+
+$lines = @()
+if (Test-Path $envPath) { $lines = Get-Content -LiteralPath $envPath -ErrorAction SilentlyContinue }
+$out = New-Object System.Collections.Generic.List[string]
+$seen = $false
+foreach ($line in $lines) {
+  $trim = $line.Trim()
+  if ($trim -and -not $trim.StartsWith("#") -and $trim.Contains("=")) {
+    $k = $trim.Split("=", 2)[0].Trim()
+    if ($k -eq "FASTMCP_DOCKET_URL") {
+      $out.Add("FASTMCP_DOCKET_URL=$docketUrl")
+      $seen = $true
+      continue
+    }
+  }
+  $out.Add($line)
+}
+if (-not $seen) {
+  if ($out.Count -gt 0 -and $out[$out.Count - 1].Trim() -ne "") { $out.Add("") }
+  $out.Add("# Added by gsd install")
+  $out.Add("FASTMCP_DOCKET_URL=$docketUrl")
+}
+$out | Set-Content -Encoding UTF8 -LiteralPath $envPath
+
+Write-Host ""
+Write-Host "Configured FASTMCP_DOCKET_URL in $envPath"
+Write-Host "Valkey container: $valkeyContainerName (port 6379)"
