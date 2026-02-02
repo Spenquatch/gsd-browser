@@ -1165,6 +1165,13 @@ async def web_eval_agent(
                         raise
 
             cdp_dispatcher = CDPInputDispatcher(send=_send_ctrl_input)
+            # Register direct dispatcher so Socket.IO handlers can dispatch
+            # CDP input immediately (like web-agent) instead of only via queue.
+            main_loop = asyncio.get_running_loop()
+            control_state.set_input_dispatcher(
+                cdp_dispatcher.dispatch, main_loop
+            )
+            logger.info("Registered direct CDP input dispatcher on control_state (loop=%s)", id(main_loop))
 
         cdp_attached = False
 
@@ -1190,6 +1197,32 @@ async def web_eval_agent(
                     break
                 if time.time() - started_wait > 10.0:
                     streaming_disabled_reason = "cdp_not_ready"
+                    note_detached = getattr(streaming_stats, "note_cdp_detached", None)
+                    if callable(note_detached):
+                        note_detached(error=streaming_disabled_reason)
+                    return
+                await asyncio.sleep(0.05)
+
+            # Wait for session_manager to be initialized (required for get_or_create_cdp_session)
+            while True:
+                session_manager = getattr(browser_session, "session_manager", None)
+                if session_manager is not None:
+                    break
+                if time.time() - started_wait > 10.0:
+                    streaming_disabled_reason = "session_manager_not_ready"
+                    note_detached = getattr(streaming_stats, "note_cdp_detached", None)
+                    if callable(note_detached):
+                        note_detached(error=streaming_disabled_reason)
+                    return
+                await asyncio.sleep(0.05)
+
+            # Wait for agent to have navigated (agent_focus_target_id must be set)
+            while True:
+                agent_focus_target_id = getattr(browser_session, "agent_focus_target_id", None)
+                if agent_focus_target_id is not None:
+                    break
+                if time.time() - started_wait > 10.0:
+                    streaming_disabled_reason = "agent_focus_not_ready"
                     note_detached = getattr(streaming_stats, "note_cdp_detached", None)
                     if callable(note_detached):
                         note_detached(error=streaming_disabled_reason)
@@ -1522,6 +1555,9 @@ async def web_eval_agent(
                     logger.debug("Failed to detach CDP event capture", exc_info=True)
 
             if control_state is not None and active_session_set:
+                clear_input_dispatcher = getattr(control_state, "clear_input_dispatcher", None)
+                if callable(clear_input_dispatcher):
+                    clear_input_dispatcher()
                 clear_active_session = getattr(control_state, "clear_active_session", None)
                 if callable(clear_active_session):
                     clear_active_session(session_id=session_id)

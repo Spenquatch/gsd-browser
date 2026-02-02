@@ -74,6 +74,7 @@ let lastControlState = {
   paused: false,
   active_session_id: null
 };
+let lastDeviceSize = null;
 
 async function connectSockets() {
   const config = await getAuthConfig();
@@ -142,6 +143,11 @@ async function connectSockets() {
       $('seq').textContent = payload?.seq ?? '—';
       $('serverLatency').textContent = fmtMs(payload?.latency_ms);
       setPill($('modeStatus'), 'mode: cdp', 'pill-muted');
+
+      const meta = payload?.metadata;
+      if (meta?.deviceWidth && meta?.deviceHeight) {
+        lastDeviceSize = { width: meta.deviceWidth, height: meta.deviceHeight };
+      }
 
       const img = new Image();
       img.onload = () => {
@@ -290,13 +296,15 @@ function surfaceCoordsFromEvent(evt) {
   const rect = el.getBoundingClientRect();
   if (!rect.width || !rect.height) return null;
 
-  const size = surfaceSize(el);
-  if (!size) return null;
+  // Use device (viewport) dimensions for CDP coordinates if available,
+  // otherwise fall back to canvas/image dimensions.
+  const targetSize = lastDeviceSize || surfaceSize(el);
+  if (!targetSize) return null;
 
   const relX = (evt.clientX - rect.left) / rect.width;
   const relY = (evt.clientY - rect.top) / rect.height;
-  const x = clamp(relX * size.width, 0, size.width);
-  const y = clamp(relY * size.height, 0, size.height);
+  const x = clamp(relX * targetSize.width, 0, targetSize.width);
+  const y = clamp(relY * targetSize.height, 0, targetSize.height);
   return { x, y };
 }
 

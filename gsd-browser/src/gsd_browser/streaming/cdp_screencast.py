@@ -34,10 +34,28 @@ class CdpFrame:
 
 def _quality_to_cdp_params(quality: StreamingQuality) -> dict[str, Any]:
     if quality == "low":
-        return {"format": "jpeg", "quality": 35, "maxWidth": 800, "maxHeight": 600}
+        return {
+            "format": "jpeg",
+            "quality": 35,
+            "maxWidth": 800,
+            "maxHeight": 600,
+            "everyNthFrame": 1,
+        }
     if quality == "high":
-        return {"format": "jpeg", "quality": 80, "maxWidth": 1920, "maxHeight": 1080}
-    return {"format": "jpeg", "quality": 60, "maxWidth": 1280, "maxHeight": 720}
+        return {
+            "format": "jpeg",
+            "quality": 80,
+            "maxWidth": 1920,
+            "maxHeight": 1080,
+            "everyNthFrame": 1,
+        }
+    return {
+        "format": "jpeg",
+        "quality": 60,
+        "maxWidth": 1280,
+        "maxHeight": 720,
+        "everyNthFrame": 1,
+    }
 
 
 class CdpScreencastStreamer:
@@ -110,7 +128,15 @@ class CdpScreencastStreamer:
         session_id: str,
         focus_poll_interval_s: float = 0.75,
     ) -> bool:
+        logger.info(
+            "start_browser_use called",
+            extra={"session_id": session_id, "streaming_mode": self._stats.streaming_mode},
+        )
         if self._stats.streaming_mode != "cdp":
+            logger.warning(
+                "start_browser_use skipped - not in CDP mode",
+                extra={"streaming_mode": self._stats.streaming_mode},
+            )
             return False
 
         async with self._lifecycle_lock:
@@ -124,18 +150,24 @@ class CdpScreencastStreamer:
                     raise RuntimeError("browser-use CDPSession missing cdp_client/session_id")
 
                 await self._register_browser_use_handlers(cdp_client)
+                cdp_params = _quality_to_cdp_params(self._quality)
+                logger.info(
+                    "Starting CDP screencast with params",
+                    extra={"params": cdp_params, "cdp_session_id": cdp_session_id},
+                )
                 await self._browser_use_send(
                     cdp_client=cdp_client,
                     cdp_session_id=cdp_session_id,
                     method="Page.startScreencast",
-                    params=_quality_to_cdp_params(self._quality),
+                    params=cdp_params,
                 )
             except Exception as exc:  # noqa: BLE001
                 error = _truncate_cdp_error(exc)
                 self._stats.note_cdp_detached(error=error)
-                logger.info(
+                logger.warning(
                     "CDP screencast unavailable (browser-use)",
                     extra={"session_id": session_id, "error": error},
+                    exc_info=True,
                 )
                 return False
 
@@ -292,23 +324,34 @@ class CdpScreencastStreamer:
 
     async def _on_browser_use_frame(self, *, params: Any, cdp_session_id: str | None) -> None:
         if not self._running:
+            logger.debug("Frame ignored: streamer not running")
             return
         active_cdp_session_id = self._active_cdp_session_id
         if not active_cdp_session_id or cdp_session_id != active_cdp_session_id:
+            logger.debug(
+                "Frame ignored: session mismatch",
+                extra={
+                    "cdp_session_id": cdp_session_id,
+                    "active_cdp_session_id": active_cdp_session_id,
+                },
+            )
             return
 
         active_run_session_id = self._active_run_session_id
         active_cdp_client = self._active_cdp_client
         if not active_run_session_id or active_cdp_client is None:
+            logger.debug("Frame ignored: no active session/client")
             return
 
         if not isinstance(params, dict):
+            logger.debug("Frame ignored: params not dict")
             return
 
         self._seq += 1
         seq = self._seq
         received_ts = time.time()
 
+        logger.info(f"CDP frame {seq} received", extra={"seq": seq})
         self._stats.note_frame_received(seq=seq, received_ts=received_ts)
 
         ack_id = params.get("sessionId")

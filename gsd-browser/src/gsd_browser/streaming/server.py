@@ -98,6 +98,8 @@ class ControlState:
         self._input_events: list[dict[str, Any]] = []
         self._input_events_max = 1000
         self._input_seq = 0
+        self._direct_dispatch_fn: Any = None
+        self._dispatch_loop: asyncio.AbstractEventLoop | None = None
 
     def snapshot(self) -> dict[str, Any]:
         with self._lock:
@@ -241,6 +243,40 @@ class ControlState:
                 return False
             self._set_paused_locked(False)
             return True
+
+    def set_input_dispatcher(
+        self,
+        dispatch_fn: Any,
+        loop: asyncio.AbstractEventLoop,
+    ) -> None:
+        """Register a direct CDP input dispatcher (called from the agent task thread)."""
+        with self._lock:
+            self._direct_dispatch_fn = dispatch_fn
+            self._dispatch_loop = loop
+
+    def clear_input_dispatcher(self) -> None:
+        with self._lock:
+            self._direct_dispatch_fn = None
+            self._dispatch_loop = None
+
+    async def dispatch_input_directly(
+        self, event: str, payload: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Dispatch an input event directly to CDP, crossing thread/loop boundary."""
+        with self._lock:
+            fn = getattr(self, "_direct_dispatch_fn", None)
+            loop = getattr(self, "_dispatch_loop", None)
+        if fn is None or loop is None:
+            logger.debug("dispatch_input_directly: no dispatcher (fn=%s, loop=%s)", fn is not None, loop is not None)
+            return {"ok": False, "error": "no_dispatcher"}
+        try:
+            future = asyncio.run_coroutine_threadsafe(fn(event, payload), loop)
+            await asyncio.wrap_future(future)
+        except Exception as exc:
+            logger.warning("dispatch_input_directly failed: %s: %s", type(exc).__name__, exc)
+            return {"ok": False, "error": f"dispatch_error: {type(exc).__name__}"}
+        logger.debug("dispatch_input_directly: OK event=%s", event)
+        return {"ok": True}
 
     async def wait_until_unpaused(self) -> None:
         if not self.is_paused():
@@ -507,12 +543,20 @@ def create_streaming_app(
                 payload=payload,
             )
 
+        # Try direct CDP dispatch first (immediate, like web-agent)
+        result = await control_state.dispatch_input_directly(event, validated or {})
+        if result.get("ok"):
+            logger.info("ctrl input dispatched directly: event=%s", event)
+            return {"ok": True}
+
+        logger.info("ctrl direct dispatch failed (%s), falling back to queue: event=%s", result.get("error"), event)
+        # Fall back to queue-based dispatch (drained by pause_gate)
         queue_result = control_state.enqueue_input_event(
             sid=sid, event=event, payload=validated or {}
         )
         return {"ok": True, **queue_result}
 
-    @sio.event(namespace=DEFAULT_CTRL_NAMESPACE)
+    @sio.on("connect", namespace=DEFAULT_CTRL_NAMESPACE)
     async def connect_ctrl(sid: str, environ: dict[str, Any], auth: dict[str, Any] | None) -> None:
         if not authorize_socket_connection(
             config=auth_config,
@@ -527,7 +571,7 @@ def create_streaming_app(
         logger.info("Client connected", extra={"sid": sid, "namespace": DEFAULT_CTRL_NAMESPACE})
         await _emit_control_state(to_sid=sid)
 
-    @sio.event(namespace=DEFAULT_CTRL_NAMESPACE)
+    @sio.on("disconnect", namespace=DEFAULT_CTRL_NAMESPACE)
     async def disconnect_ctrl(sid: str) -> None:
         logger.info("Client disconnected", extra={"sid": sid, "namespace": DEFAULT_CTRL_NAMESPACE})
         if control_state.is_holder(sid=sid):
