@@ -39,6 +39,7 @@ class FakeAsyncServer:
         *,
         namespace: str | None = None,
         to: str | None = None,
+        room: str | None = None,
     ) -> None:
         self.emits.append(
             {
@@ -254,6 +255,8 @@ def test_emit_browser_update_emits_and_records_stream_sample() -> None:
         stats = StreamingStats(streaming_mode="screenshot", frame_queue_max=1)
         screenshots = ScreenshotManager()
 
+        from gsd_browser.streaming.session_registry import SessionRegistry
+
         runtime = StreamingRuntime(
             asgi_app=None,
             api_app=None,  # type: ignore[arg-type]
@@ -262,6 +265,7 @@ def test_emit_browser_update_emits_and_records_stream_sample() -> None:
             screenshots=screenshots,
             cdp_streamer=None,  # type: ignore[arg-type]
             control_state=ControlState(),
+            registry=SessionRegistry(),
         )
 
         image_bytes = b"pngbytes"

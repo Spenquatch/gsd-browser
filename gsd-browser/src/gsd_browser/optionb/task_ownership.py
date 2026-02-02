@@ -24,6 +24,7 @@ class TaskOwnershipRecord(BaseModel):
     created_at_ms: int
     expires_at_ms: int
     session_id: str
+    worker_id: str = Field(default="")
 
 
 def _redis_key(task_id: str) -> str:
@@ -122,6 +123,7 @@ def build_record(
     session_id: str,
     ttl_ms: int,
     created_at_ms: int | None = None,
+    worker_id: str = "",
 ) -> TaskOwnershipRecord:
     created = _now_ms() if created_at_ms is None else int(created_at_ms)
     ttl_ms_value = max(0, int(ttl_ms))
@@ -135,4 +137,5 @@ def build_record(
         created_at_ms=created,
         expires_at_ms=expires,
         session_id=session_id,
+        worker_id=worker_id,
     )

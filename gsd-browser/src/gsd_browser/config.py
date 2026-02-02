@@ -83,6 +83,20 @@ class Settings(BaseModel):
 
     auto_pause_on_take_control: bool = Field(True, alias="GSD_AUTO_PAUSE_ON_TAKE_CONTROL")
 
+    # Multi-session concurrency (ADR-0026)
+    max_sessions_per_tenant: int = Field(5, alias="GSD_MAX_SESSIONS_PER_TENANT")
+
+    # Streaming auth mode (ADR-0023): "hmac" for localhost dev, "jwt" for production
+    streaming_auth_mode: str = Field("hmac", alias="GSD_STREAMING_AUTH_MODE")
+
+    # Remote streaming (ADR-0024)
+    streaming_bind_host: str = Field("127.0.0.1", alias="GSD_STREAMING_BIND_HOST")
+    streaming_public_host: str = Field("", alias="GSD_STREAMING_PUBLIC_HOST")
+    streaming_public_scheme: str = Field("wss", alias="GSD_STREAMING_PUBLIC_SCHEME")
+
+    # Worker identity (ADR-0026)
+    worker_id: str = Field("", alias="GSD_WORKER_ID")
+
     model_config = ConfigDict(populate_by_name=True)
 
     def _mcp_env(self, *, include_key_placeholders: bool = False) -> dict[str, str]:
@@ -263,6 +277,22 @@ def load_settings(
             payload["GSD_AUTO_PAUSE_ON_TAKE_CONTROL"] = merged[
                 "GSD_AUTO_PAUSE_ON_TAKE_CONTROL"
             ]
+        if merged.get("GSD_MAX_SESSIONS_PER_TENANT") is not None:
+            payload["GSD_MAX_SESSIONS_PER_TENANT"] = merged[
+                "GSD_MAX_SESSIONS_PER_TENANT"
+            ]
+        if merged.get("GSD_STREAMING_AUTH_MODE") is not None:
+            payload["GSD_STREAMING_AUTH_MODE"] = merged["GSD_STREAMING_AUTH_MODE"]
+        if merged.get("GSD_STREAMING_BIND_HOST") is not None:
+            payload["GSD_STREAMING_BIND_HOST"] = merged["GSD_STREAMING_BIND_HOST"]
+        if merged.get("GSD_STREAMING_PUBLIC_HOST") is not None:
+            payload["GSD_STREAMING_PUBLIC_HOST"] = merged["GSD_STREAMING_PUBLIC_HOST"]
+        if merged.get("GSD_STREAMING_PUBLIC_SCHEME") is not None:
+            payload["GSD_STREAMING_PUBLIC_SCHEME"] = merged[
+                "GSD_STREAMING_PUBLIC_SCHEME"
+            ]
+        if merged.get("GSD_WORKER_ID") is not None:
+            payload["GSD_WORKER_ID"] = merged["GSD_WORKER_ID"]
 
         return Settings.model_validate(payload, strict=strict)
     except ValidationError as exc:

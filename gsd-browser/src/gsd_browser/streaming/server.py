@@ -2,12 +2,11 @@
 
 from __future__ import annotations
 
-import asyncio
 import base64
 import logging
-import threading
 import time
 from dataclasses import dataclass
+from dataclasses import field as dataclass_field
 from pathlib import Path
 from typing import Any
 
@@ -20,6 +19,7 @@ from fastapi.staticfiles import StaticFiles
 from ..config import Settings
 from ..screenshot_manager import ScreenshotManager
 from .cdp_screencast import CdpScreencastStreamer
+from .control_state import ControlState
 from .env import normalize_streaming_mode, normalize_streaming_quality
 from .security import (
     FixedWindowRateLimiter,
@@ -28,6 +28,7 @@ from .security import (
     get_security_logger,
     load_streaming_auth_config,
 )
+from .session_registry import SessionRegistry
 from .stats import StreamingStats
 
 logger = logging.getLogger("gsd_browser.streaming")
@@ -45,6 +46,10 @@ class StreamingRuntime:
     screenshots: ScreenshotManager
     cdp_streamer: CdpScreencastStreamer
     control_state: ControlState
+    registry: SessionRegistry
+
+    # sid → Identity mapping for JWT auth mode (ADR-0023)
+    _sid_identity: dict[str, Any] = dataclass_field(default_factory=dict)
 
     async def emit_browser_update(
         self,
@@ -63,7 +68,12 @@ class StreamingRuntime:
             "image_base64": base64.b64encode(image_bytes).decode("ascii"),
             "metadata": dict(metadata or {}),
         }
-        await self.sio.emit("browser_update", payload, namespace=DEFAULT_STREAM_NAMESPACE)
+        # Emit to session room if it exists, otherwise broadcast (backward compat)
+        room = session_id if session_id else None
+        await self.sio.emit(
+            "browser_update", payload,
+            namespace=DEFAULT_STREAM_NAMESPACE, room=room,
+        )
         shot = self.screenshots.record_screenshot(
             screenshot_type="stream_sample",
             image_bytes=image_bytes,
@@ -79,209 +89,6 @@ class StreamingRuntime:
                 await persist_screenshot(shot)
         except Exception:  # noqa: BLE001
             pass
-
-
-class ControlState:
-    """Thread-safe control state shared across the dashboard thread and tool runtime."""
-
-    def __init__(self, *, auto_pause_on_take_control: bool = True) -> None:
-        self._lock = threading.Lock()
-        self._unpaused = threading.Event()
-        self._unpaused.set()
-
-        self._auto_pause_on_take_control = bool(auto_pause_on_take_control)
-
-        self.holder_sid: str | None = None
-        self.held_since_ts: float | None = None
-        self.paused: bool = False
-        self.active_session_id: str | None = None
-        self._input_events: list[dict[str, Any]] = []
-        self._input_events_max = 1000
-        self._input_seq = 0
-        self._direct_dispatch_fn: Any = None
-        self._dispatch_loop: asyncio.AbstractEventLoop | None = None
-
-    def snapshot(self) -> dict[str, Any]:
-        with self._lock:
-            return {
-                "holder_sid": self.holder_sid,
-                "held_since_ts": self.held_since_ts,
-                "paused": self.paused,
-                "active_session_id": self.active_session_id,
-            }
-
-    def set_active_session(self, *, session_id: str) -> None:
-        session_id_value = str(session_id).strip()
-        if not session_id_value:
-            return
-        with self._lock:
-            if self.active_session_id != session_id_value:
-                self._input_events.clear()
-                self._input_seq = 0
-            self.active_session_id = session_id_value
-
-    def clear_active_session(self, *, session_id: str | None = None) -> None:
-        with self._lock:
-            if session_id is not None and self.active_session_id != session_id:
-                return
-            self.active_session_id = None
-            self._input_events.clear()
-
-    def has_active_session(self) -> bool:
-        with self._lock:
-            return self.active_session_id is not None
-
-    def enqueue_input_event(
-        self, *, sid: str, event: str, payload: dict[str, Any]
-    ) -> dict[str, Any]:
-        with self._lock:
-            self._input_seq += 1
-            record = {
-                "seq": self._input_seq,
-                "received_at": time.time(),
-                "sid": sid,
-                "event": event,
-                "payload": payload,
-            }
-            self._input_events.append(record)
-            dropped: dict[str, Any] | None = None
-            if len(self._input_events) > self._input_events_max:
-                dropped = self._input_events.pop(0)
-            if dropped is not None:
-                get_security_logger().info(
-                    "ctrl_input_dropped",
-                    extra={
-                        "namespace": DEFAULT_CTRL_NAMESPACE,
-                        "sid": sid,
-                        "event": event,
-                        "dropped_seq": dropped.get("seq"),
-                        "dropped_event": dropped.get("event"),
-                        "queued": len(self._input_events),
-                        "reason": "buffer_full",
-                    },
-                )
-            if self._input_seq == 1 or self._input_seq % 25 == 0:
-                meta: dict[str, Any] = {"payload_keys": sorted(payload.keys())}
-                if event == "input_type":
-                    text = payload.get("text")
-                    if isinstance(text, str):
-                        meta["text_len"] = len(text)
-                get_security_logger().info(
-                    "ctrl_input_queued",
-                    extra={
-                        "namespace": DEFAULT_CTRL_NAMESPACE,
-                        "sid": sid,
-                        "event": event,
-                        "seq": self._input_seq,
-                        "queued": len(self._input_events),
-                        **meta,
-                    },
-                )
-            return {"queued": len(self._input_events), "dropped": dropped is not None}
-
-    def drain_input_events(self, *, max_items: int | None = None) -> list[dict[str, Any]]:
-        with self._lock:
-            if max_items is None or max_items <= 0:
-                drained = list(self._input_events)
-                self._input_events.clear()
-                return drained
-            drained = self._input_events[:max_items]
-            del self._input_events[:max_items]
-            return drained
-
-    def current_holder_sid(self) -> str | None:
-        with self._lock:
-            return self.holder_sid
-
-    def is_holder(self, *, sid: str) -> bool:
-        with self._lock:
-            return self.holder_sid == sid
-
-    def is_paused(self) -> bool:
-        with self._lock:
-            return self.paused
-
-    def _set_paused_locked(self, paused: bool) -> None:
-        self.paused = paused
-        if paused:
-            self._unpaused.clear()
-        else:
-            self._unpaused.set()
-
-    def clear(self) -> None:
-        with self._lock:
-            self.holder_sid = None
-            self.held_since_ts = None
-            self._set_paused_locked(False)
-            self._input_events.clear()
-
-    def take_control(self, *, sid: str) -> None:
-        with self._lock:
-            if self.holder_sid is None:
-                self.holder_sid = sid
-                self.held_since_ts = time.time()
-                self._input_events.clear()
-                self._set_paused_locked(self._auto_pause_on_take_control)
-
-    def release_control(self, *, sid: str) -> None:
-        with self._lock:
-            if self.holder_sid == sid:
-                self.holder_sid = None
-                self.held_since_ts = None
-                self._set_paused_locked(False)
-
-    def pause_if_holder(self, *, sid: str) -> bool:
-        with self._lock:
-            if self.holder_sid != sid:
-                return False
-            self._set_paused_locked(True)
-            return True
-
-    def resume_if_holder(self, *, sid: str) -> bool:
-        with self._lock:
-            if self.holder_sid != sid:
-                return False
-            self._set_paused_locked(False)
-            return True
-
-    def set_input_dispatcher(
-        self,
-        dispatch_fn: Any,
-        loop: asyncio.AbstractEventLoop,
-    ) -> None:
-        """Register a direct CDP input dispatcher (called from the agent task thread)."""
-        with self._lock:
-            self._direct_dispatch_fn = dispatch_fn
-            self._dispatch_loop = loop
-
-    def clear_input_dispatcher(self) -> None:
-        with self._lock:
-            self._direct_dispatch_fn = None
-            self._dispatch_loop = None
-
-    async def dispatch_input_directly(
-        self, event: str, payload: dict[str, Any]
-    ) -> dict[str, Any]:
-        """Dispatch an input event directly to CDP, crossing thread/loop boundary."""
-        with self._lock:
-            fn = getattr(self, "_direct_dispatch_fn", None)
-            loop = getattr(self, "_dispatch_loop", None)
-        if fn is None or loop is None:
-            logger.debug("dispatch_input_directly: no dispatcher (fn=%s, loop=%s)", fn is not None, loop is not None)
-            return {"ok": False, "error": "no_dispatcher"}
-        try:
-            future = asyncio.run_coroutine_threadsafe(fn(event, payload), loop)
-            await asyncio.wrap_future(future)
-        except Exception as exc:
-            logger.warning("dispatch_input_directly failed: %s: %s", type(exc).__name__, exc)
-            return {"ok": False, "error": f"dispatch_error: {type(exc).__name__}"}
-        logger.debug("dispatch_input_directly: OK event=%s", event)
-        return {"ok": True}
-
-    async def wait_until_unpaused(self) -> None:
-        if not self.is_paused():
-            return
-        await asyncio.to_thread(self._unpaused.wait)
 
 
 def create_streaming_app(
@@ -674,6 +481,83 @@ def create_streaming_app(
     async def input_type(sid: str, payload: Any) -> dict[str, Any]:
         return await _handle_ctrl_input_event(sid=sid, event="input_type", payload=payload)
 
+    # Session registry for multi-session support (ADR-0026)
+    registry = SessionRegistry(retention_seconds=3600.0)
+
+    # Session room join handler (ADR-0024)
+    @sio.on("join_session", namespace=DEFAULT_STREAM_NAMESPACE)
+    async def join_session(sid: str, data: Any) -> dict[str, Any]:
+        if not isinstance(data, dict):
+            return {"ok": False, "error": "invalid_payload"}
+        session_id = data.get("session_id")
+        if not isinstance(session_id, str) or not session_id.strip():
+            return {"ok": False, "error": "missing_session_id"}
+        session_id = session_id.strip()
+
+        # Check session exists in registry
+        session = registry.get_session(session_id)
+        if session is None:
+            # Backward compat: allow joining any room when registry is empty
+            # (single-session localhost mode)
+            logger.debug(
+                "join_session: session %s not in registry, allowing",
+                session_id,
+            )
+
+        sio.enter_room(sid, session_id, namespace=DEFAULT_STREAM_NAMESPACE)
+        logger.info(
+            "Client joined session room",
+            extra={"sid": sid, "session_id": session_id},
+        )
+        return {"ok": True, "session_id": session_id}
+
+    @sio.on("leave_session", namespace=DEFAULT_STREAM_NAMESPACE)
+    async def leave_session(sid: str, data: Any) -> dict[str, Any]:
+        if not isinstance(data, dict):
+            return {"ok": False, "error": "invalid_payload"}
+        session_id = data.get("session_id")
+        if not isinstance(session_id, str) or not session_id.strip():
+            return {"ok": False, "error": "missing_session_id"}
+        session_id = session_id.strip()
+        sio.leave_room(sid, session_id, namespace=DEFAULT_STREAM_NAMESPACE)
+        return {"ok": True}
+
+    # Session management API endpoints (ADR-0026)
+    @api_app.get("/api/v1/sessions")
+    async def list_sessions() -> JSONResponse:
+        sessions = registry.all_sessions()
+        return JSONResponse([
+            {
+                "session_id": s.session_id,
+                "status": s.status.value,
+                "tenant_id": s.owner_tenant_id,
+                "subject_id": s.owner_subject_id,
+                "worker_id": s.worker_id,
+                "stream_url": s.stream_url,
+                "created_at": s.created_at,
+                "last_activity_at": s.last_activity_at,
+            }
+            for s in sessions
+        ])
+
+    @api_app.get("/api/v1/sessions/{session_id}")
+    async def get_session_detail(session_id: str) -> JSONResponse:
+        session = registry.get_session(session_id)
+        if session is None:
+            return JSONResponse(
+                {"error": "Session not found"}, status_code=404
+            )
+        return JSONResponse({
+            "session_id": session.session_id,
+            "status": session.status.value,
+            "tenant_id": session.owner_tenant_id,
+            "subject_id": session.owner_subject_id,
+            "worker_id": session.worker_id,
+            "stream_url": session.stream_url,
+            "created_at": session.created_at,
+            "last_activity_at": session.last_activity_at,
+        })
+
     asgi_app = socketio.ASGIApp(sio, other_asgi_app=api_app)
     return StreamingRuntime(
         asgi_app=asgi_app,
@@ -683,6 +567,7 @@ def create_streaming_app(
         screenshots=screenshot_manager,
         cdp_streamer=cdp_streamer,
         control_state=control_state,
+        registry=registry,
     )
 
 
