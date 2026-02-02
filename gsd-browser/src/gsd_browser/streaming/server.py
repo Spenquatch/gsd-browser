@@ -636,6 +636,44 @@ def create_streaming_app(
             "last_activity_at": session.last_activity_at,
         })
 
+    @api_app.post("/api/v1/sessions/{session_id}/terminate")
+    async def terminate_session_endpoint(
+        session_id: str,
+        identity: dict[str, Any] | None = Depends(_require_api_auth),  # noqa: B008
+    ) -> JSONResponse:
+        session = registry.get_session(session_id)
+        if session is None:
+            return JSONResponse(
+                {"error": "Session not found"}, status_code=404
+            )
+        if identity is not None:
+            tid = identity.get("tenant_id")
+            if tid and session.owner_tenant_id != tid:
+                return JSONResponse(
+                    {"error": "Forbidden"}, status_code=403
+                )
+        try:
+            registry.terminate_session(session_id)
+        except ValueError as exc:
+            return JSONResponse(
+                {"error": str(exc)}, status_code=409
+            )
+        return JSONResponse({"ok": True, "session_id": session_id})
+
+    # Session-affinity health check (RS-5 / ADR-0024)
+    worker_id = getattr(settings, "worker_id", "") or ""
+
+    @api_app.get("/healthz/worker")
+    async def worker_healthz() -> JSONResponse:
+        all_active = sum(
+            1 for s in registry.all_sessions() if s.is_active()
+        )
+        return JSONResponse({
+            "worker_id": worker_id,
+            "active_sessions": all_active,
+            **stats.snapshot(),
+        })
+
     asgi_app = socketio.ASGIApp(sio, other_asgi_app=api_app)
     return StreamingRuntime(
         asgi_app=asgi_app,
