@@ -12,7 +12,7 @@ from typing import Any
 
 import socketio
 import uvicorn
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -89,6 +89,10 @@ class StreamingRuntime:
                 await persist_screenshot(shot)
         except Exception:  # noqa: BLE001
             pass
+
+
+def _api_auth_error(detail: str) -> HTTPException:
+    return HTTPException(status_code=401, detail=detail)
 
 
 def create_streaming_app(
@@ -541,10 +545,55 @@ def create_streaming_app(
         sio.leave_room(sid, session_id, namespace=DEFAULT_STREAM_NAMESPACE)
         return {"ok": True}
 
+    # JWT middleware for /api/v1/ endpoints (DA-7 / ADR-0023)
+    async def _require_api_auth(request: Request) -> dict[str, Any] | None:
+        """FastAPI dependency that validates JWT when auth_mode is jwt.
+
+        Returns the verified identity dict, or None when auth is not
+        required (hmac mode / local dev).
+        """
+        if not auth_config.auth_required or auth_config.auth_mode != "jwt":
+            return None
+
+        auth_header = request.headers.get("authorization", "")
+        if not auth_header.lower().startswith("bearer "):
+            raise _api_auth_error("Missing Bearer token")
+
+        token = auth_header[7:].strip()
+        if not token:
+            raise _api_auth_error("Empty Bearer token")
+
+        try:
+            from ..optionb.identity import get_jwt_verifier
+
+            verifier = get_jwt_verifier()
+            if verifier is None:
+                raise _api_auth_error("JWT verifier not configured")
+            identity = await verifier.verify(token)
+            return {
+                "tenant_id": identity.tenant_id,
+                "subject_id": identity.subject_id,
+            }
+        except Exception as exc:  # noqa: BLE001
+            get_security_logger().info(
+                "api_jwt_auth_failed",
+                extra={"error": str(exc)[:200]},
+            )
+            raise _api_auth_error("Invalid token") from exc
+
     # Session management API endpoints (ADR-0026)
     @api_app.get("/api/v1/sessions")
-    async def list_sessions() -> JSONResponse:
-        sessions = registry.all_sessions()
+    async def list_sessions(
+        identity: dict[str, Any] | None = Depends(_require_api_auth),  # noqa: B008
+    ) -> JSONResponse:
+        all_sessions = registry.all_sessions()
+        # Filter by tenant when JWT auth is active
+        if identity is not None:
+            tid = identity.get("tenant_id")
+            all_sessions = [
+                s for s in all_sessions
+                if s.owner_tenant_id == tid
+            ]
         return JSONResponse([
             {
                 "session_id": s.session_id,
@@ -556,16 +605,26 @@ def create_streaming_app(
                 "created_at": s.created_at,
                 "last_activity_at": s.last_activity_at,
             }
-            for s in sessions
+            for s in all_sessions
         ])
 
     @api_app.get("/api/v1/sessions/{session_id}")
-    async def get_session_detail(session_id: str) -> JSONResponse:
+    async def get_session_detail(
+        session_id: str,
+        identity: dict[str, Any] | None = Depends(_require_api_auth),  # noqa: B008
+    ) -> JSONResponse:
         session = registry.get_session(session_id)
         if session is None:
             return JSONResponse(
                 {"error": "Session not found"}, status_code=404
             )
+        # Tenant-scoped access check
+        if identity is not None:
+            tid = identity.get("tenant_id")
+            if tid and session.owner_tenant_id != tid:
+                return JSONResponse(
+                    {"error": "Forbidden"}, status_code=403
+                )
         return JSONResponse({
             "session_id": session.session_id,
             "status": session.status.value,

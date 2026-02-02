@@ -210,3 +210,56 @@ class TestTenantSessionLimit:
         _create(registry, session_id="s3")
         registry.activate_session("s3")  # ACTIVE
         assert registry.count_active_sessions("tenant-a") == 3
+
+
+class TestSessionLifecycleTransitions:
+    """MS-8: Validate status transition rules."""
+
+    def test_valid_full_lifecycle(self, registry: SessionRegistry) -> None:
+        _create(registry, session_id="s1")
+        registry.activate_session("s1")
+        registry.pause_session("s1")
+        registry.resume_session("s1")
+        registry.terminate_session("s1")
+        s = registry.get_session("s1")
+        assert s is not None
+        assert s.status == SessionStatus.TERMINATED
+
+    def test_create_to_terminated(self, registry: SessionRegistry) -> None:
+        _create(registry, session_id="s1")
+        registry.terminate_session("s1")
+        s = registry.get_session("s1")
+        assert s is not None
+        assert s.status == SessionStatus.TERMINATED
+
+    def test_invalid_create_to_paused(
+        self, registry: SessionRegistry
+    ) -> None:
+        _create(registry, session_id="s1")
+        with pytest.raises(ValueError, match="Invalid transition"):
+            registry.pause_session("s1")
+
+    def test_invalid_active_to_active(
+        self, registry: SessionRegistry
+    ) -> None:
+        _create(registry, session_id="s1")
+        registry.activate_session("s1")
+        with pytest.raises(ValueError, match="Invalid transition"):
+            registry.activate_session("s1")
+
+    def test_terminated_is_terminal(
+        self, registry: SessionRegistry
+    ) -> None:
+        _create(registry, session_id="s1")
+        registry.terminate_session("s1")
+        # Double-terminate is idempotent (no error)
+        registry.terminate_session("s1")
+        # But activate after terminate is invalid
+        with pytest.raises(ValueError, match="Invalid transition"):
+            registry.activate_session("s1")
+
+    def test_terminate_unknown_is_noop(
+        self, registry: SessionRegistry
+    ) -> None:
+        # Should not raise
+        registry.terminate_session("nonexistent")

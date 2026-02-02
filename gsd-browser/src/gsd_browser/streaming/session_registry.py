@@ -30,6 +30,24 @@ class SessionStatus(str, enum.Enum):
     TERMINATED = "terminated"
 
 
+# Valid status transitions (from → set of allowed targets).
+_VALID_TRANSITIONS: dict[SessionStatus, frozenset[SessionStatus]] = {
+    SessionStatus.CREATE: frozenset({
+        SessionStatus.ACTIVE,
+        SessionStatus.TERMINATED,
+    }),
+    SessionStatus.ACTIVE: frozenset({
+        SessionStatus.PAUSED,
+        SessionStatus.TERMINATED,
+    }),
+    SessionStatus.PAUSED: frozenset({
+        SessionStatus.ACTIVE,
+        SessionStatus.TERMINATED,
+    }),
+    SessionStatus.TERMINATED: frozenset(),  # terminal state
+}
+
+
 @dataclass
 class SessionState:
     """Per-session state container."""
@@ -134,24 +152,38 @@ class SessionRegistry:
                 if s.owner_tenant_id == tenant_id and s.is_active()
             )
 
+    def _transition(
+        self, session_id: str, target: SessionStatus
+    ) -> None:
+        """Transition a session to a new status (must hold _lock)."""
+        session = self._sessions.get(session_id)
+        if session is None:
+            raise KeyError(f"Session {session_id} not found")
+        allowed = _VALID_TRANSITIONS.get(session.status, frozenset())
+        if target not in allowed:
+            raise ValueError(
+                f"Invalid transition: {session.status.value}"
+                f" -> {target.value} for session {session_id}"
+            )
+        session.status = target
+        session.touch()
+
     def activate_session(self, session_id: str) -> None:
         """Transition session to ACTIVE status."""
         with self._lock:
-            session = self._sessions.get(session_id)
-            if session is None:
-                raise KeyError(f"Session {session_id} not found")
-            session.status = SessionStatus.ACTIVE
-            session.touch()
+            self._transition(session_id, SessionStatus.ACTIVE)
             logger.info("Session activated: %s", session_id)
 
     def pause_session(self, session_id: str) -> None:
         """Transition session to PAUSED status."""
         with self._lock:
-            session = self._sessions.get(session_id)
-            if session is None:
-                raise KeyError(f"Session {session_id} not found")
-            session.status = SessionStatus.PAUSED
-            session.touch()
+            self._transition(session_id, SessionStatus.PAUSED)
+
+    def resume_session(self, session_id: str) -> None:
+        """Transition session from PAUSED back to ACTIVE."""
+        with self._lock:
+            self._transition(session_id, SessionStatus.ACTIVE)
+            logger.info("Session resumed: %s", session_id)
 
     def terminate_session(self, session_id: str) -> None:
         """Transition session to TERMINATED status.
@@ -163,8 +195,9 @@ class SessionRegistry:
             session = self._sessions.get(session_id)
             if session is None:
                 return  # Idempotent
-            session.status = SessionStatus.TERMINATED
-            session.touch()
+            if session.status == SessionStatus.TERMINATED:
+                return  # Already terminated
+            self._transition(session_id, SessionStatus.TERMINATED)
             logger.info("Session terminated: %s", session_id)
 
     def cleanup_expired(self) -> int:

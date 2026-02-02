@@ -230,6 +230,24 @@ def _activate_session_in_registry(registry: Any, session_id: str) -> None:
         logger.debug("Failed to activate session in registry", exc_info=True)
 
 
+def _build_stream_url(settings: Settings, session_id: str) -> str | None:
+    """Build the streaming URL for a session (ADR-0024 / RS-3).
+
+    Uses public host/scheme if configured, otherwise falls back to
+    localhost dashboard URL. Returns None if no dashboard is available.
+    """
+    public_host = getattr(settings, "streaming_public_host", "") or ""
+    public_scheme = getattr(settings, "streaming_public_scheme", "") or "wss"
+    if public_host:
+        return f"{public_scheme}://{public_host}/stream"
+
+    bind_host = (
+        getattr(settings, "streaming_bind_host", "")
+        or DEFAULT_DASHBOARD_HOST
+    )
+    return f"ws://{bind_host}:{DEFAULT_DASHBOARD_PORT}/stream"
+
+
 def _select_web_eval_agent_mode(*, normalized_url: str, explicit: str | None) -> str:
     if explicit is not None:
         candidate = str(explicit).strip().lower()
@@ -716,8 +734,9 @@ async def web_eval_agent(
     settings = load_settings(strict=False)
     ensure_dashboard_running = getattr(runtime, "ensure_dashboard_running", None)
     if callable(ensure_dashboard_running):
+        bind_host = getattr(settings, "streaming_bind_host", "") or DEFAULT_DASHBOARD_HOST
         ensure_dashboard_running(
-            settings=settings, host=DEFAULT_DASHBOARD_HOST, port=DEFAULT_DASHBOARD_PORT
+            settings=settings, host=bind_host, port=DEFAULT_DASHBOARD_PORT
         )
 
     dashboard_fn = getattr(runtime, "dashboard", None)
@@ -1799,6 +1818,7 @@ async def web_eval_agent(
             history=history,
             max_items=8,
         )
+        stream_url = _build_stream_url(settings, session_id)
         payload = {
             "version": "gsd.web_eval_agent.v1",
             "session_id": session_id,
@@ -1810,6 +1830,7 @@ async def web_eval_agent(
             "status": status,
             "result": result,
             "summary": summary,
+            "stream_url": stream_url,
             "page": page,
             "errors_top": errors_top,
             "timeouts": {
@@ -2492,8 +2513,9 @@ async def setup_browser_state(
     _ = ctx
     runtime = get_runtime()
     settings = load_settings(strict=False)
+    bind_host = getattr(settings, "streaming_bind_host", "") or DEFAULT_DASHBOARD_HOST
     runtime.ensure_dashboard_running(
-        settings=settings, host=DEFAULT_DASHBOARD_HOST, port=DEFAULT_DASHBOARD_PORT
+        settings=settings, host=bind_host, port=DEFAULT_DASHBOARD_PORT
     )
 
     tool_call_id = str(uuid.uuid4())
