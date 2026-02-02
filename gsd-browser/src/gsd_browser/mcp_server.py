@@ -134,6 +134,102 @@ def _parse_timestamp(value: Any) -> float | None:
         return None
 
 
+class TenantSessionLimitError(Exception):
+    """Raised when a tenant exceeds their concurrent session limit."""
+
+    def __init__(self, tenant_id: str, limit: int, active: int) -> None:
+        self.tenant_id = tenant_id
+        self.limit = limit
+        self.active = active
+        super().__init__(
+            f"Tenant {tenant_id} has {active} active sessions"
+            f" (limit: {limit})"
+        )
+
+
+def _get_caller_identity() -> tuple[str, str]:
+    """Return (tenant_id, subject_id) for the current caller."""
+    try:
+        from .optionb.identity import STDIO_IDENTITY
+        from .optionb.request_context import get_current_identity
+
+        identity = get_current_identity() or STDIO_IDENTITY
+        return identity.tenant_id, identity.subject_id
+    except Exception:  # noqa: BLE001
+        return "local", "local"
+
+
+def _register_session_in_registry(
+    *,
+    registry: Any,
+    session_id: str,
+    settings: Settings,
+) -> None:
+    """Register a new session in the SessionRegistry if available.
+
+    Raises TenantSessionLimitError if the tenant's active session count
+    would exceed GSD_MAX_SESSIONS_PER_TENANT.
+    """
+    if registry is None:
+        return
+    create = getattr(registry, "create_session", None)
+    if not callable(create):
+        return
+    tenant_id, subject_id = _get_caller_identity()
+    worker_id = getattr(settings, "worker_id", "") or ""
+
+    # Enforce tenant session limit (ADR-0026 / MS-7)
+    max_sessions = getattr(settings, "max_sessions_per_tenant", 5)
+    count_active = getattr(registry, "count_active_sessions", None)
+    if callable(count_active):
+        active = count_active(tenant_id)
+        if active >= max_sessions:
+            raise TenantSessionLimitError(
+                tenant_id=tenant_id,
+                limit=max_sessions,
+                active=active,
+            )
+
+    try:
+        create(
+            session_id=session_id,
+            owner_tenant_id=tenant_id,
+            owner_subject_id=subject_id,
+            worker_id=worker_id,
+        )
+    except Exception:  # noqa: BLE001
+        logger.debug(
+            "Failed to register session in registry",
+            exc_info=True,
+        )
+
+
+def _terminate_session_in_registry(registry: Any, session_id: str) -> None:
+    """Terminate a session in the SessionRegistry if available."""
+    if registry is None:
+        return
+    terminate = getattr(registry, "terminate_session", None)
+    if not callable(terminate):
+        return
+    try:
+        terminate(session_id)
+    except Exception:  # noqa: BLE001
+        logger.debug("Failed to terminate session in registry", exc_info=True)
+
+
+def _activate_session_in_registry(registry: Any, session_id: str) -> None:
+    """Activate a session in the SessionRegistry if available."""
+    if registry is None:
+        return
+    activate = getattr(registry, "activate_session", None)
+    if not callable(activate):
+        return
+    try:
+        activate(session_id)
+    except Exception:  # noqa: BLE001
+        logger.debug("Failed to activate session in registry", exc_info=True)
+
+
 def _select_web_eval_agent_mode(*, normalized_url: str, explicit: str | None) -> str:
     if explicit is not None:
         candidate = str(explicit).strip().lower()
@@ -630,11 +726,60 @@ async def web_eval_agent(
     control_state = getattr(streaming_runtime, "control_state", None) if streaming_runtime else None
     cdp_streamer = getattr(streaming_runtime, "cdp_streamer", None) if streaming_runtime else None
     streaming_stats = getattr(streaming_runtime, "stats", None) if streaming_runtime else None
+    session_registry = getattr(streaming_runtime, "registry", None) if streaming_runtime else None
 
     tool_call_id = str(uuid.uuid4())
     session_id = str(uuid.uuid4())
     started = datetime.now(UTC).timestamp()
     normalized_url = _normalize_url(url)
+
+    # Register session in SessionRegistry (ADR-0026)
+    try:
+        _register_session_in_registry(
+            registry=session_registry,
+            session_id=session_id,
+            settings=settings,
+        )
+    except TenantSessionLimitError as exc:
+        payload = {
+            "version": "gsd.web_eval_agent.v1",
+            "session_id": session_id,
+            "tool_call_id": tool_call_id,
+            "url": normalized_url,
+            "task": task,
+            "mode": None,
+            "requested_mode": str(mode) if mode is not None else None,
+            "status": "failed",
+            "result": None,
+            "summary": str(exc),
+            "page": {"url": None, "title": None},
+            "errors_top": [],
+            "timeouts": {
+                "budget_s": None,
+                "step_timeout_s": None,
+                "max_steps": None,
+                "timed_out": False,
+            },
+            "warnings": [],
+            "artifacts": {
+                "screenshots": 0,
+                "stream_samples": 0,
+                "run_events": 0,
+            },
+            "next_actions": [
+                "Wait for existing sessions to complete.",
+                (
+                    "Increase GSD_MAX_SESSIONS_PER_TENANT"
+                    f" (current: {exc.limit})."
+                ),
+            ],
+        }
+        return [
+            TextContent(
+                type="text",
+                text=json.dumps(payload, ensure_ascii=False),
+            )
+        ]
 
     warnings: list[str] = []
     # Get defaults from settings (may be None if not set in env)
@@ -1122,6 +1267,9 @@ async def web_eval_agent(
                 set_active_session(session_id=session_id)
                 active_session_set = True
             get_or_create_cdp_session = getattr(browser_session, "get_or_create_cdp_session", None)
+
+            # Activate session in registry now that browser is up (ADR-0026)
+            _activate_session_in_registry(session_registry, session_id)
 
             async def _send_ctrl_input(event: str, payload: dict[str, Any]) -> None:
                 if not callable(get_or_create_cdp_session):
@@ -1719,6 +1867,7 @@ async def web_eval_agent(
             },
         )
 
+        _terminate_session_in_registry(session_registry, session_id)
         return [TextContent(type="text", text=json.dumps(payload, ensure_ascii=False))]
     except TimeoutError:
         duration_s = max(0.0, datetime.now(UTC).timestamp() - started)
@@ -1787,6 +1936,7 @@ async def web_eval_agent(
                 f"Open dashboard: http://{DEFAULT_DASHBOARD_HOST}:{DEFAULT_DASHBOARD_PORT}",
             ],
         }
+        _terminate_session_in_registry(session_registry, session_id)
         return [TextContent(type="text", text=json.dumps(payload, ensure_ascii=False))]
     except asyncio.CancelledError:
         duration_s = max(0.0, datetime.now(UTC).timestamp() - started)
@@ -1849,6 +1999,7 @@ async def web_eval_agent(
                 f"Open dashboard: http://{DEFAULT_DASHBOARD_HOST}:{DEFAULT_DASHBOARD_PORT}",
             ],
         }
+        _terminate_session_in_registry(session_registry, session_id)
         return [TextContent(type="text", text=json.dumps(payload, ensure_ascii=False))]
     except Exception as exc:  # noqa: BLE001
         duration_s = max(0.0, datetime.now(UTC).timestamp() - started)
@@ -1959,6 +2110,7 @@ async def web_eval_agent(
                 f"Open dashboard: http://{DEFAULT_DASHBOARD_HOST}:{DEFAULT_DASHBOARD_PORT}",
             ],
         }
+        _terminate_session_in_registry(session_registry, session_id)
         return [TextContent(type="text", text=json.dumps(payload, ensure_ascii=False))]
 
 

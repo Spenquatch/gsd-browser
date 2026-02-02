@@ -271,8 +271,8 @@ class CdpScreencastStreamer:
         except asyncio.QueueEmpty:
             return
 
-    async def _emit(self, *, event: str, payload: dict[str, Any]) -> None:
-        coro = self._sio.emit(event, payload, namespace=self._namespace)
+    async def _emit(self, *, event: str, payload: dict[str, Any], room: str | None = None) -> None:
+        coro = self._sio.emit(event, payload, namespace=self._namespace, room=room)
         target_loop = self._emit_loop
         if target_loop is None:
             await coro
@@ -542,7 +542,9 @@ class CdpScreencastStreamer:
                 "metadata": frame.metadata,
             }
 
-            await self._emit(event="frame", payload=payload)
+            # Emit to session room (ADR-0026) or broadcast if no session_id
+            room = frame.session_id if frame.session_id else None
+            await self._emit(event="frame", payload=payload, room=room)
             self._stats.note_frame_emitted(emitted_ts=emitted_ts, latency_ms=latency_ms)
 
             should_sample = bool(frame.data_base64) and (

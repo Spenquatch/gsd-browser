@@ -168,3 +168,45 @@ class TestLen:
     def test_after_create(self, registry: SessionRegistry) -> None:
         _create(registry)
         assert len(registry) == 1
+
+
+class TestTenantSessionLimit:
+    """MS-7: Verify count_active_sessions works for limit enforcement."""
+
+    def test_count_excludes_terminated(
+        self, registry: SessionRegistry
+    ) -> None:
+        _create(registry, session_id="s1")
+        _create(registry, session_id="s2")
+        registry.activate_session("s1")
+        registry.activate_session("s2")
+        assert registry.count_active_sessions("tenant-a") == 2
+
+        registry.terminate_session("s1")
+        assert registry.count_active_sessions("tenant-a") == 1
+
+    def test_count_excludes_other_tenants(
+        self, registry: SessionRegistry
+    ) -> None:
+        _create(registry, session_id="s1")
+        registry.activate_session("s1")
+        registry.create_session(
+            session_id="s2",
+            owner_tenant_id="other-tenant",
+            owner_subject_id="sub",
+            worker_id="",
+        )
+        registry.activate_session("s2")
+        assert registry.count_active_sessions("tenant-a") == 1
+        assert registry.count_active_sessions("other-tenant") == 1
+
+    def test_count_includes_created_and_paused(
+        self, registry: SessionRegistry
+    ) -> None:
+        _create(registry, session_id="s1")  # CREATED
+        _create(registry, session_id="s2")
+        registry.activate_session("s2")
+        registry.pause_session("s2")  # PAUSED
+        _create(registry, session_id="s3")
+        registry.activate_session("s3")  # ACTIVE
+        assert registry.count_active_sessions("tenant-a") == 3

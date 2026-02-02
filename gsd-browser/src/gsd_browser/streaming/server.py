@@ -484,6 +484,9 @@ def create_streaming_app(
     # Session registry for multi-session support (ADR-0026)
     registry = SessionRegistry(retention_seconds=3600.0)
 
+    # sid → Identity mapping for JWT auth mode (ADR-0023)
+    sid_identity: dict[str, Any] = {}
+
     # Session room join handler (ADR-0024)
     @sio.on("join_session", namespace=DEFAULT_STREAM_NAMESPACE)
     async def join_session(sid: str, data: Any) -> dict[str, Any]:
@@ -503,6 +506,22 @@ def create_streaming_app(
                 "join_session: session %s not in registry, allowing",
                 session_id,
             )
+        elif auth_config.auth_required:
+            # Identity-scoped room join (ADR-0023 / DA-5)
+            identity = sid_identity.get(sid)
+            if identity is not None:
+                id_tenant = getattr(identity, "tenant_id", None)
+                if id_tenant and id_tenant != session.owner_tenant_id:
+                    get_security_logger().info(
+                        "join_session_denied_tenant_mismatch",
+                        extra={
+                            "sid": sid,
+                            "session_id": session_id,
+                            "identity_tenant": id_tenant,
+                            "session_tenant": session.owner_tenant_id,
+                        },
+                    )
+                    return {"ok": False, "error": "forbidden"}
 
         sio.enter_room(sid, session_id, namespace=DEFAULT_STREAM_NAMESPACE)
         logger.info(
@@ -568,6 +587,7 @@ def create_streaming_app(
         cdp_streamer=cdp_streamer,
         control_state=control_state,
         registry=registry,
+        _sid_identity=sid_identity,
     )
 
 
