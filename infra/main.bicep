@@ -38,6 +38,9 @@ param jwtIssuer string = 'https://fresh-sheepdog-88.clerk.accounts.dev'
 @description('Clerk JWT audience')
 param jwtAudience string = 'gsd'
 
+@description('Allowed origins for CORS (comma-separated URLs)')
+param allowedOrigins string = ''
+
 // ── Resource Group ──────────────────────────────────────────────────────
 
 resource rg 'Microsoft.Resources/resourceGroups@2024-03-01' = {
@@ -148,6 +151,7 @@ module mgmtApp 'modules/aca-app-mgmt.bicep' = {
     jwtJwksUrl: jwtJwksUrl
     jwtIssuer: jwtIssuer
     jwtAudience: jwtAudience
+    allowedOrigins: allowedOrigins
   }
 }
 

@@ -35,6 +35,9 @@ param jwtIssuer string
 @description('Clerk JWT audience')
 param jwtAudience string
 
+@description('Allowed origins for CORS (comma-separated URLs)')
+param allowedOrigins string = ''
+
 resource mgmtApp 'Microsoft.App/containerApps@2024-03-01' = {
   name: '${prefix}-mgmt'
   location: location
@@ -93,6 +96,7 @@ resource mgmtApp 'Microsoft.App/containerApps@2024-03-01' = {
             { name: 'GSD_JWT_AUDIENCE', value: jwtAudience }
             { name: 'GSD_JWT_TENANT_ID_CLAIM', value: 'tenant_id' }
             { name: 'GSD_JWT_SUBJECT_ID_CLAIM', value: 'sub' }
+            { name: 'GSD_HTTP_ALLOWED_ORIGINS', value: allowedOrigins }
           ]
           probes: [
             {
