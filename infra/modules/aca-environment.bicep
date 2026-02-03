@@ -31,6 +31,12 @@ resource env 'Microsoft.App/managedEnvironments@2024-03-01' = {
       infrastructureSubnetId: acaSubnetId
       internal: false
     }
+    workloadProfiles: [
+      {
+        name: 'Consumption'
+        workloadProfileType: 'Consumption'
+      }
+    ]
     zoneRedundant: false
   }
 }

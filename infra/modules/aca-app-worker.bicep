@@ -48,6 +48,7 @@ resource workerApp 'Microsoft.App/containerApps@2024-03-01' = {
   location: location
   properties: {
     managedEnvironmentId: environmentId
+    workloadProfileName: 'Consumption'
     configuration: {
       activeRevisionsMode: 'Single'
       ingress: {
@@ -101,17 +102,9 @@ resource workerApp 'Microsoft.App/containerApps@2024-03-01' = {
             { name: 'GSD_LLM_PROVIDER', value: 'anthropic' }
             { name: 'GSD_MODEL', value: 'claude-haiku-4-5' }
           ]
-          probes: [
-            {
-              type: 'Liveness'
-              httpGet: {
-                path: '/healthz'
-                port: 5009
-              }
-              periodSeconds: 15
-              failureThreshold: 3
-            }
-          ]
+          // Worker is a Docket task processor without HTTP server.
+          // ACA will restart if the container exits. No probe needed.
+          probes: []
         }
       ]
       scale: {
