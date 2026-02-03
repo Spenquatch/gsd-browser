@@ -177,7 +177,7 @@ module swa 'modules/static-web-app.bicep' = {
   name: 'static-web-app'
   scope: rg
   params: {
-    location: location
+    location: 'eastus2' // SWA not available in eastus; nearest region
     prefix: prefix
   }
 }

@@ -55,7 +55,6 @@ az deployment sub create \
   --location "$LOCATION" \
   --template-file "$INFRA_DIR/main.bicep" \
   --parameters "$INFRA_DIR/parameters/prod.bicepparam" \
-  --parameters anthropicApiKey="$ANTHROPIC_API_KEY" \
   --parameters imageTag="$IMAGE_TAG" \
   "${EXTRA_ARGS[@]}"
 

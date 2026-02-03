@@ -10,5 +10,5 @@ param jwtJwksUrl = 'https://fresh-sheepdog-88.clerk.accounts.dev/.well-known/jwk
 param jwtIssuer = 'https://fresh-sheepdog-88.clerk.accounts.dev'
 param jwtAudience = 'gsd'
 
-// Secrets — supplied at deploy time via --parameters or environment
-// param anthropicApiKey = <set via deploy.sh>
+// Secrets — read from environment variable at deploy time
+param anthropicApiKey = readEnvironmentVariable('ANTHROPIC_API_KEY')
