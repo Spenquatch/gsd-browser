@@ -14,8 +14,8 @@
 |-------|--------|-------|
 | Phase 0: Prerequisite | Done | I9.1 default runtime switch complete |
 | Phase 1: ADRs + Specs | **Done** | ADRs 0022-0027 all written and committed |
-| Phase 2: Core Refactors | **In Progress** | ~80% complete, see task-level status below |
-| Phase 3: Remote Streaming | Not Started | Blocked on remaining Phase 2 items |
+| Phase 2: Core Refactors | **Done** | All streams complete (A, B, C, D) |
+| Phase 3: Remote Streaming | **Done** | All tasks complete |
 | Phase 4: Azure Deployment | Not Started | Can overlap with Phase 3 |
 | Phase 5: Integration Testing | Not Started | Blocked on Phases 3+4 |
 
@@ -108,7 +108,7 @@
 | DA-3 | Implement JWT validation in `authorize_socket_connection` | DA-2 | **Done** |
 | DA-4 | Add sid->Identity mapping in streaming server | DA-3 | **Done** |
 | DA-5 | Identity-scoped frame emission (only emit to authorized sockets) | DA-4, MS-5 | **Done** |
-| DA-7 | Add JWT middleware to streaming FastAPI HTTP endpoints | DA-2 | Pending |
+| DA-7 | Add JWT middleware to streaming FastAPI HTTP endpoints | DA-2 | **Done** |
 
 **Stream C — Session Management** (parallel, depends on MS-2):
 
@@ -116,8 +116,8 @@
 |------|-------------|------------|--------|
 | MS-6 | Add `worker_id` to task ownership records | MS-2 | **Done** |
 | MS-7 | Tenant session limit enforcement (`GSD_MAX_SESSIONS_PER_TENANT`) | MS-6 | **Done** |
-| MS-8 | Session lifecycle management (create, terminate, cleanup) | MS-2, MS-6 | Pending |
-| MS-9 | Add `/api/v1/sessions/{session_id}` management endpoint | MS-8 | Pending |
+| MS-8 | Session lifecycle management (create, terminate, cleanup) | MS-2, MS-6 | **Done** |
+| MS-9 | Add `/api/v1/sessions/{session_id}` management endpoint | MS-8 | **Done** |
 
 **Stream D — React Frontend** (parallel, no server dependency until integration):
 
@@ -133,18 +133,18 @@
 | FE-8 | Wire Clerk JWT into Socket.IO auth | FE-3, FE-6 | **Done** |
 | FE-9 | Add HUD overlay (FPS, latency, seq, samples) | FE-6 | **Done** |
 | FE-10 | Export `<GsdSessionViewer>` as embeddable component | FE-6, FE-7 | **Done** |
-| FE-11 | Build + deploy pipeline for `gsd-dashboard/` | FE-1 | Pending |
+| FE-11 | Build + deploy pipeline for `gsd-dashboard/` | FE-1 | **Done** |
 
 ### Phase 3: Remote Streaming + API Integration — NOT STARTED
 
 | Task | Description | Depends On | Status |
 |------|-------------|------------|--------|
-| RS-3 | Add `stream_url` to web_eval_agent response metadata | MS-6 | Pending |
-| RS-4 | Make streaming bind address configurable (`GSD_STREAMING_BIND_HOST`) | -- | Pending |
-| RS-5 | Session-affinity health check endpoint | -- | Pending |
-| RS-6 | Wire React session viewer to per-session stream URL from API | RS-3, FE-6, FE-8 | Pending |
-| RS-7 | Document load balancer requirements (WebSocket upgrade, sticky sessions) | -- | Pending |
-| FE-12 | Wire sessions list page to real `/api/v1/sessions` + management API data | MS-9, FE-5 | Pending |
+| RS-3 | Add `stream_url` to web_eval_agent response metadata | MS-6 | **Done** |
+| RS-4 | Make streaming bind address configurable (`GSD_STREAMING_BIND_HOST`) | -- | **Done** |
+| RS-5 | Session-affinity health check endpoint | -- | **Done** |
+| RS-6 | Wire React session viewer to per-session stream URL from API | RS-3, FE-6, FE-8 | **Done** |
+| RS-7 | Document load balancer requirements (WebSocket upgrade, sticky sessions) | -- | **Done** |
+| FE-12 | Wire sessions list page to real `/api/v1/sessions` + management API data | MS-9, FE-5 | **Done** |
 
 ### Phase 4: Azure Deployment — NOT STARTED
 
@@ -272,11 +272,15 @@ The React app is a pure client — it does NOT get served by the Python server. 
 
 ## Recommended Next Steps
 
-The following tasks have all dependencies satisfied and can be started now:
+Phases 0-3 are complete. Next up is Phase 4 (Azure Deployment) and Phase 5 (Integration Testing).
 
-1. **DA-7** — JWT middleware on streaming FastAPI HTTP endpoints
-2. **MS-8** — Session lifecycle management (create, terminate, cleanup hooks)
-3. **MS-9** — `/api/v1/sessions/{session_id}` management endpoint (auth-protected)
-4. **RS-3** — Add `stream_url` to web_eval_agent response metadata
-5. **RS-4** — Make streaming bind address configurable (`GSD_STREAMING_BIND_HOST`)
-6. **FE-11** — Build + deploy pipeline for `gsd-dashboard/`
+Phase 4 tasks are all unblocked:
+1. **AZ-2** — Bicep/Terraform template: VNet, ACA environment, Redis, Blob Storage
+2. **AZ-9** — Cost analysis for 5-20 concurrent sessions (no infra dependency)
+
+Phase 5 tasks with dependencies already satisfied:
+1. **CL-4** — Clerk JWT integration test
+2. **DA-8** — JWT-authenticated Socket.IO e2e test
+3. **MS-11** — Two concurrent sessions on same worker test
+4. **MS-12** — Tenant session limit enforcement test
+5. **CL-5** — Document embeddable JWT passing contract

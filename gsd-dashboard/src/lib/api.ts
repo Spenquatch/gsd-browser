@@ -36,3 +36,25 @@ export async function fetchSession(
   }
   return res.json();
 }
+
+export async function terminateSession(
+  sessionId: string,
+  token?: string,
+): Promise<{ ok: boolean; session_id: string }> {
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+  };
+  if (token) {
+    headers["Authorization"] = `Bearer ${token}`;
+  }
+
+  const res = await fetch(
+    `${BASE_URL}/api/v1/sessions/${sessionId}/terminate`,
+    { method: "POST", headers },
+  );
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.error || `Terminate failed: ${res.status}`);
+  }
+  return res.json();
+}

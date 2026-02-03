@@ -4,17 +4,37 @@ import { ControlPanel } from "../components/ControlPanel";
 import { Hud } from "../components/Hud";
 import { useStreamSocket } from "../hooks/useStreamSocket";
 import { useControlSocket } from "../hooks/useControlSocket";
+import { useSession } from "../hooks/useSession";
 
 export function LiveSessionPage() {
   const { id: sessionId } = useParams<{ id: string }>();
 
-  const stream = useStreamSocket({ sessionId: sessionId ?? "" });
-  const control = useControlSocket({ sessionId: sessionId ?? "" });
+  const { session, loading, error } = useSession(sessionId ?? "");
+  const streamUrl = session?.stream_url ?? undefined;
+
+  const stream = useStreamSocket({ sessionId: sessionId ?? "", streamUrl });
+  const control = useControlSocket({ sessionId: sessionId ?? "", streamUrl });
 
   if (!sessionId) {
     return (
       <div className="flex h-full items-center justify-center text-gray-500">
         No session ID provided.
+      </div>
+    );
+  }
+
+  if (loading) {
+    return (
+      <div className="flex h-full items-center justify-center text-gray-500">
+        Loading session...
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex h-full items-center justify-center text-red-500">
+        {error}
       </div>
     );
   }

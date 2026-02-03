@@ -1,8 +1,25 @@
+import { useCallback } from "react";
 import { Link } from "react-router-dom";
 import { useSessions } from "../hooks/useSessions";
+import { terminateSession } from "../lib/api";
+import { useGsdToken } from "../lib/auth";
 
 export function SessionsPage() {
-  const { sessions, loading, error } = useSessions();
+  const { sessions, loading, error, refresh } = useSessions();
+  const getToken = useGsdToken();
+
+  const handleTerminate = useCallback(
+    async (sessionId: string) => {
+      try {
+        const token = await getToken();
+        await terminateSession(sessionId, token ?? undefined);
+        refresh();
+      } catch (err) {
+        console.error("Failed to terminate session:", err);
+      }
+    },
+    [getToken, refresh],
+  );
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-8">
@@ -56,14 +73,24 @@ export function SessionsPage() {
                     {new Date(session.created_at * 1000).toLocaleString()}
                   </td>
                   <td className="whitespace-nowrap px-4 py-3 text-sm">
-                    {(session.status === "active" || session.status === "paused") && (
-                      <Link
-                        to={`/sessions/${session.session_id}`}
-                        className="font-medium text-gsd-600 hover:text-gsd-800"
-                      >
-                        View Live
-                      </Link>
-                    )}
+                    <div className="flex items-center gap-3">
+                      {(session.status === "active" || session.status === "paused") && (
+                        <Link
+                          to={`/sessions/${session.session_id}`}
+                          className="font-medium text-gsd-600 hover:text-gsd-800"
+                        >
+                          View Live
+                        </Link>
+                      )}
+                      {session.status !== "terminated" && (
+                        <button
+                          onClick={() => handleTerminate(session.session_id)}
+                          className="font-medium text-red-600 hover:text-red-800"
+                        >
+                          Terminate
+                        </button>
+                      )}
+                    </div>
                   </td>
                 </tr>
               ))}
