@@ -16,9 +16,9 @@ Use Clerk JWT templates with configurable lifetimes for MCP client authenticatio
 All templates use the same claims structure as the existing `gsd` template:
 ```json
 {
-  "tenant_id": "{{user.public_metadata.tenant_id}}",
-  "sub": "{{user.id}}",
-  "email": "{{user.primary_email_address}}"
+  "aud": "gsd",
+  "scope": "gsd:browser:read gsd:browser:execute",
+  "tenant_id": "{{ org.id || user.id }}"
 }
 ```
 
@@ -61,37 +61,34 @@ Users configure their MCP client with:
 
 Go to Clerk Dashboard → JWT Templates and create these 5 templates:
 
+### Claims Template (same for all)
+```json
+{
+  "aud": "gsd",
+  "scope": "gsd:browser:read gsd:browser:execute",
+  "tenant_id": "{{ org.id || user.id }}"
+}
+```
+
 ### Template: `gsd-24h`
 - **Name**: `gsd-24h`
 - **Lifetime**: 86400 seconds (24 hours)
-- **Claims**:
-```json
-{
-  "tenant_id": "{{user.public_metadata.tenant_id}}",
-  "sub": "{{user.id}}",
-  "email": "{{user.primary_email_address}}"
-}
-```
 
 ### Template: `gsd-7d`
 - **Name**: `gsd-7d`
 - **Lifetime**: 604800 seconds (7 days)
-- **Claims**: Same as above
 
 ### Template: `gsd-30d`
 - **Name**: `gsd-30d`
 - **Lifetime**: 2592000 seconds (30 days)
-- **Claims**: Same as above
 
 ### Template: `gsd-6m`
 - **Name**: `gsd-6m`
 - **Lifetime**: 15552000 seconds (6 months)
-- **Claims**: Same as above
 
 ### Template: `gsd-1y`
 - **Name**: `gsd-1y`
 - **Lifetime**: 31536000 seconds (1 year)
-- **Claims**: Same as above
 
 ## Security Notes
 - Tokens cannot be revoked once issued (Clerk limitation)
