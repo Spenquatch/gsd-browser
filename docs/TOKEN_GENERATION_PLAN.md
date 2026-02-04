@@ -53,9 +53,45 @@ Users configure their MCP client with:
 - CORS and origin checks fixed for server-to-server calls
 
 ### Pending
-1. Create Clerk JWT templates (5 templates with different lifetimes)
-2. Add token generation UI to dashboard
+1. Create Clerk JWT templates (5 templates with different lifetimes) - **Manual step required**
+2. ~~Add token generation UI to dashboard~~ **DONE** - `/tokens` page added
 3. Test end-to-end MCP client flow
+
+## Clerk JWT Template Setup (Manual Step)
+
+Go to Clerk Dashboard → JWT Templates and create these 5 templates:
+
+### Template: `gsd-24h`
+- **Name**: `gsd-24h`
+- **Lifetime**: 86400 seconds (24 hours)
+- **Claims**:
+```json
+{
+  "tenant_id": "{{user.public_metadata.tenant_id}}",
+  "sub": "{{user.id}}",
+  "email": "{{user.primary_email_address}}"
+}
+```
+
+### Template: `gsd-7d`
+- **Name**: `gsd-7d`
+- **Lifetime**: 604800 seconds (7 days)
+- **Claims**: Same as above
+
+### Template: `gsd-30d`
+- **Name**: `gsd-30d`
+- **Lifetime**: 2592000 seconds (30 days)
+- **Claims**: Same as above
+
+### Template: `gsd-6m`
+- **Name**: `gsd-6m`
+- **Lifetime**: 15552000 seconds (6 months)
+- **Claims**: Same as above
+
+### Template: `gsd-1y`
+- **Name**: `gsd-1y`
+- **Lifetime**: 31536000 seconds (1 year)
+- **Claims**: Same as above
 
 ## Security Notes
 - Tokens cannot be revoked once issued (Clerk limitation)

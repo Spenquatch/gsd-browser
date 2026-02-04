@@ -3,6 +3,7 @@ import { SignedIn, SignedOut, SignInButton } from "@clerk/clerk-react";
 import { Layout } from "./components/Layout";
 import { SessionsPage } from "./pages/SessionsPage";
 import { LiveSessionPage } from "./pages/LiveSessionPage";
+import { TokensPage } from "./pages/TokensPage";
 
 function AuthGate({ children }: { children: React.ReactNode }) {
   return (
@@ -34,6 +35,7 @@ export function App() {
         <Route element={<Layout />}>
           <Route index element={<SessionsPage />} />
           <Route path="sessions/:id" element={<LiveSessionPage />} />
+          <Route path="tokens" element={<TokensPage />} />
         </Route>
       </Routes>
     </AuthGate>
