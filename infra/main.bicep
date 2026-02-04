@@ -133,6 +133,7 @@ module apiApp 'modules/aca-app-api.bicep' = {
     jwtJwksUrl: jwtJwksUrl
     jwtIssuer: jwtIssuer
     jwtAudience: jwtAudience
+    allowedOrigins: allowedOrigins
   }
 }
 

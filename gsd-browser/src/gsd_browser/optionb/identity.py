@@ -65,8 +65,20 @@ def identity_from_claims(
     tenant_id_claim: str,
     subject_id_claim: str,
 ) -> Identity:
-    tenant_raw = claims.get(tenant_id_claim)
     subject_raw = claims.get(subject_id_claim)
+    if subject_raw is None and subject_id_claim != "sub":
+        subject_raw = claims.get("sub")
+
+    tenant_raw = claims.get(tenant_id_claim)
+    # Backward/compat: allow Clerk default org claim when no custom tenant_id claim is present.
+    if tenant_raw is None:
+        if tenant_id_claim != "tenant_id":
+            tenant_raw = claims.get("tenant_id")
+        if tenant_raw is None:
+            tenant_raw = claims.get("org_id") or claims.get("orgId")
+        if tenant_raw is None:
+            # Personal workspace fallback (ADR-0022): use subject_id as tenant_id.
+            tenant_raw = subject_raw
 
     tenant_id = _normalize_identity_component(tenant_raw, field_name="tenant_id")
     subject_id = _normalize_identity_component(subject_raw, field_name="subject_id")

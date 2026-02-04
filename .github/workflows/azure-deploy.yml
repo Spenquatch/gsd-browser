@@ -125,9 +125,11 @@ jobs:
           npm run build
         env:
           VITE_CLERK_PUBLISHABLE_KEY: ${{ secrets.VITE_CLERK_PUBLISHABLE_KEY }}
-          VITE_GSD_API_BASE_URL: https://${{ needs.deploy-infra.outputs.api_fqdn }}
+          # Dashboard talks to the management API for session/task ops.
+          VITE_GSD_API_BASE_URL: https://${{ needs.deploy-infra.outputs.mgmt_fqdn }}
           VITE_GSD_MGMT_API_BASE_URL: https://${{ needs.deploy-infra.outputs.mgmt_fqdn }}
           VITE_GSD_WORKER_BASE_URL: https://${{ needs.deploy-infra.outputs.worker_fqdn }}
+          VITE_GSD_CLERK_JWT_TEMPLATE: gsd
 
       - name: Deploy to Static Web Apps
         uses: Azure/static-web-apps-deploy@v1

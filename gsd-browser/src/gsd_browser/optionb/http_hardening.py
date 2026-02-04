@@ -165,7 +165,12 @@ class LocalHttpHardeningMiddleware:
         headers = _http_headers(scope)
 
         origin = (headers.get("origin") or "").strip()
-        if not origin or not _is_allowed_origin(origin=origin, config=self._config):
+        # Allow empty/missing origin when allow_null_origin is True (for server-to-server calls)
+        origin_allowed = (
+            (not origin and self._config.allow_null_origin)
+            or (origin and _is_allowed_origin(origin=origin, config=self._config))
+        )
+        if not origin_allowed:
             response = JSONResponse(
                 {"error": "origin_not_allowed", "origin": origin},
                 status_code=403,

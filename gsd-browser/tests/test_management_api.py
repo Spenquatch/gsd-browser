@@ -144,6 +144,83 @@ def test_management_tasks_list_is_identity_scoped(
     assert payload["next_cursor"] is None
 
 
+def test_management_sessions_list_is_identity_scoped(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path_factory: pytest.TempPathFactory,
+) -> None:
+    _clear_management_env(monkeypatch)
+    _configure_memory_docket(monkeypatch, label="management-sessions-list-identity")
+
+    api_keys_file = _write_api_keys_file(
+        tmp_path_factory,
+        [
+            {
+                "key": "key-a",
+                "tenant_id": "tenant-a",
+                "subject_id": "subject-a",
+                "scopes": ["gsd:browser:read"],
+            },
+            {
+                "key": "key-b",
+                "tenant_id": "tenant-b",
+                "subject_id": "subject-b",
+                "scopes": ["gsd:browser:read"],
+            },
+        ],
+    )
+    monkeypatch.setenv("GSD_API_KEYS_FILE", api_keys_file)
+
+    app = build_management_app()
+    headers = {"Host": "localhost", "Origin": "http://localhost", "X-API-Key": "key-a"}
+    with TestClient(app) as client:
+        from gsd_browser.optionb import task_ownership
+        from gsd_browser.optionb.identity import Identity
+
+        docket = client.app.state.docket
+        store = task_ownership.TaskOwnershipStore(docket_getter=lambda: docket)
+
+        base_ms = 2_000_000_000_000
+        identity_a = Identity(tenant_id="tenant-a", subject_id="subject-a", transport="http")
+        identity_b = Identity(tenant_id="tenant-b", subject_id="subject-b", transport="http")
+
+        async def seed() -> None:
+            await store.write(
+                task_ownership.build_record(
+                    task_id="task-a",
+                    tool_name="web_eval_agent",
+                    identity=identity_a,
+                    session_id="sess-a",
+                    ttl_ms=60_000,
+                    created_at_ms=base_ms + 1000,
+                )
+            )
+            await store.write(
+                task_ownership.build_record(
+                    task_id="task-b",
+                    tool_name="web_task_agent",
+                    identity=identity_b,
+                    session_id="sess-b",
+                    ttl_ms=60_000,
+                    created_at_ms=base_ms + 2000,
+                )
+            )
+
+        assert client.portal is not None
+        client.portal.call(seed)
+        resp = client.get("/api/v1/sessions", headers=headers)
+
+    assert resp.status_code == 200
+    payload = resp.json()
+    assert isinstance(payload, list)
+    assert [session["session_id"] for session in payload] == ["sess-a"]
+    session = payload[0]
+    assert session["tenant_id"] == "tenant-a"
+    assert session["subject_id"] == "subject-a"
+    assert session["status"] == "create"
+    assert session["created_at"] == int((base_ms + 1000) / 1000)
+    assert session["last_activity_at"] >= session["created_at"]
+
+
 def test_management_admin_tasks_list_requires_admin_mode_and_scope(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path_factory: pytest.TempPathFactory,

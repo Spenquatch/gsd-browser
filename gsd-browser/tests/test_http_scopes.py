@@ -28,6 +28,16 @@ def test_extract_scopes_from_claims_scp_list_with_non_string_yields_empty() -> N
     assert extract_scopes_from_claims(claims) == set()
 
 
+def test_extract_scopes_from_claims_falls_back_to_clerk_org_permissions_list() -> None:
+    claims = {"org_permissions": ["gsd:browser:read", "gsd:browser:execute"]}
+    assert extract_scopes_from_claims(claims) == {"gsd:browser:read", "gsd:browser:execute"}
+
+
+def test_extract_scopes_from_claims_org_permissions_list_with_non_string_yields_empty() -> None:
+    claims = {"org_permissions": ["gsd:admin", 123]}
+    assert extract_scopes_from_claims(claims) == set()
+
+
 def test_has_any_scope_allows_when_required_empty() -> None:
     assert has_any_scope({"gsd:admin"}, set()) is True
 
@@ -35,4 +45,3 @@ def test_has_any_scope_allows_when_required_empty() -> None:
 def test_has_any_scope_checks_intersection() -> None:
     assert has_any_scope({"gsd:browser:read"}, {"gsd:browser:execute"}) is False
     assert has_any_scope({"gsd:browser:read"}, {"gsd:browser:read"}) is True
-

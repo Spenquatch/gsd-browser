@@ -21,6 +21,20 @@ def extract_scopes_from_claims(claims: Mapping[str, Any]) -> set[str]:
 
     raw_scp = claims.get("scp")
     if raw_scp is None:
+        # Clerk (no custom JWT template) commonly provides org permissions as a list.
+        # Supporting this keeps the server IdP-agnostic while allowing Clerk defaults.
+        raw_org_permissions = claims.get("org_permissions")
+        if isinstance(raw_org_permissions, list):
+            scopes: set[str] = set()
+            for item in raw_org_permissions:
+                if not isinstance(item, str):
+                    return set()
+                scope = item.strip()
+                if scope:
+                    scopes.add(scope)
+            return scopes
+        if isinstance(raw_org_permissions, str):
+            return _parse_scope_string(raw_org_permissions)
         return set()
 
     if isinstance(raw_scp, str):
@@ -48,4 +62,3 @@ def has_any_scope(scopes: set[str], required: Iterable[str]) -> bool:
 
 def _parse_scope_string(value: str) -> set[str]:
     return {scope for scope in value.strip().split() if scope}
-

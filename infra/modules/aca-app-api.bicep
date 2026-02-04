@@ -39,6 +39,9 @@ param jwtIssuer string
 @description('Clerk JWT audience')
 param jwtAudience string
 
+@description('Allowed origins for CORS (comma-separated URLs)')
+param allowedOrigins string = ''
+
 resource apiApp 'Microsoft.App/containerApps@2024-03-01' = {
   name: '${prefix}-api'
   location: location
@@ -103,6 +106,8 @@ resource apiApp 'Microsoft.App/containerApps@2024-03-01' = {
             { name: 'ANTHROPIC_API_KEY', secretRef: 'anthropic-api-key' }
             { name: 'GSD_LLM_PROVIDER', value: 'anthropic' }
             { name: 'GSD_MODEL', value: 'claude-haiku-4-5' }
+            { name: 'GSD_HTTP_ALLOWED_ORIGINS', value: allowedOrigins }
+            { name: 'GSD_HTTP_ALLOW_NULL_ORIGIN', value: 'true' }
           ]
           probes: [
             {

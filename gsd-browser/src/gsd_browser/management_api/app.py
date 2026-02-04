@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import logging
 import os
+import time
 from collections.abc import Awaitable, Callable, Iterator, Mapping
 from contextlib import asynccontextmanager, contextmanager
+from datetime import UTC, datetime
 from typing import Any, TypeVar, cast
 
 import fastmcp
@@ -34,6 +36,7 @@ from ..optionb.ops_tasks import (
     get_ops_tasks_service,
 )
 from ..optionb.scopes import extract_scopes_from_claims, has_any_scope
+from ..optionb.task_ownership import TaskOwnershipRecord
 
 logger = logging.getLogger("gsd_browser.management_api")
 
@@ -79,13 +82,13 @@ def _should_authenticate_request(*, method: str, path: str) -> bool:
     return normalized_path.startswith("/api/") or normalized_path == "/api"
 
 
-def _unauthorized_response() -> JSONResponse:
+def _unauthorized_response(*, reason: str, details: dict[str, Any] | None = None) -> JSONResponse:
     return JSONResponse(
         {
             "error": {
                 "code": "unauthenticated",
                 "message": "Missing or invalid authentication",
-                "details": {},
+                "details": {"reason": reason, **(details or {})},
             }
         },
         status_code=401,
@@ -145,7 +148,7 @@ class ManagementAuthMiddleware:
             if api_key:
                 match = self._api_keys.lookup_identity_and_scopes(api_key)
                 if match is None:
-                    response = _unauthorized_response()
+                    response = _unauthorized_response(reason="invalid_api_key")
                     await response(scope, receive, send)
                     return
                 identity, scopes = match
@@ -155,14 +158,33 @@ class ManagementAuthMiddleware:
                 return
 
         token = _authorization_bearer_token(headers)
-        if not token or self._jwt_verifier is None:
-            response = _unauthorized_response()
+        if not token:
+            response = _unauthorized_response(reason="missing_bearer")
             await response(scope, receive, send)
             return
 
-        access_token = await self._jwt_verifier.verify_token(token)
+        if self._jwt_verifier is None:
+            response = _unauthorized_response(reason="jwt_not_configured")
+            await response(scope, receive, send)
+            return
+
+        audience_mismatch: Any | None = None
+        if isinstance(self._jwt_verifier, GsdJwtVerifier):
+            access_token, audience_mismatch = await self._jwt_verifier.verify_token_with_audience_details(token)
+        else:
+            access_token = await self._jwt_verifier.verify_token(token)
+
         if access_token is None:
-            response = _unauthorized_response()
+            if audience_mismatch is not None:
+                response = _unauthorized_response(
+                    reason="audience_mismatch",
+                    details={
+                        "expected_audience": getattr(audience_mismatch, "expected_audience", ""),
+                        "actual_audience": getattr(audience_mismatch, "actual_audience", ""),
+                    },
+                )
+            else:
+                response = _unauthorized_response(reason="invalid_bearer")
             await response(scope, receive, send)
             return
 
@@ -174,7 +196,12 @@ class ManagementAuthMiddleware:
                 subject_id_claim=get_jwt_subject_id_claim_name(),
             )
         except ValueError:
-            response = _unauthorized_response()
+            response = _unauthorized_response(
+                reason="invalid_claims",
+                details={
+                    "hint": "Expected tenant/subject claims. If using Clerk, ensure the JWT template is configured (or org claims are present)."
+                },
+            )
             await response(scope, receive, send)
             return
 
@@ -267,6 +294,277 @@ def _require_ops_scopes(scopes: set[str], *, required: tuple[str, ...]) -> None:
         message="Insufficient scope",
         details={"required_scopes": list(required)},
     )
+
+
+def _now_ms() -> int:
+    return int(time.time() * 1000)
+
+
+def _parse_iso_datetime_to_epoch_s(raw: bytes) -> int | None:
+    try:
+        value = raw.decode("utf-8").strip()
+        if not value:
+            return None
+        if value.endswith("Z"):
+            value = f"{value[:-1]}+00:00"
+        dt = datetime.fromisoformat(value)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=UTC)
+        return int(dt.astimezone(UTC).timestamp())
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _task_state_from_runs_hash(runs_hash: dict[bytes, bytes]) -> tuple[str, int | None]:
+    raw_state = runs_hash.get(b"state")
+    state = raw_state.decode("utf-8") if isinstance(raw_state, (bytes, bytearray)) else ""
+
+    if state in {"running"}:
+        status = "running"
+    elif state in {"completed"}:
+        status = "completed"
+    elif state in {"failed"}:
+        status = "failed"
+    elif state in {"cancelled"}:
+        status = "cancelled"
+    else:
+        status = "queued"
+
+    last_activity: int | None = None
+    for key in (b"completed_at", b"started_at"):
+        raw_dt = runs_hash.get(key)
+        if raw_dt is None:
+            continue
+        parsed = _parse_iso_datetime_to_epoch_s(raw_dt)
+        if parsed is not None:
+            last_activity = parsed
+            break
+
+    return status, last_activity
+
+
+async def _read_task_ownership_records(
+    *,
+    docket: Docket,
+    identity: Identity,
+    now_ms: int,
+    session_id: str | None = None,
+) -> list[TaskOwnershipRecord]:
+    import redis.exceptions
+
+    pattern = "gsd:v1:tasks:*:owner"
+    records: list[TaskOwnershipRecord] = []
+
+    try:
+        async with docket.redis() as redis:
+            cursor = 0
+            while True:
+                cursor, keys = await redis.scan(cursor=cursor, match=pattern, count=250)
+                if keys:
+                    raw_values = await redis.mget(keys)
+                    for raw in raw_values:
+                        if raw is None:
+                            continue
+                        if isinstance(raw, bytes):
+                            raw = raw.decode("utf-8")
+                        if not isinstance(raw, str):
+                            continue
+                        try:
+                            record = TaskOwnershipRecord.model_validate_json(raw)
+                        except Exception:  # noqa: BLE001
+                            continue
+                        if record.tenant_id != identity.tenant_id or record.subject_id != identity.subject_id:
+                            continue
+                        if int(record.expires_at_ms) <= int(now_ms):
+                            continue
+                        if session_id is not None and record.session_id != session_id:
+                            continue
+                        records.append(record)
+                if cursor == 0:
+                    break
+    except redis.exceptions.RedisError as exc:
+        raise RuntimeError("Failed to list TaskOwnershipRecords") from exc
+
+    return records
+
+
+async def _sessions_payload(
+    *, docket: Docket, identity: Identity, session_id: str | None = None
+) -> list[dict[str, Any]]:
+    now_ms = _now_ms()
+    records = await _read_task_ownership_records(
+        docket=docket,
+        identity=identity,
+        now_ms=now_ms,
+        session_id=session_id,
+    )
+    if not records:
+        return []
+
+    from fastmcp.server.tasks.keys import build_task_key
+
+    by_session: dict[str, dict[str, Any]] = {}
+
+    import redis.exceptions
+
+    try:
+        async with docket.redis() as redis:
+            for record in records:
+                sid = record.session_id
+                created_at_s = int(int(record.created_at_ms) / 1000)
+
+                agg = by_session.get(sid)
+                if agg is None:
+                    agg = {
+                        "session_id": sid,
+                        "status": "create",
+                        "tenant_id": record.tenant_id,
+                        "subject_id": record.subject_id,
+                        "worker_id": record.worker_id or "",
+                        "stream_url": None,
+                        "created_at": created_at_s,
+                        "last_activity_at": created_at_s,
+                        "_task_states": set(),
+                    }
+                    by_session[sid] = agg
+                else:
+                    if created_at_s < int(agg["created_at"]):
+                        agg["created_at"] = created_at_s
+                    if created_at_s > int(agg["last_activity_at"]):
+                        agg["last_activity_at"] = created_at_s
+
+                task_key = build_task_key(record.session_id, record.task_id, "tool", record.tool_name)
+                runs_hash = await redis.hgetall(docket.runs_key(task_key))
+                if runs_hash:
+                    state, last_activity_s = _task_state_from_runs_hash(runs_hash)
+                else:
+                    state, last_activity_s = ("queued", None)
+
+                agg["_task_states"].add(state)
+                if last_activity_s is not None and last_activity_s > int(agg["last_activity_at"]):
+                    agg["last_activity_at"] = last_activity_s
+    except redis.exceptions.RedisError as exc:
+        raise RuntimeError("Failed to list session state") from exc
+
+    out: list[dict[str, Any]] = []
+    for agg in by_session.values():
+        states = cast(set[str], agg.pop("_task_states"))
+        if "running" in states:
+            agg["status"] = "active"
+        elif "queued" in states:
+            agg["status"] = "create"
+        else:
+            agg["status"] = "terminated"
+        out.append(agg)
+
+    out.sort(
+        key=lambda s: (int(s.get("created_at", 0)), str(s.get("session_id", ""))),
+        reverse=True,
+    )
+    return out
+
+
+async def _list_sessions(request: Request) -> Response:
+    identity, scopes = _require_identity_and_scopes(request)
+    try:
+        _require_ops_scopes(scopes, required=("gsd:browser:read", "gsd:admin"))
+
+        docket = cast(Docket, request.app.state.docket)
+        with _docket_scope(docket):
+            sessions = await _sessions_payload(docket=docket, identity=identity)
+        return JSONResponse(sessions)
+    except OpsTasksServiceError as exc:
+        status_code = 403 if exc.code == "forbidden" else 400
+        return _error_response(
+            status_code=status_code,
+            code=exc.code,
+            message=exc.message,
+            details=exc.details,
+        )
+
+
+async def _get_session(request: Request) -> Response:
+    identity, scopes = _require_identity_and_scopes(request)
+    try:
+        _require_ops_scopes(scopes, required=("gsd:browser:read", "gsd:admin"))
+        session_id = str(request.path_params.get("session_id") or "").strip()
+        if not session_id:
+            raise OpsTasksServiceError(
+                code="invalid_session_id",
+                message="Invalid session_id",
+                details={},
+            )
+
+        docket = cast(Docket, request.app.state.docket)
+        with _docket_scope(docket):
+            sessions = await _sessions_payload(docket=docket, identity=identity, session_id=session_id)
+        if not sessions:
+            return _error_response(
+                status_code=404,
+                code="not_found",
+                message="Session not found",
+                details={},
+            )
+        return JSONResponse(sessions[0])
+    except OpsTasksServiceError as exc:
+        status_code = 403 if exc.code == "forbidden" else 400
+        return _error_response(
+            status_code=status_code,
+            code=exc.code,
+            message=exc.message,
+            details=exc.details,
+        )
+
+
+async def _terminate_session(request: Request) -> Response:
+    identity, scopes = _require_identity_and_scopes(request)
+    try:
+        _require_ops_scopes(scopes, required=("gsd:browser:execute", "gsd:admin"))
+        session_id = str(request.path_params.get("session_id") or "").strip()
+        if not session_id:
+            raise OpsTasksServiceError(
+                code="invalid_session_id",
+                message="Invalid session_id",
+                details={},
+            )
+
+        docket = cast(Docket, request.app.state.docket)
+        with _docket_scope(docket):
+            now_ms = _now_ms()
+            records = await _read_task_ownership_records(
+                docket=docket, identity=identity, now_ms=now_ms, session_id=session_id
+            )
+            if not records:
+                return _error_response(
+                    status_code=404,
+                    code="not_found",
+                    message="Session not found",
+                    details={},
+                )
+
+            from fastmcp.server.tasks.keys import build_task_key
+
+            cancelled = 0
+            errors: list[str] = []
+            for record in records:
+                try:
+                    task_key = build_task_key(record.session_id, record.task_id, "tool", record.tool_name)
+                    await docket.cancel(task_key)
+                    cancelled += 1
+                except Exception as exc:  # noqa: BLE001
+                    errors.append(str(exc)[:200])
+
+        return JSONResponse(
+            {"ok": True, "session_id": session_id, "cancelled_tasks": cancelled, "errors": errors}
+        )
+    except OpsTasksServiceError as exc:
+        status_code = 403 if exc.code == "forbidden" else 400
+        return _error_response(
+            status_code=status_code,
+            code=exc.code,
+            message=exc.message,
+            details=exc.details,
+        )
 
 
 async def _list_tasks(request: Request) -> Response:
@@ -444,6 +742,13 @@ def build_management_app() -> Starlette:
         lifespan=_docket_lifespan,
         routes=[
             Route("/healthz", _healthz, methods=["GET"]),
+            Route("/api/v1/sessions", _list_sessions, methods=["GET"]),
+            Route("/api/v1/sessions/{session_id:str}", _get_session, methods=["GET"]),
+            Route(
+                "/api/v1/sessions/{session_id:str}/terminate",
+                _terminate_session,
+                methods=["POST"],
+            ),
             Route("/api/v1/tasks", _list_tasks, methods=["GET"]),
             Route("/api/v1/jobs/{job_id:str}", _get_job, methods=["GET"]),
             Route("/api/v1/admin/tasks", _admin_list_tasks, methods=["GET"]),

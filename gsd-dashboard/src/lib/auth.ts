@@ -8,7 +8,7 @@ const JWT_TEMPLATE = import.meta.env.VITE_GSD_CLERK_JWT_TEMPLATE || "gsd";
  * Returns null if Clerk is not configured or user is not signed in.
  */
 export function useGsdToken(): () => Promise<string | null> {
-  let getToken: ((opts: { template: string }) => Promise<string | null>) | null = null;
+  let getToken: ((opts?: { template?: string }) => Promise<string | null>) | null = null;
 
   try {
     const auth = useAuth();
@@ -19,6 +19,9 @@ export function useGsdToken(): () => Promise<string | null> {
 
   return useCallback(async () => {
     if (!getToken) return null;
-    return getToken({ template: JWT_TEMPLATE });
+    const templated = await getToken({ template: JWT_TEMPLATE });
+    if (templated) return templated;
+    // Fallback to default session token if the named template isn't configured in Clerk.
+    return getToken();
   }, [getToken]);
 }

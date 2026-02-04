@@ -30,12 +30,31 @@ def test_identity_from_claims_accepts_valid_values() -> None:
     assert identity.transport == "http"
 
 
+def test_identity_from_claims_falls_back_to_org_id_when_tenant_id_missing() -> None:
+    identity = identity_from_claims(
+        {"org_id": "org_1", "sub": "user_1"},
+        tenant_id_claim="tenant_id",
+        subject_id_claim="sub",
+    )
+    assert identity.tenant_id == "org_1"
+    assert identity.subject_id == "user_1"
+
+
+def test_identity_from_claims_falls_back_to_subject_when_tenant_id_missing() -> None:
+    identity = identity_from_claims(
+        {"sub": "user_1"},
+        tenant_id_claim="tenant_id",
+        subject_id_claim="sub",
+    )
+    assert identity.tenant_id == "user_1"
+    assert identity.subject_id == "user_1"
+
+
 @pytest.mark.parametrize(
     ("claims", "match"),
     [
         ({}, "tenant_id"),
         ({"tenant_id": "t"}, "subject_id"),
-        ({"sub": "u"}, "tenant_id"),
         ({"tenant_id": " ", "sub": "u"}, "tenant_id"),
         ({"tenant_id": "t", "sub": " "}, "subject_id"),
         ({"tenant_id": "_bad", "sub": "u"}, "tenant_id"),
@@ -114,7 +133,8 @@ def test_gsd_jwt_verifier_rejects_tokens_with_invalid_identity_claims() -> None:
         issuer="https://issuer.example.com",
         audience="gsd",
     )
-    assert asyncio.run(verifier.verify_token(missing_tenant_claim)) is None
+    # Personal workspace fallback: tenant_id defaults to subject_id.
+    assert asyncio.run(verifier.verify_token(missing_tenant_claim)) is not None
 
 
 def test_tool_wrappers_set_identity_scope_in_stdio(monkeypatch: pytest.MonkeyPatch) -> None:
