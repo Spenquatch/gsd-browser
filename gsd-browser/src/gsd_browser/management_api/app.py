@@ -38,7 +38,7 @@ from ..optionb.ops_tasks import (
     get_ops_tasks_service,
 )
 from ..optionb.scopes import extract_scopes_from_claims, has_any_scope
-from ..optionb.task_ownership import TaskOwnershipRecord
+from ..optionb.task_ownership import TaskOwnershipRecord, get_task_ownership_store
 
 logger = logging.getLogger("gsd_browser.management_api")
 
@@ -432,9 +432,123 @@ async def _read_task_ownership_records(
     return records
 
 
-async def _sessions_payload(
+async def _sessions_payload_indexed(
+    *,
+    docket: Docket,
+    identity: Identity,
+    session_id: str | None = None,
+    limit: int = 50,
+    offset: int = 0,
+) -> tuple[list[dict[str, Any]], int]:
+    """Indexed version of sessions payload using identity-scoped ZSETs.
+
+    Returns (sessions, total_count).
+    This is O(sessions_for_identity) rather than O(all_tasks_globally).
+    """
+    import redis.exceptions
+    from fastmcp.server.tasks.keys import build_task_key
+
+    stream_base_url = _stream_base_url_from_env()
+    store = get_task_ownership_store()
+
+    # Get session IDs from index
+    if session_id:
+        # Single session lookup - get tasks for that session
+        task_ids = await store.list_tasks_by_session(identity, session_id)
+        if not task_ids:
+            return [], 0
+        session_ids = [session_id]
+        total = 1
+    else:
+        # List sessions from index
+        session_ids, total = await store.list_sessions_by_identity(
+            identity, limit=limit, offset=offset
+        )
+        if not session_ids:
+            return [], total
+
+        # Get task IDs for each session (could be optimized with batch pipeline)
+        task_ids = []
+        for sid in session_ids:
+            tids = await store.list_tasks_by_session(identity, sid)
+            task_ids.extend(tids)
+
+    # Batch fetch all task ownership records
+    records_by_id = await store.get_records_for_tasks(task_ids)
+    if not records_by_id:
+        return [], total
+
+    # Build session aggregates
+    by_session: dict[str, dict[str, Any]] = {}
+
+    try:
+        async with docket.redis() as redis:
+            for record in records_by_id.values():
+                sid = record.session_id
+                created_at_s = int(int(record.created_at_ms) / 1000)
+
+                agg = by_session.get(sid)
+                if agg is None:
+                    agg = {
+                        "session_id": sid,
+                        "status": "create",
+                        "tenant_id": record.tenant_id,
+                        "subject_id": record.subject_id,
+                        "worker_id": record.worker_id or "",
+                        "stream_url": stream_base_url,
+                        "created_at": created_at_s,
+                        "last_activity_at": created_at_s,
+                        "_task_states": set(),
+                    }
+                    by_session[sid] = agg
+                else:
+                    if created_at_s < int(agg["created_at"]):
+                        agg["created_at"] = created_at_s
+                    if created_at_s > int(agg["last_activity_at"]):
+                        agg["last_activity_at"] = created_at_s
+
+                task_key = build_task_key(
+                    record.session_id, record.task_id, "tool", record.tool_name
+                )
+                runs_hash = await redis.hgetall(docket.runs_key(task_key))
+                if runs_hash:
+                    state, last_activity_s = _task_state_from_runs_hash(runs_hash)
+                else:
+                    state, last_activity_s = ("queued", None)
+
+                agg["_task_states"].add(state)
+                if (
+                    last_activity_s is not None
+                    and last_activity_s > int(agg["last_activity_at"])
+                ):
+                    agg["last_activity_at"] = last_activity_s
+    except redis.exceptions.RedisError as exc:
+        raise RuntimeError("Failed to list session state") from exc
+
+    # Compute final status
+    out: list[dict[str, Any]] = []
+    for agg in by_session.values():
+        states = cast(set[str], agg.pop("_task_states"))
+        if "running" in states:
+            agg["status"] = "active"
+        elif "queued" in states:
+            agg["status"] = "create"
+        else:
+            agg["status"] = "terminated"
+        out.append(agg)
+
+    # Sessions are already ordered by creation time from the index (newest first)
+    return out, total
+
+
+async def _sessions_payload_scan(
     *, docket: Docket, identity: Identity, session_id: str | None = None
 ) -> list[dict[str, Any]]:
+    """Legacy SCAN-based sessions payload.
+
+    Falls back to this when indexes don't exist (pre-migration data).
+    This is O(all_tasks_globally) and should be avoided at scale.
+    """
     now_ms = _now_ms()
     stream_base_url = _stream_base_url_from_env()
     records = await _read_task_ownership_records(
@@ -512,6 +626,34 @@ async def _sessions_payload(
         reverse=True,
     )
     return out
+
+
+async def _sessions_payload(
+    *, docket: Docket, identity: Identity, session_id: str | None = None
+) -> list[dict[str, Any]]:
+    """Get sessions payload, preferring indexed lookups with SCAN fallback.
+
+    Uses identity-scoped ZSET indexes if available, falls back to SCAN for
+    backward compatibility with pre-migration data.
+    """
+    store = get_task_ownership_store()
+
+    # Check if session index exists
+    has_index = await store.has_session_index(identity)
+
+    if has_index:
+        # Use indexed lookup
+        sessions, _ = await _sessions_payload_indexed(
+            docket=docket, identity=identity, session_id=session_id
+        )
+        return sessions
+
+    # Fallback to SCAN (log deprecation warning)
+    logger.debug(
+        "sessions_index_missing_using_scan",
+        extra={"tenant_id": identity.tenant_id, "subject_id": identity.subject_id},
+    )
+    return await _sessions_payload_scan(docket=docket, identity=identity, session_id=session_id)
 
 
 async def _list_sessions(request: Request) -> Response:
