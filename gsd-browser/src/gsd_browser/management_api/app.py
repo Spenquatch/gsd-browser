@@ -18,6 +18,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
+from .. import __version__
 from ..optionb.api_keys import ApiKeyRegistry, load_api_key_registry_from_env
 from ..optionb.http_hardening import (
     LocalHttpHardeningMiddleware,
@@ -114,6 +115,9 @@ def _should_authenticate_request(*, method: str, path: str) -> bool:
     if normalized_path == "/healthz":
         return False
 
+    if normalized_path == "/metrics":
+        return True
+
     return normalized_path.startswith("/api/") or normalized_path == "/api"
 
 
@@ -189,6 +193,7 @@ class ManagementAuthMiddleware:
                 identity, scopes = match
                 scope["gsd.identity"] = identity
                 scope["gsd.scopes"] = scopes
+                scope["gsd.auth_method"] = "api_key"
                 await self.app(scope, receive, send)
                 return
 
@@ -249,6 +254,7 @@ class ManagementAuthMiddleware:
         scopes = extract_scopes_from_claims(claims)
         scope["gsd.identity"] = identity
         scope["gsd.scopes"] = scopes
+        scope["gsd.auth_method"] = "jwt"
         await self.app(scope, receive, send)
 
 
@@ -305,6 +311,18 @@ def _require_identity_and_scopes(request: Request) -> tuple[Identity, set[str]]:
     return identity, scopes
 
 
+def _require_jwt_admin(request: Request) -> None:
+    _, scopes = _require_identity_and_scopes(request)
+    auth_method = request.scope.get("gsd.auth_method")
+    if auth_method != "jwt":
+        raise OpsTasksServiceError(
+            code="forbidden",
+            message="JWT authentication required",
+            details={},
+        )
+    _require_ops_scopes(scopes, required=("gsd:admin",))
+
+
 def _parse_query_model(model: type[_ModelT], request: Request) -> _ModelT:
     try:
         return model.model_validate(dict(request.query_params))
@@ -339,6 +357,149 @@ def _require_ops_scopes(scopes: set[str], *, required: tuple[str, ...]) -> None:
 
 def _now_ms() -> int:
     return int(time.time() * 1000)
+
+
+def _prometheus_text(*, samples: list[str]) -> Response:
+    body = "\n".join(samples).rstrip() + "\n"
+    return Response(
+        content=body,
+        media_type="text/plain; version=0.0.4; charset=utf-8",
+    )
+
+
+def _metric_escape(value: str) -> str:
+    return (
+        str(value)
+        .replace("\\", "\\\\")
+        .replace("\n", "\\n")
+        .replace('"', '\\"')
+    )
+
+
+def _gauge(
+    name: str,
+    value: int | float,
+    *,
+    labels: dict[str, str] | None = None,
+) -> str:
+    if not labels:
+        return f"{name} {float(value)}"
+    rendered = ",".join(f'{k}="{_metric_escape(v)}"' for k, v in sorted(labels.items()))
+    return f"{name}{{{rendered}}} {float(value)}"
+
+
+async def _metrics(request: Request) -> Response:
+    try:
+        _require_jwt_admin(request)
+
+        docket = cast(Docket, request.app.state.docket)
+        now_ms = _now_ms()
+        now_s = float(now_ms) / 1000.0
+
+        stream_len = 0
+        queue_len = 0
+        stream_oldest_age_s = 0.0
+        stream_has_messages = 0
+        queue_overdue_s = 0.0
+        queue_has_messages = 0
+
+        redis_used_memory_bytes: int | None = None
+
+        with _docket_scope(docket):
+            async with docket.redis() as client:
+                pipe = client.pipeline(transaction=False)
+                pipe.xlen(docket.stream_key)
+                pipe.zcard(docket.queue_key)
+                pipe.xrange(docket.stream_key, min="-", max="+", count=1)
+                pipe.zrange(docket.queue_key, 0, 0, withscores=True)
+                results = await pipe.execute()
+
+                try:
+                    raw = await client.info(section="memory")
+                    used = raw.get("used_memory") if isinstance(raw, dict) else None
+                    redis_used_memory_bytes = int(used) if used is not None else None
+                except Exception:  # noqa: BLE001
+                    redis_used_memory_bytes = None
+
+        # Pipeline results are ordered; tolerate partial results if INFO isn't supported.
+        if len(results) >= 1:
+            stream_len = int(results[0] or 0)
+        if len(results) >= 2:
+            queue_len = int(results[1] or 0)
+
+        # Oldest stream message age (ms from stream id like "1700000000000-0").
+        if len(results) >= 3:
+            xr = results[2] or []
+            if xr:
+                msg_id = xr[0][0]
+                msg_id_str = msg_id.decode("utf-8") if isinstance(msg_id, bytes) else str(msg_id)
+                head, _, _ = msg_id_str.partition("-")
+                try:
+                    msg_ms = int(head)
+                    stream_oldest_age_s = max(0.0, (now_ms - msg_ms) / 1000.0)
+                    stream_has_messages = 1
+                except ValueError:
+                    stream_oldest_age_s = 0.0
+                    stream_has_messages = 1
+
+        # Oldest scheduled task overdue seconds (score is when.timestamp()).
+        if len(results) >= 4:
+            zr = results[3] or []
+            if zr:
+                score = float(zr[0][1])
+                queue_has_messages = 1
+                queue_overdue_s = max(0.0, now_s - score)
+
+        samples: list[str] = [
+            "# HELP gsd_management_build_info Build and version information.",
+            "# TYPE gsd_management_build_info gauge",
+            _gauge(
+                "gsd_management_build_info",
+                1,
+                labels={"version": __version__},
+            ),
+            "# HELP gsd_docket_stream_len Number of ready-to-claim messages in the Docket stream.",
+            "# TYPE gsd_docket_stream_len gauge",
+            _gauge("gsd_docket_stream_len", stream_len),
+            "# HELP gsd_docket_queue_len Number of scheduled tasks in the Docket sorted-set queue.",
+            "# TYPE gsd_docket_queue_len gauge",
+            _gauge("gsd_docket_queue_len", queue_len),
+            "# HELP gsd_docket_stream_has_messages "
+            "Whether the Docket stream has at least one message.",
+            "# TYPE gsd_docket_stream_has_messages gauge",
+            _gauge("gsd_docket_stream_has_messages", stream_has_messages),
+            "# HELP gsd_docket_stream_oldest_age_seconds "
+            "Age of the oldest stream message (seconds).",
+            "# TYPE gsd_docket_stream_oldest_age_seconds gauge",
+            _gauge("gsd_docket_stream_oldest_age_seconds", stream_oldest_age_s),
+            "# HELP gsd_docket_queue_has_messages "
+            "Whether the Docket queue has at least one scheduled task.",
+            "# TYPE gsd_docket_queue_has_messages gauge",
+            _gauge("gsd_docket_queue_has_messages", queue_has_messages),
+            "# HELP gsd_docket_queue_oldest_overdue_seconds "
+            "Overdue age of the earliest scheduled task (seconds, 0 if not overdue).",
+            "# TYPE gsd_docket_queue_oldest_overdue_seconds gauge",
+            _gauge("gsd_docket_queue_oldest_overdue_seconds", queue_overdue_s),
+        ]
+
+        if redis_used_memory_bytes is not None:
+            samples.extend(
+                [
+                    "# HELP gsd_redis_used_memory_bytes Redis used_memory from INFO MEMORY.",
+                    "# TYPE gsd_redis_used_memory_bytes gauge",
+                    _gauge("gsd_redis_used_memory_bytes", redis_used_memory_bytes),
+                ]
+            )
+
+        return _prometheus_text(samples=samples)
+    except OpsTasksServiceError as exc:
+        status_code = 403 if exc.code == "forbidden" else 400
+        return _error_response(
+            status_code=status_code,
+            code=exc.code,
+            message=exc.message,
+            details=exc.details,
+        )
 
 
 def _parse_iso_datetime_to_epoch_s(raw: bytes) -> int | None:
@@ -1058,6 +1219,7 @@ def build_management_app() -> Starlette:
         lifespan=_docket_lifespan,
         routes=[
             Route("/healthz", _healthz, methods=["GET"]),
+            Route("/metrics", _metrics, methods=["GET"]),
             Route("/api/v1/sessions", _list_sessions, methods=["GET"]),
             Route("/api/v1/sessions/{session_id:str}", _get_session, methods=["GET"]),
             Route(

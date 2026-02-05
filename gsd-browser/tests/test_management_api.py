@@ -55,6 +55,92 @@ def test_management_hardening_exempts_options_requests(monkeypatch: pytest.Monke
     assert resp.status_code == 405
 
 
+@pytest.mark.parametrize(
+    "headers",
+    [
+        {"Host": "localhost", "Origin": "http://localhost"},
+        {"Host": "localhost", "Origin": "http://localhost", "Authorization": "Bearer not-a-jwt"},
+    ],
+)
+def test_management_metrics_requires_auth(
+    headers: dict[str, str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _clear_management_env(monkeypatch)
+
+    app = build_management_app()
+    with TestClient(app) as client:
+        resp = client.get("/metrics", headers=headers)
+
+    assert resp.status_code == 401
+
+
+def test_management_metrics_requires_jwt_admin_scope(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _clear_management_env(monkeypatch)
+    _configure_memory_docket(monkeypatch, label="management-metrics-jwt-admin")
+
+    from gsd_browser.management_api import app as mgmt_app
+
+    class _Token:
+        def __init__(self, claims: dict[str, object]) -> None:
+            self.claims = claims
+
+    class _Verifier:
+        async def verify_token(self, _: str) -> _Token:  # noqa: ANN001
+            return _Token(
+                {
+                    "tenant_id": "tenant-a",
+                    "sub": "subject-a",
+                    "scope": "gsd:admin",
+                    "aud": "gsd",
+                    "iss": "https://issuer.example",
+                }
+            )
+
+    monkeypatch.setattr(mgmt_app, "_optional_jwt_verifier", lambda: _Verifier())
+
+    app = build_management_app()
+    headers = {"Host": "localhost", "Origin": "http://localhost", "Authorization": "Bearer ok"}
+    with TestClient(app) as client:
+        resp = client.get("/metrics", headers=headers)
+
+    assert resp.status_code == 200
+    assert resp.headers.get("content-type", "").startswith("text/plain")
+    body = resp.text
+    assert "gsd_docket_stream_len" in body
+    assert "gsd_docket_queue_len" in body
+
+
+def test_management_metrics_rejects_api_keys_even_with_admin_scope(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path_factory: pytest.TempPathFactory,
+) -> None:
+    _clear_management_env(monkeypatch)
+    _configure_memory_docket(monkeypatch, label="management-metrics-api-key-forbidden")
+
+    api_keys_file = _write_api_keys_file(
+        tmp_path_factory,
+        [
+            {
+                "key": "key-admin",
+                "tenant_id": "tenant-a",
+                "subject_id": "subject-a",
+                "scopes": ["gsd:admin"],
+            }
+        ],
+    )
+    monkeypatch.setenv("GSD_API_KEYS_FILE", api_keys_file)
+
+    app = build_management_app()
+    headers = {"Host": "localhost", "Origin": "http://localhost", "X-API-Key": "key-admin"}
+    with TestClient(app) as client:
+        resp = client.get("/metrics", headers=headers)
+
+    assert resp.status_code == 403
+
+
 def _configure_memory_docket(monkeypatch: pytest.MonkeyPatch, *, label: str) -> None:
     import fastmcp
 
