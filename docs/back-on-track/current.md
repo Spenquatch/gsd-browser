@@ -33,15 +33,17 @@ drive cleanup + hardening work.
 
 Resource Group: `gsd-prod-rg` (East US)
 
-Latest validated prod image tag (Phase 3 smoke run): `phase3-streaming-1770320691`
+Current prod image tag (CI deploy): `sha-b4ae6d68e936` (GitHub Actions run `21729149468`, deployed 2026-02-05)
+
+Last manual smoke run image tag (Phase 3): `phase3-streaming-1770320691`
 
 ### Container Apps
 
 | Component | Name | FQDN | Latest Ready Revision | Image |
 |---|---|---|---|---|
-| MCP API | `gsd-prod-api` | `https://gsd-prod-api.yellowplant-7a34cb33.eastus.azurecontainerapps.io` | `gsd-prod-api--0000019` | `gsdprodacr.azurecr.io/gsd-browser:phase3-streaming-1770320691` |
-| Worker | `gsd-prod-worker` | `https://gsd-prod-worker.yellowplant-7a34cb33.eastus.azurecontainerapps.io` | `gsd-prod-worker--0000014` | `gsdprodacr.azurecr.io/gsd-browser:phase3-streaming-1770320691` |
-| Mgmt API | `gsd-prod-mgmt` | `https://gsd-prod-mgmt.yellowplant-7a34cb33.eastus.azurecontainerapps.io` | `gsd-prod-mgmt--0000015` | `gsdprodacr.azurecr.io/gsd-browser:phase3-streaming-1770320691` |
+| MCP API | `gsd-prod-api` | `https://gsd-prod-api.yellowplant-7a34cb33.eastus.azurecontainerapps.io` | `gsd-prod-api--0000020` | `gsdprodacr.azurecr.io/gsd-browser:sha-b4ae6d68e936` |
+| Worker | `gsd-prod-worker` | `https://gsd-prod-worker.yellowplant-7a34cb33.eastus.azurecontainerapps.io` | `gsd-prod-worker--0000015` | `gsdprodacr.azurecr.io/gsd-browser:sha-b4ae6d68e936` |
+| Mgmt API | `gsd-prod-mgmt` | `https://gsd-prod-mgmt.yellowplant-7a34cb33.eastus.azurecontainerapps.io` | `gsd-prod-mgmt--0000016` | `gsdprodacr.azurecr.io/gsd-browser:sha-b4ae6d68e936` |
 
 ### Smoke checks (passed)
 
@@ -49,6 +51,7 @@ HTTP health:
 
 ```bash
 curl -sS "https://gsd-prod-api.yellowplant-7a34cb33.eastus.azurecontainerapps.io/.well-known/oauth-protected-resource"
+curl -sS -i "https://gsd-prod-mgmt.yellowplant-7a34cb33.eastus.azurecontainerapps.io/healthz"
 curl -sS -i "https://gsd-prod-worker.yellowplant-7a34cb33.eastus.azurecontainerapps.io/healthz/worker"
 ```
 
@@ -57,6 +60,12 @@ In-container artifact smoke (Azure Blob + Managed Identity + `get_screenshots`):
 ```bash
 az containerapp exec -g gsd-prod-rg -n gsd-prod-worker --command \
   "python -m gsd_browser.optionb.smoke_artifacts --delivery-mode both --cleanup"
+```
+
+Mgmt metrics endpoint (intentionally requires auth):
+
+```bash
+curl -sS -i "https://gsd-prod-mgmt.yellowplant-7a34cb33.eastus.azurecontainerapps.io/metrics"
 ```
 
 ### Static Web App (dashboard)
@@ -76,6 +85,8 @@ Configured on `gsd-prod-mgmt` (and similarly on the MCP API) via:
 - `GSD_JWT_AUDIENCE=gsd`
 - `GSD_JWT_TENANT_ID_CLAIM=tenant_id`
 - `GSD_JWT_SUBJECT_ID_CLAIM=sub`
+
+Mgmt `/metrics` additionally requires JWT scope: `gsd:admin` (and rejects API keys).
 
 ### Frontend (dashboard)
 
