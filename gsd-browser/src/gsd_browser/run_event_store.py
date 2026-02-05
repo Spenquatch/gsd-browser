@@ -6,6 +6,7 @@ from collections import deque
 from dataclasses import dataclass, field
 from threading import Lock
 from typing import Any
+from urllib.parse import urlparse
 
 
 def _truncate(value: str, *, max_len: int) -> str:
@@ -14,6 +15,18 @@ def _truncate(value: str, *, max_len: int) -> str:
     if len(value) <= max_len:
         return value
     return value[: max(0, max_len - 1)] + "…"
+
+
+
+def _sanitize_url(url: str) -> str:
+    raw = str(url or "").strip()
+    if not raw:
+        return ""
+    parsed = urlparse(raw)
+    if parsed.scheme and parsed.netloc:
+        return f"{parsed.scheme}://{parsed.netloc}{parsed.path or ''}"
+    # relative / opaque forms: keep only path (drops query/fragment)
+    return parsed.path or raw
 
 
 @dataclass(frozen=True)
@@ -248,7 +261,7 @@ class RunEventStore:
         if step is not None:
             details["step"] = int(step)
         if url:
-            details["url"] = _truncate(str(url), max_len=self._config.max_url_len)
+            details["url"] = _truncate(_sanitize_url(str(url)), max_len=self._config.max_url_len)
         if title:
             details["title"] = _truncate(str(title), max_len=self._config.max_summary_len)
 
@@ -260,6 +273,13 @@ class RunEventStore:
             details=details or None,
             has_error=bool(has_error),
         )
+        if step is not None:
+            try:
+                from .optionb.progress import schedule_agent_step
+
+                schedule_agent_step(step=int(step), note=summary)
+            except Exception:  # noqa: BLE001
+                pass
 
     def record_console_event(
         self,
@@ -277,7 +297,10 @@ class RunEventStore:
             safe_location: dict[str, Any] = {}
             url = location.get("url")
             if url:
-                safe_location["url"] = _truncate(str(url), max_len=self._config.max_url_len)
+                sanitized_url = _sanitize_url(str(url))
+                safe_location["url"] = _truncate(
+                    sanitized_url, max_len=self._config.max_url_len
+                )
             for key in ("line", "column", "function"):
                 if key in location and location[key] is not None:
                     safe_location[key] = location[key]
@@ -290,7 +313,7 @@ class RunEventStore:
             timestamp=captured_at,
             summary=safe_message,
             details=details,
-            has_error=safe_level in {"error", "exception", "fatal"},
+            has_error=safe_level.lower() in {"error", "exception", "fatal"},
         )
 
     def record_network_event(
@@ -305,7 +328,7 @@ class RunEventStore:
         error: str | None = None,
     ) -> None:
         safe_method = _truncate(str(method), max_len=20)
-        safe_url = _truncate(str(url), max_len=self._config.max_url_len)
+        safe_url = _truncate(_sanitize_url(str(url)), max_len=self._config.max_url_len)
         details: dict[str, Any] = {"method": safe_method, "url": safe_url}
         if status is not None:
             details["status"] = int(status)

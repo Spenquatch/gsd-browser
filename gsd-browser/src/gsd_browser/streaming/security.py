@@ -56,10 +56,13 @@ class StreamingAuthConfig:
     nonce_uses: int
     per_sid_events_per_minute: int
     per_sid_connects_per_minute: int
+    # ADR-0023: "hmac" (default, localhost dev) or "jwt" (production)
+    auth_mode: str = "hmac"
 
     def to_public_dict(self) -> dict[str, Any]:
         return {
             "auth_required": self.auth_required,
+            "auth_mode": self.auth_mode,
             "nonce_ttl_seconds": self.nonce_ttl_seconds,
             "nonce_uses": self.nonce_uses,
             "per_sid_events_per_minute": self.per_sid_events_per_minute,
@@ -71,6 +74,9 @@ def load_streaming_auth_config() -> StreamingAuthConfig:
     auth_required = _parse_bool(os.environ.get("STREAMING_AUTH_REQUIRED"), default=False)
     api_key = os.environ.get("STREAMING_API_KEY") or None
     allowed_origins = _parse_allowed_origins(os.environ.get("STREAMING_ALLOWED_ORIGINS"))
+    auth_mode = (os.environ.get("GSD_STREAMING_AUTH_MODE") or "hmac").strip().lower()
+    if auth_mode not in ("hmac", "jwt"):
+        auth_mode = "hmac"
 
     nonce_ttl_seconds = _parse_int(os.environ.get("STREAMING_NONCE_TTL_SECONDS"), default=60)
     nonce_uses = _parse_int(os.environ.get("STREAMING_NONCE_USES"), default=4)
@@ -81,8 +87,12 @@ def load_streaming_auth_config() -> StreamingAuthConfig:
         os.environ.get("STREAMING_RATE_LIMIT_CONNECTS_PER_MINUTE"), default=30
     )
 
-    if auth_required and not api_key:
+    if auth_required and auth_mode == "hmac" and not api_key:
         raise RuntimeError("STREAMING_AUTH_REQUIRED is set but STREAMING_API_KEY is empty")
+
+    # JWT mode implies auth is required
+    if auth_mode == "jwt":
+        auth_required = True
 
     return StreamingAuthConfig(
         auth_required=auth_required,
@@ -92,6 +102,7 @@ def load_streaming_auth_config() -> StreamingAuthConfig:
         nonce_uses=max(1, nonce_uses),
         per_sid_events_per_minute=max(1, per_sid_events_per_minute),
         per_sid_connects_per_minute=max(1, per_sid_connects_per_minute),
+        auth_mode=auth_mode,
     )
 
 
@@ -215,7 +226,18 @@ def authorize_socket_connection(
     environ: dict[str, Any],
     auth: dict[str, Any] | None,
     connect_limiter: FixedWindowRateLimiter,
+    jwt_verifier: Any | None = None,
+    sid_identity_map: dict[str, Any] | None = None,
 ) -> bool:
+    """Authorize a Socket.IO connection.
+
+    Supports two auth modes (ADR-0023):
+    - "hmac": HMAC nonce validation (default, localhost dev)
+    - "jwt": JWT token validation (production multi-tenant)
+
+    When jwt_verifier and sid_identity_map are provided and auth_mode is "jwt",
+    the token from auth["token"] is validated and the identity is stored.
+    """
     sec = get_security_logger()
 
     if not connect_limiter.allow(f"{namespace}:{sid}:connect"):
@@ -246,6 +268,19 @@ def authorize_socket_connection(
         )
         return False
 
+    # JWT auth mode (ADR-0023)
+    if config.auth_mode == "jwt":
+        return _authorize_jwt(
+            sec=sec,
+            namespace=namespace,
+            sid=sid,
+            environ=environ,
+            auth=auth,
+            jwt_verifier=jwt_verifier,
+            sid_identity_map=sid_identity_map,
+        )
+
+    # HMAC auth mode (default)
     if not config.api_key:
         logger.error("Auth required but STREAMING_API_KEY is missing")
         return False
@@ -288,4 +323,62 @@ def authorize_socket_connection(
         )
         return False
 
+    return True
+
+
+def _authorize_jwt(
+    *,
+    sec: logging.Logger,
+    namespace: str,
+    sid: str,
+    environ: dict[str, Any],
+    auth: dict[str, Any] | None,
+    jwt_verifier: Any | None,
+    sid_identity_map: dict[str, Any] | None,
+) -> bool:
+    """Validate the presence of a JWT token for Socket.IO connect.
+
+    The connect handler is async and performs full JWT verification + identity extraction.
+    This helper is intentionally conservative and only validates that a token is present
+    and JWT mode is configured.
+    """
+    if jwt_verifier is None:
+        logger.error(
+            "JWT auth mode enabled but no jwt_verifier configured"
+        )
+        return False
+
+    if not isinstance(auth, dict):
+        sec.info(
+            "jwt_missing_auth",
+            extra={
+                "namespace": namespace,
+                "sid": sid,
+                "ip": get_client_ip(environ),
+            },
+        )
+        return False
+
+    token = auth.get("token")
+    if not isinstance(token, str) or not token.strip():
+        sec.info(
+            "jwt_missing_token",
+            extra={
+                "namespace": namespace,
+                "sid": sid,
+                "ip": get_client_ip(environ),
+            },
+        )
+        return False
+
+    sec.info(
+        "jwt_auth_attempt",
+        extra={
+            "namespace": namespace,
+            "sid": sid,
+            "ip": get_client_ip(environ),
+        },
+    )
+
+    _ = sid_identity_map
     return True

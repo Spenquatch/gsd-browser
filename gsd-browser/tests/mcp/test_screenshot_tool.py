@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import asyncio
 import inspect
-import re
+import json
+import uuid
 from typing import Any
 
 import pytest
@@ -100,12 +101,13 @@ def test_screenshot_manager_get_screenshots_include_images_false_is_metadata_onl
 def test_mcp_get_screenshots_enforces_last_n_max_20_and_metadata_only_mode(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    session_id = str(uuid.uuid4())
     manager = ScreenshotManager()
     for i in range(30):
         _add(
             manager,
             screenshot_type="agent_step",
-            session_id="a",
+            session_id=session_id,
             timestamp=float(100 + i),
             image_bytes=b"img",
         )
@@ -116,17 +118,18 @@ def test_mcp_get_screenshots_enforces_last_n_max_20_and_metadata_only_mode(
 
     monkeypatch.setattr(mcp_server_mod, "get_runtime", lambda: DummyRuntime(manager))
 
-    result = _run(mcp_get_screenshots(last_n=25, include_images=False))
+    result = _run(mcp_get_screenshots(session_id=session_id, last_n=25, include_images=False))
     assert isinstance(result, list)
     assert all(getattr(item, "type", None) != "image" for item in result)
 
-    summary_text = next(
+    json_text = next(
         (getattr(item, "text", "") for item in result if getattr(item, "type", None) == "text"),
         "",
     )
-    match = re.search(r"Retrieved (\d+) screenshots", summary_text)
-    assert match, f"Expected summary line with count; got: {summary_text!r}"
-    assert int(match.group(1)) == 20
+    payload = json.loads(json_text)
+    assert payload["version"] == "gsd.get_screenshots.v1"
+    assert isinstance(payload["screenshots"], list)
+    assert len(payload["screenshots"]) == 20
 
 
 def test_cli_diagnostics_smoke_messages() -> None:

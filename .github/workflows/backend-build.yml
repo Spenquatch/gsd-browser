@@ -1,0 +1,78 @@
+name: Backend Build (ACR)
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: "Optional image tag override (default: sha-<gitsha> or tag name)"
+        required: false
+        type: string
+  push:
+    branches: [main]
+    tags: ["*"]
+    paths:
+      - "gsd-browser/**"
+      - "infra/scripts/build-push.sh"
+      - ".github/workflows/backend-build.yml"
+
+env:
+  RESOURCE_GROUP: gsd-prod-rg
+  ACR_NAME: gsdprodacr
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  build-push:
+    name: Build & Push Image
+    runs-on: ubuntu-latest
+    outputs:
+      image_tag: ${{ steps.meta.outputs.image_tag }}
+      image: ${{ steps.meta.outputs.image }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Compute image tag
+        id: meta
+        shell: bash
+        run: |
+          # Note: use github.event.inputs for workflow_dispatch; it's absent on push/tag events.
+          if [[ -n "${{ github.event.inputs.image_tag }}" ]]; then
+            tag="${{ github.event.inputs.image_tag }}"
+          elif [[ "${GITHUB_REF_TYPE:-}" == "tag" ]]; then
+            tag="${GITHUB_REF_NAME}"
+          else
+            tag="sha-${GITHUB_SHA::12}"
+          fi
+
+          image="${{ env.ACR_NAME }}.azurecr.io/gsd-browser:${tag}"
+          echo "image_tag=${tag}" >> "$GITHUB_OUTPUT"
+          echo "image=${image}" >> "$GITHUB_OUTPUT"
+
+          printf '%s\n' "${tag}" > image_tag.txt
+          printf '%s\n' "${image}" > image.txt
+
+      - name: Azure Login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Build and push (infra/scripts/build-push.sh)
+        shell: bash
+        run: |
+          IMAGE_TAG="${{ steps.meta.outputs.image_tag }}" \
+          ACR_NAME="${{ env.ACR_NAME }}" \
+          RESOURCE_GROUP="${{ env.RESOURCE_GROUP }}" \
+          ./infra/scripts/build-push.sh
+
+      - name: Upload image metadata artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-image
+          path: |
+            image_tag.txt
+            image.txt
+          retention-days: 14

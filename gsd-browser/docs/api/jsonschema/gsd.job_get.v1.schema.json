@@ -1,0 +1,232 @@
+{
+  "$defs": {
+    "JobProgressV1": {
+      "additionalProperties": true,
+      "properties": {
+        "current": {
+          "minimum": 0,
+          "title": "Current",
+          "type": "integer"
+        },
+        "percentage": {
+          "maximum": 100.0,
+          "minimum": 0.0,
+          "title": "Percentage",
+          "type": "number"
+        },
+        "total": {
+          "minimum": 0,
+          "title": "Total",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "current",
+        "total",
+        "percentage"
+      ],
+      "title": "JobProgressV1",
+      "type": "object"
+    },
+    "OpsErrorPayloadV1": {
+      "additionalProperties": true,
+      "properties": {
+        "code": {
+          "maxLength": 120,
+          "minLength": 1,
+          "title": "Code",
+          "type": "string"
+        },
+        "details": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Details"
+        },
+        "message": {
+          "maxLength": 500,
+          "minLength": 1,
+          "title": "Message",
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "message"
+      ],
+      "title": "OpsErrorPayloadV1",
+      "type": "object"
+    }
+  },
+  "additionalProperties": true,
+  "properties": {
+    "created_at": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Created At"
+    },
+    "error": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/OpsErrorPayloadV1"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "expires_at": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Expires At"
+    },
+    "finished_at": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Finished At"
+    },
+    "found": {
+      "title": "Found",
+      "type": "boolean"
+    },
+    "job_id": {
+      "anyOf": [
+        {
+          "format": "uuid",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Job Id"
+    },
+    "progress": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/JobProgressV1"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "progress_message": {
+      "default": "",
+      "maxLength": 2000,
+      "title": "Progress Message",
+      "type": "string"
+    },
+    "session_id": {
+      "anyOf": [
+        {
+          "format": "uuid",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Session Id"
+    },
+    "started_at": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Started At"
+    },
+    "state": {
+      "anyOf": [
+        {
+          "enum": [
+            "queued",
+            "running",
+            "completed",
+            "failed",
+            "cancelled"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "State"
+    },
+    "tool_name": {
+      "anyOf": [
+        {
+          "maxLength": 200,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Tool Name"
+    },
+    "updated_at": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Updated At"
+    },
+    "version": {
+      "const": "gsd.job_get.v1",
+      "title": "Version",
+      "type": "string"
+    }
+  },
+  "required": [
+    "version",
+    "job_id",
+    "found"
+  ],
+  "title": "JobGetPayloadV1",
+  "type": "object"
+}

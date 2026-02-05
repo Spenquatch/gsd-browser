@@ -1,6 +1,8 @@
 services:
   gsd:
-    build: ..
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
     environment:
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
       - GSD_MODEL=${GSD_MODEL:-claude-haiku-4-5}

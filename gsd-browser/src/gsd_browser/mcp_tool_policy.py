@@ -11,8 +11,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-
-from mcp.server.fastmcp import FastMCP
+from typing import Protocol
 
 logger = logging.getLogger("gsd_browser.mcp_tools")
 
@@ -20,11 +19,20 @@ logger = logging.getLogger("gsd_browser.mcp_tools")
 # Update alongside tool definitions in `mcp_server.py`.
 KNOWN_MCP_TOOLS: tuple[str, ...] = (
     "web_eval_agent",
+    "web_eval_agent_submit",
     "web_task_agent",
+    "web_task_agent_submit",
     "web_task_agent_github",
+    "web_task_agent_github_submit",
+    "job_get",
+    "job_result",
+    "job_wait",
+    "job_cancel",
     "get_run_events",
     "setup_browser_state",
     "get_screenshots",
+    "tasks_list",
+    "tasks_admin_list",
 )
 
 
@@ -115,7 +123,11 @@ def compute_tool_exposure_policy(
     )
 
 
-def apply_tool_exposure_policy(*, mcp: FastMCP, policy: ToolExposurePolicy) -> None:
+class _SupportsRemoveTool(Protocol):
+    def remove_tool(self, name: str) -> None: ...
+
+
+def apply_tool_exposure_policy(*, mcp: _SupportsRemoveTool, policy: ToolExposurePolicy) -> None:
     """Remove tools from a FastMCP instance to match the advertised tool set.
 
     Must be called before `mcp.run(...)` so clients receive a consistent list.

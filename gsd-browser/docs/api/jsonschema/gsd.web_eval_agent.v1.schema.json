@@ -1,0 +1,357 @@
+{
+  "$defs": {
+    "ArtifactsCountV1": {
+      "additionalProperties": true,
+      "properties": {
+        "run_events": {
+          "title": "Run Events",
+          "type": "integer"
+        },
+        "screenshots": {
+          "title": "Screenshots",
+          "type": "integer"
+        },
+        "stream_samples": {
+          "title": "Stream Samples",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "screenshots",
+        "stream_samples",
+        "run_events"
+      ],
+      "title": "ArtifactsCountV1",
+      "type": "object"
+    },
+    "DevExcerptsV1": {
+      "additionalProperties": true,
+      "properties": {
+        "console_errors": {
+          "items": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "title": "Console Errors",
+          "type": "array"
+        },
+        "errors_top": {
+          "items": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "title": "Errors Top",
+          "type": "array"
+        },
+        "network_errors": {
+          "items": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "title": "Network Errors",
+          "type": "array"
+        }
+      },
+      "required": [
+        "console_errors",
+        "network_errors",
+        "errors_top"
+      ],
+      "title": "DevExcerptsV1",
+      "type": "object"
+    },
+    "PageInfoV1": {
+      "additionalProperties": true,
+      "properties": {
+        "title": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Title"
+        },
+        "url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Url"
+        }
+      },
+      "required": [
+        "url",
+        "title"
+      ],
+      "title": "PageInfoV1",
+      "type": "object"
+    },
+    "RankedFailureV1": {
+      "additionalProperties": true,
+      "properties": {
+        "code": {
+          "anyOf": [
+            {
+              "maxLength": 120,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Code"
+        },
+        "step": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Step"
+        },
+        "summary": {
+          "maxLength": 400,
+          "title": "Summary",
+          "type": "string"
+        },
+        "type": {
+          "enum": [
+            "console",
+            "network",
+            "agent",
+            "provider",
+            "validation",
+            "timeout",
+            "cancelled"
+          ],
+          "title": "Type",
+          "type": "string"
+        },
+        "url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Url"
+        }
+      },
+      "required": [
+        "type",
+        "summary",
+        "step",
+        "url"
+      ],
+      "title": "RankedFailureV1",
+      "type": "object"
+    },
+    "TimeoutsV1": {
+      "additionalProperties": true,
+      "properties": {
+        "budget_s": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Budget S"
+        },
+        "max_steps": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Max Steps"
+        },
+        "step_timeout_s": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Step Timeout S"
+        },
+        "timed_out": {
+          "title": "Timed Out",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "budget_s",
+        "step_timeout_s",
+        "max_steps",
+        "timed_out"
+      ],
+      "title": "TimeoutsV1",
+      "type": "object"
+    }
+  },
+  "additionalProperties": true,
+  "properties": {
+    "artifacts": {
+      "$ref": "#/$defs/ArtifactsCountV1"
+    },
+    "dev_excerpts": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/DevExcerptsV1"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "errors_top": {
+      "items": {
+        "$ref": "#/$defs/RankedFailureV1"
+      },
+      "maxItems": 8,
+      "title": "Errors Top",
+      "type": "array"
+    },
+    "mode": {
+      "anyOf": [
+        {
+          "enum": [
+            "compact",
+            "dev"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Mode"
+    },
+    "next_actions": {
+      "items": {
+        "type": "string"
+      },
+      "maxItems": 20,
+      "title": "Next Actions",
+      "type": "array"
+    },
+    "page": {
+      "$ref": "#/$defs/PageInfoV1"
+    },
+    "requested_mode": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Requested Mode"
+    },
+    "result": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Result"
+    },
+    "session_id": {
+      "format": "uuid",
+      "title": "Session Id",
+      "type": "string"
+    },
+    "status": {
+      "enum": [
+        "success",
+        "failed",
+        "partial"
+      ],
+      "title": "Status",
+      "type": "string"
+    },
+    "summary": {
+      "maxLength": 2048,
+      "title": "Summary",
+      "type": "string"
+    },
+    "task": {
+      "minLength": 1,
+      "title": "Task",
+      "type": "string"
+    },
+    "timeouts": {
+      "$ref": "#/$defs/TimeoutsV1"
+    },
+    "tool_call_id": {
+      "format": "uuid",
+      "title": "Tool Call Id",
+      "type": "string"
+    },
+    "url": {
+      "maxLength": 2000,
+      "minLength": 1,
+      "title": "Url",
+      "type": "string"
+    },
+    "version": {
+      "const": "gsd.web_eval_agent.v1",
+      "title": "Version",
+      "type": "string"
+    },
+    "warnings": {
+      "items": {
+        "type": "string"
+      },
+      "maxItems": 20,
+      "title": "Warnings",
+      "type": "array"
+    }
+  },
+  "required": [
+    "version",
+    "session_id",
+    "tool_call_id",
+    "url",
+    "task",
+    "mode",
+    "status",
+    "result",
+    "summary",
+    "page",
+    "errors_top",
+    "timeouts",
+    "warnings",
+    "artifacts",
+    "next_actions"
+  ],
+  "title": "WebEvalAgentPayloadV1",
+  "type": "object"
+}

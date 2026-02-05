@@ -1,4 +1,4 @@
-.PHONY: help py-% ts-%
+.PHONY: help py-% ts-% fe-install fe-dev fe-build fe-test fe-lint
 
 .DEFAULT_GOAL := help
 
@@ -24,6 +24,13 @@ help:
 	@echo "    make ts-smoke       Run TS smoke test script"
 	@echo "    make ts-diagnose    Run TS diagnostics script"
 	@echo ""
+	@echo "  Dashboard (gsd-dashboard/)"
+	@echo "    make fe-install     Install npm deps"
+	@echo "    make fe-dev         Run Vite dev server"
+	@echo "    make fe-build       Build production bundle"
+	@echo "    make fe-test        Run Vitest"
+	@echo "    make fe-lint        Run ESLint + typecheck"
+	@echo ""
 	@echo "Notes:"
 	@echo "  - Most commands run inside the corresponding subproject directory."
 	@echo "  - Example: make py-test"
@@ -31,4 +38,19 @@ help:
 
 py-%:
 	@$(MAKE) -C gsd-browser $*
+
+fe-install:
+	cd gsd-dashboard && npm install
+
+fe-dev:
+	cd gsd-dashboard && npm run dev
+
+fe-build:
+	cd gsd-dashboard && npm run build
+
+fe-test:
+	cd gsd-dashboard && npm test
+
+fe-lint:
+	cd gsd-dashboard && npm run lint
 

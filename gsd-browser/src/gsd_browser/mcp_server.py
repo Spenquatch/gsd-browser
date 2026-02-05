@@ -11,6 +11,7 @@ import os
 import time
 import traceback
 import uuid
+from contextlib import contextmanager
 from contextvars import ContextVar
 from datetime import UTC, datetime
 from pathlib import Path
@@ -51,6 +52,22 @@ _BROWSER_STATE_ID_OVERRIDE: ContextVar[object] = ContextVar(
 _PROMPT_PROFILE_OVERRIDE: ContextVar[str] = ContextVar(
     "gsd_browser_prompt_profile_override", default="web_eval"
 )
+_SESSION_ID_OVERRIDE: ContextVar[object] = ContextVar(
+    "gsd_browser_session_id_override", default=_UNSET
+)
+
+
+@contextmanager
+def session_id_scope(session_id: str | None) -> object:
+    """Optionally override the web_eval_agent session_id for this task."""
+    if not session_id:
+        yield
+        return
+    token = _SESSION_ID_OVERRIDE.set(str(session_id))
+    try:
+        yield
+    finally:
+        _SESSION_ID_OVERRIDE.reset(token)
 
 
 def apply_configured_tool_policy(*, settings: Settings) -> None:
@@ -132,6 +149,128 @@ def _parse_timestamp(value: Any) -> float | None:
         return parsed.timestamp()
     except ValueError:
         return None
+
+
+class TenantSessionLimitError(Exception):
+    """Raised when a tenant exceeds their concurrent session limit."""
+
+    def __init__(self, tenant_id: str, limit: int, active: int) -> None:
+        self.tenant_id = tenant_id
+        self.limit = limit
+        self.active = active
+        super().__init__(
+            f"Tenant {tenant_id} has {active} active sessions"
+            f" (limit: {limit})"
+        )
+
+
+def _get_caller_identity() -> tuple[str, str]:
+    """Return (tenant_id, subject_id) for the current caller."""
+    try:
+        from .optionb.identity import STDIO_IDENTITY
+        from .optionb.request_context import get_current_identity
+
+        identity = get_current_identity() or STDIO_IDENTITY
+        return identity.tenant_id, identity.subject_id
+    except Exception:  # noqa: BLE001
+        return "local", "local"
+
+
+def _register_session_in_registry(
+    *,
+    registry: Any,
+    session_id: str,
+    settings: Settings,
+) -> None:
+    """Register a new session in the SessionRegistry if available.
+
+    Raises TenantSessionLimitError if the tenant's active session count
+    would exceed GSD_MAX_SESSIONS_PER_TENANT.
+    """
+    if registry is None:
+        return
+    create = getattr(registry, "create_session", None)
+    if not callable(create):
+        return
+    tenant_id, subject_id = _get_caller_identity()
+    worker_id = getattr(settings, "worker_id", "") or ""
+
+    # Enforce tenant session limit (ADR-0026 / MS-7)
+    max_sessions = getattr(settings, "max_sessions_per_tenant", 5)
+    count_active = getattr(registry, "count_active_sessions", None)
+    if callable(count_active):
+        active = count_active(tenant_id)
+        if active >= max_sessions:
+            raise TenantSessionLimitError(
+                tenant_id=tenant_id,
+                limit=max_sessions,
+                active=active,
+            )
+
+    try:
+        stream_url = _build_stream_url(settings, session_id)
+        create(
+            session_id=session_id,
+            owner_tenant_id=tenant_id,
+            owner_subject_id=subject_id,
+            worker_id=worker_id,
+            stream_url=stream_url,
+        )
+    except Exception:  # noqa: BLE001
+        logger.debug(
+            "Failed to register session in registry",
+            exc_info=True,
+        )
+
+
+def _terminate_session_in_registry(registry: Any, session_id: str) -> None:
+    """Terminate a session in the SessionRegistry if available."""
+    if registry is None:
+        return
+    terminate = getattr(registry, "terminate_session", None)
+    if not callable(terminate):
+        return
+    try:
+        terminate(session_id)
+    except Exception:  # noqa: BLE001
+        logger.debug("Failed to terminate session in registry", exc_info=True)
+
+
+def _activate_session_in_registry(registry: Any, session_id: str) -> None:
+    """Activate a session in the SessionRegistry if available."""
+    if registry is None:
+        return
+    activate = getattr(registry, "activate_session", None)
+    if not callable(activate):
+        return
+    try:
+        activate(session_id)
+    except Exception:  # noqa: BLE001
+        logger.debug("Failed to activate session in registry", exc_info=True)
+
+
+def _build_stream_url(settings: Settings, session_id: str) -> str | None:
+    """Build the streaming URL for a session (ADR-0024 / RS-3).
+
+    Uses public host/scheme if configured, otherwise falls back to
+    localhost dashboard URL. Returns None if no dashboard is available.
+    """
+    public_host = getattr(settings, "streaming_public_host", "") or ""
+    raw_scheme = getattr(settings, "streaming_public_scheme", "") or "wss"
+    scheme = str(raw_scheme).strip().lower() or "wss"
+    if scheme == "wss":
+        scheme = "https"
+    elif scheme == "ws":
+        scheme = "http"
+    if public_host:
+        return f"{scheme}://{public_host}"
+
+    bind_host = (
+        getattr(settings, "streaming_bind_host", "")
+        or DEFAULT_DASHBOARD_HOST
+    )
+    _ = session_id
+    return f"http://{bind_host}:{DEFAULT_DASHBOARD_PORT}"
 
 
 def _select_web_eval_agent_mode(*, normalized_url: str, explicit: str | None) -> str:
@@ -620,8 +759,9 @@ async def web_eval_agent(
     settings = load_settings(strict=False)
     ensure_dashboard_running = getattr(runtime, "ensure_dashboard_running", None)
     if callable(ensure_dashboard_running):
+        bind_host = getattr(settings, "streaming_bind_host", "") or DEFAULT_DASHBOARD_HOST
         ensure_dashboard_running(
-            settings=settings, host=DEFAULT_DASHBOARD_HOST, port=DEFAULT_DASHBOARD_PORT
+            settings=settings, host=bind_host, port=DEFAULT_DASHBOARD_PORT
         )
 
     dashboard_fn = getattr(runtime, "dashboard", None)
@@ -630,11 +770,61 @@ async def web_eval_agent(
     control_state = getattr(streaming_runtime, "control_state", None) if streaming_runtime else None
     cdp_streamer = getattr(streaming_runtime, "cdp_streamer", None) if streaming_runtime else None
     streaming_stats = getattr(streaming_runtime, "stats", None) if streaming_runtime else None
+    session_registry = getattr(streaming_runtime, "registry", None) if streaming_runtime else None
 
     tool_call_id = str(uuid.uuid4())
-    session_id = str(uuid.uuid4())
+    override = _SESSION_ID_OVERRIDE.get()
+    session_id = str(uuid.uuid4()) if override is _UNSET else str(override)
     started = datetime.now(UTC).timestamp()
     normalized_url = _normalize_url(url)
+
+    # Register session in SessionRegistry (ADR-0026)
+    try:
+        _register_session_in_registry(
+            registry=session_registry,
+            session_id=session_id,
+            settings=settings,
+        )
+    except TenantSessionLimitError as exc:
+        payload = {
+            "version": "gsd.web_eval_agent.v1",
+            "session_id": session_id,
+            "tool_call_id": tool_call_id,
+            "url": normalized_url,
+            "task": task,
+            "mode": None,
+            "requested_mode": str(mode) if mode is not None else None,
+            "status": "failed",
+            "result": None,
+            "summary": str(exc),
+            "page": {"url": None, "title": None},
+            "errors_top": [],
+            "timeouts": {
+                "budget_s": None,
+                "step_timeout_s": None,
+                "max_steps": None,
+                "timed_out": False,
+            },
+            "warnings": [],
+            "artifacts": {
+                "screenshots": 0,
+                "stream_samples": 0,
+                "run_events": 0,
+            },
+            "next_actions": [
+                "Wait for existing sessions to complete.",
+                (
+                    "Increase GSD_MAX_SESSIONS_PER_TENANT"
+                    f" (current: {exc.limit})."
+                ),
+            ],
+        }
+        return [
+            TextContent(
+                type="text",
+                text=json.dumps(payload, ensure_ascii=False),
+            )
+        ]
 
     warnings: list[str] = []
     # Get defaults from settings (may be None if not set in env)
@@ -672,7 +862,8 @@ async def web_eval_agent(
             "tool_call_id": tool_call_id,
             "url": normalized_url,
             "task": task,
-            "mode": str(mode) if mode is not None else None,
+            "mode": None,
+            "requested_mode": str(mode) if mode is not None else None,
             "status": "failed",
             "result": None,
             "summary": _truncate(str(exc), max_len=2000),
@@ -701,7 +892,8 @@ async def web_eval_agent(
             "tool_call_id": tool_call_id,
             "url": normalized_url,
             "task": task,
-            "mode": str(mode) if mode is not None else None,
+            "mode": None,
+            "requested_mode": str(mode) if mode is not None else None,
             "status": "failed",
             "result": None,
             "summary": _truncate(str(exc), max_len=2000),
@@ -963,7 +1155,7 @@ async def web_eval_agent(
             record = getattr(screenshots_manager, "record_screenshot", None)
             if not callable(record):
                 return
-            record(
+            shot = record(
                 screenshot_type="agent_step",
                 image_bytes=image_bytes,
                 source=source,
@@ -979,6 +1171,13 @@ async def web_eval_agent(
                 url=page_url,
                 step=step_number,
             )
+            try:
+                from .optionb.screenshot_artifacts import persist_screenshot
+
+                if shot is not None:
+                    await persist_screenshot(shot)
+            except Exception:  # noqa: BLE001
+                pass
             step_screenshot_count += 1
             if step_number is not None:
                 recorded_step_numbers.add(step_number)
@@ -999,7 +1198,7 @@ async def web_eval_agent(
 
             url = last_page_url or page_url
             title = last_page_title or page_title or ""
-            record(
+            shot = record(
                 screenshot_type="agent_step",
                 source="current_page_fallback",
                 image_bytes=image_bytes,
@@ -1016,6 +1215,13 @@ async def web_eval_agent(
                 url=url,
                 step=step,
             )
+            try:
+                from .optionb.screenshot_artifacts import persist_screenshot
+
+                if shot is not None:
+                    await persist_screenshot(shot)
+            except Exception:  # noqa: BLE001
+                pass
             step_screenshot_count += 1
             recorded_step_numbers.add(step)
 
@@ -1107,6 +1313,9 @@ async def web_eval_agent(
                 active_session_set = True
             get_or_create_cdp_session = getattr(browser_session, "get_or_create_cdp_session", None)
 
+            # Activate session in registry now that browser is up (ADR-0026)
+            _activate_session_in_registry(session_registry, session_id)
+
             async def _send_ctrl_input(event: str, payload: dict[str, Any]) -> None:
                 if not callable(get_or_create_cdp_session):
                     raise CtrlTargetUnavailableError("target_unavailable")
@@ -1149,6 +1358,16 @@ async def web_eval_agent(
                         raise
 
             cdp_dispatcher = CDPInputDispatcher(send=_send_ctrl_input)
+            # Register direct dispatcher so Socket.IO handlers can dispatch
+            # CDP input immediately (like web-agent) instead of only via queue.
+            main_loop = asyncio.get_running_loop()
+            set_input_dispatcher = getattr(control_state, "set_input_dispatcher", None)
+            if callable(set_input_dispatcher):
+                set_input_dispatcher(cdp_dispatcher.dispatch, main_loop)
+                logger.info(
+                    "Registered direct CDP input dispatcher on control_state (loop=%s)",
+                    id(main_loop),
+                )
 
         cdp_attached = False
 
@@ -1174,6 +1393,32 @@ async def web_eval_agent(
                     break
                 if time.time() - started_wait > 10.0:
                     streaming_disabled_reason = "cdp_not_ready"
+                    note_detached = getattr(streaming_stats, "note_cdp_detached", None)
+                    if callable(note_detached):
+                        note_detached(error=streaming_disabled_reason)
+                    return
+                await asyncio.sleep(0.05)
+
+            # Wait for session_manager to be initialized (required for get_or_create_cdp_session)
+            while True:
+                session_manager = getattr(browser_session, "session_manager", None)
+                if session_manager is not None:
+                    break
+                if time.time() - started_wait > 10.0:
+                    streaming_disabled_reason = "session_manager_not_ready"
+                    note_detached = getattr(streaming_stats, "note_cdp_detached", None)
+                    if callable(note_detached):
+                        note_detached(error=streaming_disabled_reason)
+                    return
+                await asyncio.sleep(0.05)
+
+            # Wait for agent to have navigated (agent_focus_target_id must be set)
+            while True:
+                agent_focus_target_id = getattr(browser_session, "agent_focus_target_id", None)
+                if agent_focus_target_id is not None:
+                    break
+                if time.time() - started_wait > 10.0:
+                    streaming_disabled_reason = "agent_focus_not_ready"
                     note_detached = getattr(streaming_stats, "note_cdp_detached", None)
                     if callable(note_detached):
                         note_detached(error=streaming_disabled_reason)
@@ -1506,6 +1751,9 @@ async def web_eval_agent(
                     logger.debug("Failed to detach CDP event capture", exc_info=True)
 
             if control_state is not None and active_session_set:
+                clear_input_dispatcher = getattr(control_state, "clear_input_dispatcher", None)
+                if callable(clear_input_dispatcher):
+                    clear_input_dispatcher()
                 clear_active_session = getattr(control_state, "clear_active_session", None)
                 if callable(clear_active_session):
                     clear_active_session(session_id=session_id)
@@ -1529,6 +1777,13 @@ async def web_eval_agent(
             last_page_url=last_page_url,
             last_page_title=last_page_title,
         )
+        try:
+            from .optionb.run_event_artifacts import persist_run_events_from_store
+
+            if run_events is not None:
+                await persist_run_events_from_store(run_events, session_id=session_id)
+        except Exception:  # noqa: BLE001
+            pass
 
         raw_result = _normalize_history_result(_history_final_result(history))
         result, final_status, final_notes = _extract_wrapped_result(raw_result)
@@ -1592,6 +1847,7 @@ async def web_eval_agent(
             history=history,
             max_items=8,
         )
+        stream_url = _build_stream_url(settings, session_id)
         payload = {
             "version": "gsd.web_eval_agent.v1",
             "session_id": session_id,
@@ -1599,9 +1855,11 @@ async def web_eval_agent(
             "url": normalized_url,
             "task": task,
             "mode": selected_mode,
+            "requested_mode": str(mode) if mode is not None else None,
             "status": status,
             "result": result,
             "summary": summary,
+            "stream_url": stream_url,
             "page": page,
             "errors_top": errors_top,
             "timeouts": {
@@ -1659,10 +1917,32 @@ async def web_eval_agent(
             },
         )
 
+        _terminate_session_in_registry(session_registry, session_id)
         return [TextContent(type="text", text=json.dumps(payload, ensure_ascii=False))]
     except TimeoutError:
         duration_s = max(0.0, datetime.now(UTC).timestamp() - started)
-        warnings = _dedupe([*warnings, f"timed_out_after_s={effective_budget_s:g}"])[:20]
+        if effective_budget_s is not None:
+            warnings = _dedupe([*warnings, f"timed_out_after_s={effective_budget_s:g}"])[:20]
+            timeout_summary = _truncate(
+                f"Timeout: tool budget exceeded (budget_s={effective_budget_s:g}).",
+                max_len=2000,
+            )
+            next_actions = [
+                "Increase budget_s (or reduce task scope) and retry.",
+            ]
+        else:
+            warnings = _dedupe([*warnings, "timed_out"])[:20]
+            timeout_summary = _truncate(
+                "Timeout: browser start or operation exceeded an internal timeout. "
+                "Try again, or increase TIMEOUT_BrowserStartEvent/TIMEOUT_BrowserLaunchEvent "
+                "in the worker.",
+                max_len=2000,
+            )
+            next_actions = [
+                "Retry the tool call.",
+                "If this consistently times out, increase TIMEOUT_BrowserStartEvent/"
+                "TIMEOUT_BrowserLaunchEvent in the worker.",
+            ]
 
         logger.info(
             "web_eval_agent timed out",
@@ -1681,12 +1961,10 @@ async def web_eval_agent(
             "url": normalized_url,
             "task": task,
             "mode": selected_mode,
+            "requested_mode": str(mode) if mode is not None else None,
             "status": "failed",
             "result": None,
-            "summary": _truncate(
-                f"Timeout: tool budget exceeded (budget_s={effective_budget_s:g}).",
-                max_len=2000,
-            ),
+            "summary": timeout_summary,
             "page": {"url": _public_url(last_page_url), "title": last_page_title or None},
             "errors_top": rank_failures_for_session(
                 run_events=run_events,
@@ -1714,7 +1992,7 @@ async def web_eval_agent(
                 ),
             },
             "next_actions": [
-                "Increase budget_s (or reduce task scope) and retry.",
+                *next_actions,
                 (
                     "Use get_run_events(session_id="
                     f"'{session_id}', event_types=['console','network'], has_error=true, last_n=50)"
@@ -1726,6 +2004,7 @@ async def web_eval_agent(
                 f"Open dashboard: http://{DEFAULT_DASHBOARD_HOST}:{DEFAULT_DASHBOARD_PORT}",
             ],
         }
+        _terminate_session_in_registry(session_registry, session_id)
         return [TextContent(type="text", text=json.dumps(payload, ensure_ascii=False))]
     except asyncio.CancelledError:
         duration_s = max(0.0, datetime.now(UTC).timestamp() - started)
@@ -1741,6 +2020,11 @@ async def web_eval_agent(
             },
         )
 
+        from .optionb.cancellation import should_propagate_cancelled_error
+
+        if should_propagate_cancelled_error():
+            raise
+
         payload = {
             "version": "gsd.web_eval_agent.v1",
             "session_id": session_id,
@@ -1748,6 +2032,7 @@ async def web_eval_agent(
             "url": normalized_url,
             "task": task,
             "mode": selected_mode,
+            "requested_mode": str(mode) if mode is not None else None,
             "status": "failed",
             "result": None,
             "summary": _truncate("Cancelled.", max_len=2000),
@@ -1782,6 +2067,7 @@ async def web_eval_agent(
                 f"Open dashboard: http://{DEFAULT_DASHBOARD_HOST}:{DEFAULT_DASHBOARD_PORT}",
             ],
         }
+        _terminate_session_in_registry(session_registry, session_id)
         return [TextContent(type="text", text=json.dumps(payload, ensure_ascii=False))]
     except Exception as exc:  # noqa: BLE001
         duration_s = max(0.0, datetime.now(UTC).timestamp() - started)
@@ -1850,6 +2136,7 @@ async def web_eval_agent(
             "url": normalized_url,
             "task": task,
             "mode": selected_mode,
+            "requested_mode": str(mode) if mode is not None else None,
             "status": "failed",
             "result": None,
             "summary": _truncate(f"{type(exc).__name__}: {exc}", max_len=2000),
@@ -1891,6 +2178,7 @@ async def web_eval_agent(
                 f"Open dashboard: http://{DEFAULT_DASHBOARD_HOST}:{DEFAULT_DASHBOARD_PORT}",
             ],
         }
+        _terminate_session_in_registry(session_registry, session_id)
         return [TextContent(type="text", text=json.dumps(payload, ensure_ascii=False))]
 
 
@@ -2005,7 +2293,7 @@ async def web_task_agent_github(
 
 @mcp.tool(name="get_run_events")
 async def get_run_events(
-    session_id: str | None = None,
+    session_id: str = "",
     last_n: int = 50,
     event_types: list[str] | None = None,
     from_timestamp: Any | None = None,
@@ -2019,7 +2307,7 @@ async def get_run_events(
     clients to fetch detailed console/network/agent events on demand.
 
     Args:
-        session_id: Filter to a single session_id (optional).
+        session_id: Filter to a single session_id (required; UUID string).
         last_n: Max number of events to return (default 50, max 200).
         event_types: Optional list of event types ("agent", "console", "network").
         from_timestamp: Only include events after this timestamp (epoch seconds or ISO-8601).
@@ -2032,6 +2320,24 @@ async def get_run_events(
     _ = ctx
     runtime = get_runtime()
     run_events = getattr(runtime, "run_events", None)
+
+    try:
+        parsed_session_id = uuid.UUID(str(session_id))
+        if parsed_session_id.version != 4:
+            raise ValueError("session_id must be UUIDv4")
+    except (TypeError, ValueError):
+        payload = {
+            "version": "gsd.get_run_events.v1",
+            "session_id": None,
+            "events": [],
+            "stats": {
+                "counts": {"agent": 0, "console": 0, "network": 0, "total": 0},
+                "oldest_timestamp": None,
+                "newest_timestamp": None,
+            },
+            "error": "session_id is required and must be a UUID string.",
+        }
+        return [TextContent(type="text", text=json.dumps(payload, ensure_ascii=False))]
 
     last_n_value = min(max(int(last_n), 0), 200)
 
@@ -2061,19 +2367,144 @@ async def get_run_events(
     if error is None and from_timestamp is not None and parsed_from_timestamp is None:
         error = "from_timestamp must be epoch seconds or ISO-8601 timestamp."
 
-    get_events = getattr(run_events, "get_events", None) if run_events is not None else None
-    events: list[dict[str, Any]]
-    if error is None and callable(get_events):
-        events = get_events(
-            session_id=session_id,
-            last_n=last_n_value,
-            event_types=normalized_types,
-            from_timestamp=parsed_from_timestamp,
-            has_error=has_error,
-            include_details=bool(include_details),
-        )
-    else:
-        events = []
+    if error is not None:
+        payload = {
+            "version": "gsd.get_run_events.v1",
+            "session_id": None,
+            "events": [],
+            "stats": {
+                "counts": {"agent": 0, "console": 0, "network": 0, "total": 0},
+                "oldest_timestamp": None,
+                "newest_timestamp": None,
+            },
+            "error": error,
+        }
+        return [TextContent(type="text", text=json.dumps(payload, ensure_ascii=False))]
+
+    used_distributed = False
+    events: list[dict[str, Any]] = []
+
+    try:
+        from .optionb.s3_client import has_complete_s3_config
+
+        s3_available = has_complete_s3_config()
+    except ImportError:
+        s3_available = False
+
+    if s3_available:
+        try:
+            from .optionb.artifact_index import get_artifact_index_store
+            from .optionb.identity import STDIO_IDENTITY
+            from .optionb.request_context import get_current_identity
+            from .optionb.s3_client import get_s3_client
+
+            identity = get_current_identity() or STDIO_IDENTITY
+            store = get_artifact_index_store()
+            docket = store.docket_getter()
+            if docket is not None:
+                used_distributed = True
+                s3 = get_s3_client()
+                zset_key = (
+                    f"gsd:v1:tenants:{identity.tenant_id}:subjects:{identity.subject_id}"
+                    f":sessions:{session_id}:run_events:z"
+                )
+                candidate_limit = 50
+                min_score: int | None = None
+                if parsed_from_timestamp is not None:
+                    min_score = int(float(parsed_from_timestamp) * 1000)
+                async with docket.redis() as client:
+                    if min_score is None:
+                        candidates = await client.zrevrange(zset_key, 0, candidate_limit - 1)
+                    else:
+                        candidates = await client.zrevrangebyscore(
+                            zset_key, "+inf", min_score, start=0, num=candidate_limit
+                        )
+
+                for raw in candidates:
+                    artifact_id = raw.decode("utf-8") if isinstance(raw, bytes) else str(raw)
+                    try:
+                        parsed = uuid.UUID(str(artifact_id))
+                        if parsed.version != 4:
+                            continue
+                    except (TypeError, ValueError):
+                        continue
+
+                    record = await store.get_meta(artifact_id)
+                    if record is None or record.state != "ready":
+                        continue
+                    if record.artifact_kind != "run_event_chunk":
+                        continue
+                    if has_error is True and not bool(record.has_error):
+                        continue
+
+                    try:
+                        body = s3.get_bytes(key=record.s3_key)
+                    except Exception:  # noqa: BLE001
+                        continue
+                    if not body:
+                        continue
+
+                    try:
+                        text = body.decode("utf-8")
+                    except Exception:  # noqa: BLE001
+                        continue
+
+                    for line in text.splitlines():
+                        stripped = line.strip()
+                        if not stripped:
+                            continue
+                        try:
+                            event = json.loads(stripped)
+                        except Exception:  # noqa: BLE001
+                            continue
+                        if not isinstance(event, dict):
+                            continue
+
+                        event_type_value = event.get("event_type") or event.get("type")
+                        if not isinstance(event_type_value, str):
+                            continue
+                        event_type_value = event_type_value.strip()
+                        if normalized_types and event_type_value not in normalized_types:
+                            continue
+
+                        ts = event.get("timestamp")
+                        if ts is None:
+                            ts = event.get("captured_at")
+                        if parsed_from_timestamp is not None and isinstance(ts, (int, float)):
+                            if float(ts) < float(parsed_from_timestamp):
+                                continue
+
+                        if has_error is not None:
+                            if bool(event.get("has_error")) is not bool(has_error):
+                                continue
+
+                        item = dict(event)
+                        if not include_details:
+                            item.pop("details", None)
+                            item.pop("location", None)
+                        events.append(item)
+                        if len(events) >= last_n_value:
+                            break
+
+                    if len(events) >= last_n_value:
+                        break
+        except Exception:  # noqa: BLE001
+            used_distributed = False
+            events = []
+
+    if not used_distributed:
+        get_events = getattr(run_events, "get_events", None) if run_events is not None else None
+        if callable(get_events):
+            events = get_events(
+                session_id=session_id,
+                last_n=last_n_value,
+                event_types=normalized_types,
+                from_timestamp=parsed_from_timestamp,
+                has_error=has_error,
+                include_details=bool(include_details),
+            )
+        else:
+            events = []
 
     counts: dict[str, int] = {"agent": 0, "console": 0, "network": 0, "total": len(events)}
     timestamps: list[float] = []
@@ -2090,13 +2521,13 @@ async def get_run_events(
     payload = {
         "version": "gsd.get_run_events.v1",
         "session_id": session_id,
-        "events": events,
+        "events": events[:last_n_value],
         "stats": {
             "counts": counts,
             "oldest_timestamp": min(timestamps) if timestamps else None,
             "newest_timestamp": max(timestamps) if timestamps else None,
         },
-        "error": error,
+        "error": None,
     }
 
     return [TextContent(type="text", text=json.dumps(payload, ensure_ascii=False))]
@@ -2129,8 +2560,9 @@ async def setup_browser_state(
     _ = ctx
     runtime = get_runtime()
     settings = load_settings(strict=False)
+    bind_host = getattr(settings, "streaming_bind_host", "") or DEFAULT_DASHBOARD_HOST
     runtime.ensure_dashboard_running(
-        settings=settings, host=DEFAULT_DASHBOARD_HOST, port=DEFAULT_DASHBOARD_PORT
+        settings=settings, host=bind_host, port=DEFAULT_DASHBOARD_PORT
     )
 
     tool_call_id = str(uuid.uuid4())
@@ -2158,33 +2590,43 @@ async def setup_browser_state(
     try:
         state_path = await capture_state_interactive(url=normalized_url, state_id=state_id)
 
-        return [
-            TextContent(
-                type="text",
-                text=(
-                    "Saved browser state.\n"
-                    f"- state_id: {state_id or 'default'}\n"
-                    f"- path: {state_path}\n"
+        payload = {
+            "version": "gsd.setup_browser_state.v1",
+            "status": "success",
+            "state_id": state_id,
+            "url": normalized_url,
+            "path": str(state_path),
+            "summary": "Saved browser state.",
+            "next_actions": [
+                (
                     "Use setup_browser_state(url=..., state_id=...) to refresh it if the session "
                     "expires."
                 ),
-            ),
-        ]
+            ],
+        }
+        return [TextContent(type="text", text=json.dumps(payload, ensure_ascii=False))]
     except Exception as exc:  # noqa: BLE001
         tb = traceback.format_exc()
-        return [
-            TextContent(
-                type="text",
-                text=f"Error executing setup_browser_state: {exc}\n\nTraceback:\n{tb}",
-            )
-        ]
+        payload = {
+            "version": "gsd.setup_browser_state.v1",
+            "status": "failed",
+            "state_id": state_id,
+            "url": normalized_url,
+            "path": None,
+            "summary": _truncate(f"Error executing setup_browser_state: {exc}", max_len=2000),
+            "traceback": tb,
+            "next_actions": [
+                "Retry setup_browser_state(url=..., state_id=...) in an interactive environment.",
+            ],
+        }
+        return [TextContent(type="text", text=json.dumps(payload, ensure_ascii=False))]
 
 
 @mcp.tool(name="get_screenshots")
 async def get_screenshots(
     last_n: int = 5,
     screenshot_type: str = "agent_step",
-    session_id: str | None = None,
+    session_id: str = "",
     from_timestamp: float | None = None,
     has_error: bool | None = None,
     include_images: bool = True,
@@ -2200,7 +2642,7 @@ async def get_screenshots(
     Args:
         last_n: Number of most recent screenshots (default: 5, max: 20)
         screenshot_type: Filter by type - "agent_step", "stream_sample", or "all"
-        session_id: Filter by specific session
+        session_id: Filter by specific session (required; UUID string)
         from_timestamp: Only get screenshots after this time
         has_error: Filter for error screenshots only
         include_images: If False, return metadata only
@@ -2211,29 +2653,329 @@ async def get_screenshots(
     _ = ctx
     runtime = get_runtime()
     last_n = min(max(last_n, 0), 20)
-
-    screenshots = runtime.screenshots.get_screenshots(
-        last_n=last_n,
-        session_id=session_id,
-        screenshot_type=screenshot_type,
-        from_timestamp=from_timestamp,
-        has_error=has_error,
-        include_images=include_images,
-    )
     stats = runtime.screenshots.get_stats()
 
-    response: list[TextContent | ImageContent] = [
-        TextContent(
-            type="text",
-            text=(
-                f"Retrieved {len(screenshots)} screenshots from storage "
-                f"(Total stored: {stats['total_screenshots']}, Sampling: {stats['sampling_rate']})"
-            ),
+    normalized_type = str(screenshot_type).strip().lower()
+    if normalized_type not in {"agent_step", "stream_sample", "all"}:
+        normalized_type = "agent_step"
+
+    def _delivery_mode() -> str:
+        raw = str(os.environ.get("GSD_ARTIFACT_DELIVERY_MODE", "inline")).strip().lower()
+        return raw if raw in {"inline", "presigned", "both"} else "inline"
+
+    def _presign_ttl_s() -> int:
+        raw = str(os.environ.get("GSD_PRESIGNED_URL_TTL_S", "")).strip()
+        if not raw:
+            return 900
+        try:
+            value = int(raw)
+        except ValueError:
+            return 900
+        return value
+
+    delivery_mode = _delivery_mode()
+    include_presigned = delivery_mode in {"presigned", "both"}
+
+    try:
+        parsed_session_id = uuid.UUID(str(session_id))
+        if parsed_session_id.version != 4:
+            raise ValueError("session_id must be UUIDv4")
+    except (TypeError, ValueError):
+        payload = {
+            "version": "gsd.get_screenshots.v1",
+            "session_id": None,
+            "filters": {
+                "last_n": last_n,
+                "screenshot_type": normalized_type,
+                "from_timestamp": from_timestamp,
+                "has_error": has_error,
+                "include_images": include_images,
+            },
+            "screenshots": [],
+            "stats": stats,
+            "error": "session_id is required and must be a UUID string.",
+        }
+        return [TextContent(type="text", text=json.dumps(payload, ensure_ascii=False))]
+
+    header_screenshots: list[dict[str, Any]] = []
+    inline_images: list[ImageContent] = []
+    error: str | None = None
+    used_distributed = False
+
+    try:
+        from .optionb.artifact_index import get_artifact_index_store
+        from .optionb.identity import STDIO_IDENTITY
+        from .optionb.request_context import get_current_identity
+    except Exception:  # noqa: BLE001
+        pass
+    else:
+        try:
+            identity = get_current_identity() or STDIO_IDENTITY
+            store = get_artifact_index_store()
+            docket = store.docket_getter()
+            if docket is not None:
+                used_distributed = True
+
+                s3 = None
+                try:
+                    from .optionb.s3_client import get_s3_client, has_complete_s3_config
+
+                    if has_complete_s3_config():
+                        s3 = get_s3_client()
+                except Exception:  # noqa: BLE001
+                    s3 = None
+
+                azure_client = None
+                try:
+                    from .optionb.azure_blob_client import (
+                        get_azure_blob_client,
+                        has_azure_blob_config,
+                    )
+
+                    if has_azure_blob_config():
+                        azure_client = get_azure_blob_client()
+                except Exception:  # noqa: BLE001
+                    azure_client = None
+
+                zset_key = (
+                    f"gsd:v1:tenants:{identity.tenant_id}:subjects:{identity.subject_id}"
+                    f":sessions:{session_id}:screenshots:z"
+                )
+                candidate_limit = min(max(last_n * 10, 50), 200)
+                min_score: int | None = None
+                if from_timestamp is not None:
+                    min_score = int(float(from_timestamp) * 1000)
+                async with docket.redis() as client:
+                    if min_score is None:
+                        candidates = await client.zrevrange(zset_key, 0, candidate_limit - 1)
+                    else:
+                        candidates = await client.zrevrangebyscore(
+                            zset_key, "+inf", min_score, start=0, num=candidate_limit
+                        )
+
+                ttl_s = _presign_ttl_s()
+                for raw in candidates:
+                    artifact_id = raw.decode("utf-8") if isinstance(raw, bytes) else str(raw)
+                    try:
+                        parsed = uuid.UUID(str(artifact_id))
+                        if parsed.version != 4:
+                            continue
+                    except (TypeError, ValueError):
+                        continue
+
+                    record = await store.get_meta(artifact_id)
+                    if record is None or record.state != "ready":
+                        continue
+                    if record.artifact_kind != "screenshot":
+                        continue
+                    if normalized_type != "all" and record.screenshot_type != normalized_type:
+                        continue
+                    if has_error is not None and bool(record.has_error) != bool(has_error):
+                        continue
+
+                    backend = "s3"
+                    try:
+                        backend = str(record.get_effective_backend())
+                    except Exception:  # noqa: BLE001
+                        backend = "s3"
+
+                    inline_included = False
+                    image_base64: str | None = None
+                    want_inline = bool(
+                        include_images
+                        and (delivery_mode in {"inline", "both"} or backend == "redis")
+                    )
+                    if want_inline:
+                        image_bytes = b""
+                        if backend == "redis":
+                            try:
+                                async with docket.redis() as client:
+                                    raw_bytes = await client.get(str(record.s3_key))
+                                if isinstance(raw_bytes, bytes):
+                                    image_bytes = raw_bytes
+                                elif isinstance(raw_bytes, str):
+                                    image_bytes = raw_bytes.encode("utf-8")
+                            except Exception:  # noqa: BLE001
+                                image_bytes = b""
+                        elif backend == "azure":
+                            if azure_client is None:
+                                if error is None:
+                                    error = (
+                                        "Azure artifacts require GSD_AZURE_STORAGE_ACCOUNT "
+                                        "(and Container App managed identity RBAC) to retrieve."
+                                    )
+                            else:
+                                try:
+                                    image_bytes = azure_client.get_bytes(
+                                        blob_name=str(record.s3_key)
+                                    )
+                                except Exception:  # noqa: BLE001
+                                    image_bytes = b""
+                        else:
+                            if s3 is None:
+                                if error is None:
+                                    error = (
+                                        "S3 artifacts require complete GSD_S3_* config to retrieve."
+                                    )
+                            else:
+                                try:
+                                    image_bytes = s3.get_bytes(key=str(record.s3_key))
+                                except Exception:  # noqa: BLE001
+                                    image_bytes = b""
+
+                        if image_bytes:
+                            inline_included = True
+                            image_base64 = base64.b64encode(image_bytes).decode("ascii")
+
+                    artifact_url: str | None = None
+                    artifact_url_expires_at: float | None = None
+                    if include_presigned and backend != "redis":
+                        try:
+                            if backend == "azure":
+                                if azure_client is None:
+                                    raise RuntimeError("Azure blob client not configured")
+                                artifact_url, artifact_url_expires_at = (
+                                    azure_client.generate_sas_url(
+                                        blob_name=str(record.s3_key),
+                                        ttl_s=int(ttl_s),
+                                    )
+                                )
+                            else:
+                                if s3 is None:
+                                    raise RuntimeError("S3 client not configured")
+                                artifact_url, artifact_url_expires_at = s3.presign_get(
+                                    key=str(record.s3_key), ttl_s=int(ttl_s)
+                                )
+
+                            logger.info(
+                                "audit.presign_issued",
+                                extra={
+                                    "artifact_id": artifact_id,
+                                    "tenant_id": identity.tenant_id,
+                                    "subject_id": identity.subject_id,
+                                    "session_id": session_id,
+                                    "backend": backend,
+                                    "expires_at": artifact_url_expires_at,
+                                },
+                            )
+                        except Exception as exc:  # noqa: BLE001
+                            logger.warning(
+                                "audit.presign_failed",
+                                extra={
+                                    "artifact_id": artifact_id,
+                                    "session_id": session_id,
+                                    "backend": backend,
+                                },
+                            )
+                            artifact_url = None
+                            artifact_url_expires_at = None
+                            if error is None:
+                                error = _truncate(
+                                    f"One or more artifacts could not be presigned: {exc}",
+                                    max_len=2000,
+                                )
+
+                    header_screenshots.append(
+                        {
+                            "id": record.artifact_id,
+                            "timestamp": float(record.created_at_ms) / 1000.0,
+                            "type": record.screenshot_type,
+                            "session_id": record.session_id,
+                            "has_error": record.has_error,
+                            "mime_type": record.content_type,
+                            "url": _public_url(record.page_url),
+                            "step": record.step,
+                            "inline_included": bool(inline_included),
+                            "metadata": {},
+                            "artifact": {
+                                "key": record.artifact_id,
+                                "url": artifact_url,
+                                "content_type": record.content_type,
+                                "size_bytes": record.size_bytes,
+                                "created_at": float(record.created_at_ms) / 1000.0,
+                                "url_expires_at": artifact_url_expires_at,
+                            },
+                        }
+                    )
+                    if inline_included and image_base64 is not None:
+                        inline_images.append(
+                            ImageContent(
+                                type="image",
+                                data=image_base64,
+                                mimeType=str(record.content_type or "image/png"),
+                            )
+                        )
+
+                    if len(header_screenshots) >= last_n:
+                        break
+        except Exception as exc:  # noqa: BLE001
+            header_screenshots = []
+            inline_images = []
+            used_distributed = False
+            if error is None:
+                error = _truncate(
+                    f"Distributed artifact lookup failed: {exc}",
+                    max_len=2000,
+                )
+
+    legacy_screenshots: list[dict[str, Any]] = []
+    if not used_distributed:
+        legacy_screenshots = runtime.screenshots.get_screenshots(
+            last_n=last_n,
+            session_id=session_id,
+            screenshot_type=screenshot_type,
+            from_timestamp=from_timestamp,
+            has_error=has_error,
+            include_images=include_images,
         )
+        for shot in legacy_screenshots:
+            inline_included = bool(include_images and shot.get("image_data"))
+            header_screenshots.append(
+                {
+                    "id": shot.get("id"),
+                    "timestamp": shot.get("timestamp"),
+                    "type": shot.get("type"),
+                    "session_id": shot.get("session_id"),
+                    "has_error": shot.get("has_error"),
+                    "mime_type": shot.get("mime_type"),
+                    "url": shot.get("url"),
+                    "step": shot.get("step"),
+                    "inline_included": inline_included,
+                    "metadata": shot.get("metadata") or {},
+                    "artifact": {
+                        "key": shot.get("id"),
+                        "url": None,
+                        "content_type": str(shot.get("mime_type") or "") or None,
+                        "size_bytes": None,
+                        "created_at": shot.get("timestamp"),
+                        "url_expires_at": None,
+                    },
+                }
+            )
+
+    payload = {
+        "version": "gsd.get_screenshots.v1",
+        "session_id": session_id,
+        "filters": {
+            "last_n": last_n,
+            "screenshot_type": normalized_type,
+            "from_timestamp": from_timestamp,
+            "has_error": has_error,
+            "include_images": include_images,
+        },
+        "screenshots": header_screenshots,
+        "stats": stats,
+        "error": error,
+    }
+
+    response: list[TextContent | ImageContent] = [
+        TextContent(type="text", text=json.dumps(payload, ensure_ascii=False))
     ]
 
-    if include_images:
-        for shot in screenshots:
+    if inline_images:
+        response.extend(inline_images)
+    elif include_images and legacy_screenshots:
+        for shot in legacy_screenshots:
             image_data = shot.get("image_data")
             if not image_data:
                 continue
@@ -2244,25 +2986,6 @@ async def get_screenshots(
                     mimeType=str(shot.get("mime_type") or "image/png"),
                 )
             )
-        return response
-
-    if screenshots:
-        lines: list[str] = []
-        for shot in screenshots:
-            prefix = f"[{shot.get('type', 'unknown')}] "
-            step = shot.get("step")
-            if step is not None:
-                prefix += f"Step {step} | "
-            url_value = str(shot.get("url") or "N/A")
-            ts = shot.get("timestamp")
-            time_value = "N/A"
-            if isinstance(ts, (int, float)):
-                time_value = datetime.fromtimestamp(ts, UTC).isoformat()
-            err = " | ERROR" if shot.get("has_error") else ""
-            lines.append(f"{prefix}URL: {url_value} | Time: {time_value}{err}")
-
-        response.append(TextContent(type="text", text="\n".join(lines)))
-
     return response
 
 

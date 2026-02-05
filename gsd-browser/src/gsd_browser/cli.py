@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 import typer
@@ -23,8 +25,10 @@ from .mcp_tool_policy import (
     parse_tool_selector,
 )
 from .user_config import default_env_path, ensure_env_file, update_env_file
+from .utils.secrets import redact_url_password
 
 console = Console()
+logger = logging.getLogger("gsd_browser.cli")
 app = typer.Typer(help="GSD MCP server CLI", invoke_without_command=True)
 mcp_tools_app = typer.Typer(help="Manage MCP tool exposure (enable/disable tools)")
 app.add_typer(mcp_tools_app, name="mcp-tools")
@@ -35,6 +39,12 @@ _MCP_TOOLS_ENABLE_ARG = typer.Argument(..., help="Tool name(s) to enable")
 _MCP_TOOLS_DISABLE_ARG = typer.Argument(..., help="Tool name(s) to disable")
 _MCP_TOOLS_SET_ENABLED_ARG = typer.Argument(None, help="Tool name(s) to allowlist")
 _MCP_TOOLS_SET_DISABLED_ARG = typer.Argument(None, help="Tool name(s) to denylist")
+
+_TRUE_ENV_VALUES = {"1", "true", "yes"}
+
+
+# Backward compatibility alias for internal usage
+_redact_url_password = redact_url_password
 
 
 def _env_path_for_user_config() -> Path:
@@ -64,6 +74,25 @@ def _print_mcp_restart_notice() -> None:
         "[yellow]Note[/yellow]: Restart your MCP host/session (e.g. Codex/Claude) for tool changes "
         "to take effect."
     )
+
+
+def _is_truthy_env(var_name: str) -> bool:
+    return str(os.environ.get(var_name, "")).strip().lower() in _TRUE_ENV_VALUES
+
+
+def _select_stdio_runtime() -> str:
+    """Return the pinned stdio runtime selection.
+
+    Pinned behavior (canonical spec §8.2.1):
+    - Default: FastMCP v2 (“Option B”) stdio runtime.
+    - Legacy escape hatch: `GSD_USE_LEGACY_MCP_RUNTIME=true`.
+    - Back-compat: `GSD_USE_FASTMCP_V2=true` may be accepted as a no-op alias and MUST NOT
+      override the legacy escape hatch.
+    """
+
+    if _is_truthy_env("GSD_USE_LEGACY_MCP_RUNTIME"):
+        return "legacy"
+    return "fastmcp_v2"
 
 
 def _validate_tool_names(tools: list[str]) -> list[str]:
@@ -144,16 +173,348 @@ def serve(
 
     setup_logging(desired_level, json_logs=desired_json)
     # IMPORTANT: MCP stdio transport uses stdout for JSON-RPC. Do not print to stdout here.
+    runtime = _select_stdio_runtime()
+    if _is_truthy_env("GSD_USE_FASTMCP_V2"):
+        typer.echo(
+            "Note: GSD_USE_FASTMCP_V2 is deprecated; the default stdio runtime is FastMCP v2. "
+            "Use GSD_USE_LEGACY_MCP_RUNTIME=true for the legacy escape hatch.",
+            err=True,
+        )
+    if runtime == "legacy":
+        typer.echo(
+            "Warning: Using legacy MCP stdio runtime (GSD_USE_LEGACY_MCP_RUNTIME=true). "
+            "SEP-1686 tasks are not supported in legacy mode.",
+            err=True,
+        )
     typer.echo(
         "Starting MCP stdio server: "
         f"llm_provider={settings.llm_provider}, model={settings.model}, "
         f"log_level={desired_level}, json_logs={desired_json}",
         err=True,
     )
-    from .mcp_server import apply_configured_tool_policy, run_stdio
+    if runtime == "fastmcp_v2":
+        from .fastmcp_v2_stdio import apply_configured_tool_policy, run_stdio
+    else:
+        from .mcp_server import apply_configured_tool_policy, run_stdio
 
     apply_configured_tool_policy(settings=settings)
     run_stdio()
+
+
+@app.command()
+def worker(
+    log_level: str | None = typer.Option(
+        None, "--log-level", help="Override log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)"
+    ),
+    json_logs: bool = typer.Option(
+        False, "--json-logs", is_flag=True, help="Emit structured JSON logs"
+    ),
+    text_logs: bool = typer.Option(
+        False, "--text-logs", is_flag=True, help="Force human-friendly logs"
+    ),
+    llm_provider: str | None = typer.Option(
+        None,
+        "--llm-provider",
+        help="LLM provider (anthropic, chatbrowseruse, openai, ollama)",
+    ),
+    llm_model: str | None = typer.Option(None, "--llm-model", help="Override LLM model name"),
+    ollama_host: str | None = typer.Option(None, "--ollama-host", help="Override OLLAMA_HOST"),
+) -> None:
+    """Start a FastMCP/Docket worker process (Option B runtime)."""
+    import asyncio
+    import contextlib
+    import os
+
+    overrides: dict[str, str] = {}
+    if llm_provider is not None:
+        overrides["GSD_LLM_PROVIDER"] = llm_provider
+    if llm_model is not None:
+        overrides["GSD_MODEL"] = llm_model
+    if ollama_host is not None:
+        overrides["OLLAMA_HOST"] = ollama_host
+
+    settings = load_settings(env=overrides or None)
+
+    desired_level = log_level or settings.log_level
+    if json_logs and text_logs:
+        console.print("[red]Cannot use --json-logs and --text-logs together[/red]")
+        raise typer.Exit(code=1)
+    if json_logs:
+        desired_json = True
+    elif text_logs:
+        desired_json = False
+    else:
+        desired_json = settings.json_logs
+
+    setup_logging(desired_level, json_logs=desired_json)
+
+    # Worker entrypoint always uses FastMCP v2 (Option B).
+    from .fastmcp_v2_stdio import apply_configured_tool_policy, mcp
+
+    apply_configured_tool_policy(settings=settings)
+
+    # Docket >= 0.16 uses Redis XAUTOCLAIM for redelivery. Redis 6.0 (not 6.2+)
+    # does not support XAUTOCLAIM, which can crash the internal worker task and
+    # leave jobs stuck in "queued" with no visible logs. Patch redis-py to
+    # tolerate missing XAUTOCLAIM so we can still process new deliveries.
+    from .optionb.docket_redis_compat import apply_xautoclaim_compat_patch
+
+    apply_xautoclaim_compat_patch()
+
+    import fastmcp
+
+    docket_url = str(fastmcp.settings.docket.url)
+    if docket_url.startswith("memory://"):
+        console.print(
+            "[bold red]✗ In-memory Docket backend not supported for workers[/bold red]\n\n"
+            "A worker runs as a separate process, so it must use a distributed Docket backend.\n\n"
+            "[bold]Fix:[/bold]\n"
+            "  export FASTMCP_DOCKET_URL=redis://localhost:6379/0\n"
+        )
+        raise typer.Exit(code=1)
+
+    concurrency = int(fastmcp.settings.docket.concurrency)
+    if concurrency <= 0:
+        console.print(
+            "[yellow]Warning[/yellow]: FASTMCP_DOCKET_CONCURRENCY is <= 0; this worker will not "
+            "execute tasks."
+        )
+
+    raw_port = str(os.environ.get("GSD_WORKER_HEALTH_PORT", "")).strip()
+    if not raw_port:
+        raw_port = str(os.environ.get("PORT", "")).strip()
+    worker_port = int(raw_port) if raw_port else 5009
+
+    # Run the combined streaming + health server on the worker ingress port (ADR-0024).
+    # If this fails to start, fall back to the legacy "ok" health server so the worker
+    # remains reachable for basic liveness checks.
+    streaming_started = False
+    try:
+        if not str(os.environ.get("GSD_STREAMING_BIND_HOST", "")).strip():
+            os.environ["GSD_STREAMING_BIND_HOST"] = "0.0.0.0"
+        from .runtime import get_runtime
+
+        runtime = get_runtime()
+        bind_host = str(os.environ.get("GSD_STREAMING_BIND_HOST") or "").strip() or "0.0.0.0"
+        runtime.ensure_dashboard_running(
+            settings=settings,
+            host=bind_host,
+            port=worker_port,
+            startup_timeout_s=10.0,
+        )
+        logger.info(
+            "worker.streaming_server.listening",
+            extra={"host": bind_host, "port": worker_port},
+        )
+        streaming_started = True
+    except Exception as exc:  # noqa: BLE001
+        logger.exception(
+            "worker.streaming_server.failed",
+            extra={"error": str(exc)[:200]},
+        )
+
+    async def run_worker_forever() -> None:
+        stop_event = asyncio.Event()
+        error: Exception | None = None
+
+        async def serve_health() -> None:
+            async def handler(  # noqa: ANN001
+                reader, writer
+            ) -> None:
+                try:
+                    await reader.read(1024)
+                    writer.write(
+                        b"HTTP/1.1 200 OK\r\n"
+                        b"Content-Type: text/plain\r\n"
+                        b"Content-Length: 2\r\n"
+                        b"Connection: close\r\n"
+                        b"\r\n"
+                        b"ok"
+                    )
+                    await writer.drain()
+                except Exception:
+                    pass
+                finally:
+                    try:
+                        writer.close()
+                        await writer.wait_closed()
+                    except Exception:
+                        pass
+
+            server = await asyncio.start_server(handler, host="0.0.0.0", port=worker_port)
+            logger.info("worker.health_server.listening", extra={"port": worker_port})
+            try:
+                await stop_event.wait()
+            finally:
+                server.close()
+                await server.wait_closed()
+
+        async def monitor_worker() -> None:
+            nonlocal error
+            # FastMCP stores the Docket Worker instance on the server, but it is
+            # created asynchronously as part of the server lifespan startup.
+            deadline = asyncio.get_running_loop().time() + 5.0
+            worker = None
+            while asyncio.get_running_loop().time() < deadline:
+                worker = getattr(mcp, "_worker", None)
+                if worker is not None:
+                    break
+                await asyncio.sleep(0.05)
+            if worker is None:
+                error = RuntimeError("FastMCP did not start a Docket worker within 5s")
+                stop_event.set()
+                return
+
+            worker_done = getattr(worker, "_worker_done", None)
+            if worker_done is None:
+                error = RuntimeError("Docket worker missing internal done event")
+                stop_event.set()
+                return
+
+            # Wait for the worker to enter its polling loop (it clears _worker_done).
+            deadline = asyncio.get_running_loop().time() + 5.0
+            while worker_done.is_set() and asyncio.get_running_loop().time() < deadline:
+                await asyncio.sleep(0.05)
+            if worker_done.is_set():
+                error = RuntimeError(
+                    "Docket worker did not enter polling loop (likely crashed during startup)"
+                )
+                stop_event.set()
+                return
+
+            # Optional periodic diagnostics to make failures visible in production logs.
+            interval_s_raw = str(os.environ.get("GSD_WORKER_DIAGNOSTICS_INTERVAL_S", "")).strip()
+            interval_s = int(interval_s_raw) if interval_s_raw else 0
+
+            while True:
+                if worker_done.is_set():
+                    error = RuntimeError("Docket worker stopped unexpectedly")
+                    stop_event.set()
+                    return
+
+                if interval_s > 0:
+                    docket = getattr(mcp, "_docket", None)
+                    if docket is not None:
+                        try:
+                            async with docket.redis() as client:
+                                pipe = client.pipeline(transaction=False)
+                                pipe.xlen(docket.stream_key)
+                                pipe.zcard(docket.queue_key)
+                                pipe.xrange(docket.stream_key, min="-", max="+", count=1)
+                                pipe.zrange(docket.queue_key, 0, 0, withscores=True)
+                                stream_len, queue_len, oldest_stream, oldest_scheduled = (
+                                    await pipe.execute()
+                                )
+
+                            now_ms = int(time.time() * 1000)
+                            now_s = float(now_ms) / 1000.0
+                            stream_oldest_age_s: float | None = None
+                            stream_has_messages = False
+                            if oldest_stream:
+                                msg_id = oldest_stream[0][0]
+                                msg_id_str = (
+                                    msg_id.decode("utf-8")
+                                    if isinstance(msg_id, bytes)
+                                    else str(msg_id)
+                                )
+                                head, _, _ = msg_id_str.partition("-")
+                                try:
+                                    stream_oldest_age_s = max(
+                                        0.0, (now_ms - int(head)) / 1000.0
+                                    )
+                                except ValueError:
+                                    stream_oldest_age_s = None
+                                stream_has_messages = True
+
+                            queue_oldest_overdue_s: float | None = None
+                            queue_has_messages = False
+                            if oldest_scheduled:
+                                try:
+                                    score = float(oldest_scheduled[0][1])
+                                    queue_oldest_overdue_s = max(0.0, now_s - score)
+                                except Exception:  # noqa: BLE001
+                                    queue_oldest_overdue_s = None
+                                queue_has_messages = True
+                            logger.info(
+                                "worker.docket.depth",
+                                extra={
+                                    "docket_stream_len": int(stream_len),
+                                    "docket_queue_len": int(queue_len),
+                                    "docket_stream_has_messages": stream_has_messages,
+                                    "docket_stream_oldest_age_s": stream_oldest_age_s,
+                                    "docket_queue_has_messages": queue_has_messages,
+                                    "docket_queue_oldest_overdue_s": queue_oldest_overdue_s,
+                                },
+                            )
+                        except Exception as exc:  # noqa: BLE001
+                            logger.exception(
+                                "worker.docket.depth_failed",
+                                extra={"error": str(exc)},
+                            )
+                    await asyncio.sleep(float(interval_s))
+                    continue
+
+                await asyncio.sleep(1.0)
+
+        async with mcp._lifespan_manager():
+            from .optionb.artifact_index import ArtifactIndexStore, CleanupRunner
+            from .optionb.maintenance import run_cleanup_maintenance_loop
+            from .optionb.s3_client import get_s3_client, has_complete_s3_config
+
+            docket = mcp.docket
+
+            def delete_s3(bucket: str, key: str) -> None:
+                if not has_complete_s3_config():
+                    raise RuntimeError("S3 config is required for artifact cleanup")
+                s3 = get_s3_client()
+                if str(bucket).strip() and str(bucket).strip() != s3.bucket:
+                    logger.warning(
+                        "maintenance.cleanup.s3_bucket_mismatch",
+                        extra={"record_bucket": bucket, "configured_bucket": s3.bucket},
+                    )
+                s3.delete(key=str(key))
+
+            cleanup_runner = CleanupRunner(
+                index=ArtifactIndexStore(docket_getter=lambda: docket),
+                delete_s3=delete_s3,
+            )
+            maintenance_task = asyncio.create_task(
+                run_cleanup_maintenance_loop(cleanup_runner),
+                name="gsd_optionb_cleanup_maintenance",
+            )
+            health_task: asyncio.Task[None] | None = None
+            if not streaming_started:
+                health_task = asyncio.create_task(
+                    serve_health(), name="gsd_worker_health_server"
+                )
+            monitor_task = asyncio.create_task(monitor_worker(), name="gsd_worker_monitor")
+            console.print(
+                f"[bold green]✓[/bold green] Starting worker for [cyan]{mcp.name}[/cyan]"
+            )
+            console.print(f"  Docket: {fastmcp.settings.docket.name}")
+            console.print(f"  Backend: {_redact_url_password(str(fastmcp.settings.docket.url))}")
+            console.print(f"  Concurrency: {fastmcp.settings.docket.concurrency}")
+            try:
+                await stop_event.wait()
+                if error is not None:
+                    raise error
+            finally:
+                monitor_task.cancel()
+                with contextlib.suppress(asyncio.CancelledError):
+                    await monitor_task
+                if health_task is not None:
+                    health_task.cancel()
+                    with contextlib.suppress(asyncio.CancelledError):
+                        await health_task
+                maintenance_task.cancel()
+                with contextlib.suppress(asyncio.CancelledError):
+                    await maintenance_task
+
+    try:
+        asyncio.run(run_worker_forever())
+    except KeyboardInterrupt:
+        console.print("\n[yellow]Worker stopped[/yellow]")
+        raise typer.Exit(code=0) from None
 
 
 @app.command("list-tools")
@@ -434,6 +795,46 @@ def serve_browser(
     from .streaming.server import run_streaming_server
 
     run_streaming_server(settings=settings, host=host, port=port)
+
+
+@app.command("serve-management")
+def serve_management(
+    host: str = typer.Option("127.0.0.1", "--host", help="Bind host for the management API"),
+    port: int = typer.Option(
+        8081,
+        "--port",
+        help="Bind port for the management API (default 8081)",
+    ),
+    log_level: str | None = typer.Option(
+        None, "--log-level", help="Override log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)"
+    ),
+    json_logs: bool = typer.Option(
+        False, "--json-logs", is_flag=True, help="Emit structured JSON logs"
+    ),
+    text_logs: bool = typer.Option(
+        False, "--text-logs", is_flag=True, help="Force human-friendly logs"
+    ),
+) -> None:
+    """Start the 8081 management REST API server."""
+    settings = load_settings(strict=False)
+    desired_level = log_level or settings.log_level
+    if json_logs and text_logs:
+        console.print("[red]Cannot use --json-logs and --text-logs together[/red]")
+        raise typer.Exit(code=1)
+    if json_logs:
+        desired_json = True
+    elif text_logs:
+        desired_json = False
+    else:
+        desired_json = settings.json_logs
+
+    setup_logging(desired_level, json_logs=desired_json)
+
+    import uvicorn
+
+    from .management_api.app import build_management_app
+
+    uvicorn.run(build_management_app(), host=host, port=port, log_level="info")
 
 
 @app.command()

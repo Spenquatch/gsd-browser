@@ -42,6 +42,7 @@ class _FakeAsyncServer:
         *,
         namespace: str | None = None,
         to: str | None = None,
+        room: str | None = None,
     ) -> None:
         self.emits.append(
             {

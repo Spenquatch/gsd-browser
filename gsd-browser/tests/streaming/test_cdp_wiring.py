@@ -39,6 +39,7 @@ class FakeAsyncServer:
         *,
         namespace: str | None = None,
         to: str | None = None,
+        room: str | None = None,
     ) -> None:
         self.emits.append(
             {
@@ -46,6 +47,7 @@ class FakeAsyncServer:
                 "payload": payload,
                 "namespace": namespace,
                 "to": to,
+                "room": room,
             }
         )
 
@@ -207,6 +209,47 @@ def test_cdp_sender_samples_and_records_screenshot_and_sampler_totals() -> None:
     _run(_exercise())
 
 
+def test_cdp_sender_emits_to_session_room() -> None:
+    """Frames are emitted to the Socket.IO room matching session_id (ADR-0026)."""
+
+    async def _exercise() -> None:
+        sio = FakeAsyncServer()
+        stats = StreamingStats(streaming_mode="cdp", frame_queue_max=2)
+        screenshots = ScreenshotManager()
+        session = FakeCdpSession()
+
+        streamer = CdpScreencastStreamer(
+            sio=sio,  # type: ignore[arg-type]
+            stats=stats,
+            screenshot_manager=screenshots,
+            quality="med",
+            namespace=DEFAULT_STREAM_NAMESPACE,
+            frame_queue_max=2,
+            sample_every_n=999,
+        )
+        streamer._running = True
+        streamer._cdp_session = session
+
+        sender_task = asyncio.create_task(streamer._sender_loop(session_id="sess-room"))
+        try:
+            await streamer._on_frame(
+                params={"data": "", "metadata": {}, "sessionId": "ack-1"},
+                session_id="sess-room",
+            )
+            await _wait_for(lambda: any(e["event"] == "frame" for e in sio.emits))
+
+            frame_emit = next(e for e in sio.emits if e["event"] == "frame")
+            assert frame_emit["room"] == "sess-room"
+        finally:
+            sender_task.cancel()
+            try:
+                await sender_task
+            except asyncio.CancelledError:
+                pass
+
+    _run(_exercise())
+
+
 def test_cdp_sampler_seen_increments_even_on_decode_failure() -> None:
     async def _exercise() -> None:
         sio = FakeAsyncServer()
@@ -254,6 +297,8 @@ def test_emit_browser_update_emits_and_records_stream_sample() -> None:
         stats = StreamingStats(streaming_mode="screenshot", frame_queue_max=1)
         screenshots = ScreenshotManager()
 
+        from gsd_browser.streaming.session_registry import SessionRegistry
+
         runtime = StreamingRuntime(
             asgi_app=None,
             api_app=None,  # type: ignore[arg-type]
@@ -262,6 +307,7 @@ def test_emit_browser_update_emits_and_records_stream_sample() -> None:
             screenshots=screenshots,
             cdp_streamer=None,  # type: ignore[arg-type]
             control_state=ControlState(),
+            registry=SessionRegistry(),
         )
 
         image_bytes = b"pngbytes"

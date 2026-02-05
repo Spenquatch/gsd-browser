@@ -89,17 +89,41 @@ def _is_noise_network(*, url: str | None, error: str | None) -> bool:
     return False
 
 
+_JUDGE_BOOLEAN_FLAGS: dict[str, str] = {
+    # Key is the canonical attribute/flag name; value is the human label.
+    "reached_captcha": "judge: reached_captcha",
+    "impossible_task": "judge: impossible_task",
+}
+
+
+def _normalize_judge_flag(flag: str) -> str | None:
+    """Return a canonical judge flag name, or None if unsupported.
+
+    This prevents accidental emission of unstable codes if upstream judgement outputs drift.
+    """
+
+    raw = str(flag or "").strip().lower()
+    if raw in _JUDGE_BOOLEAN_FLAGS:
+        return raw
+    return None
+
+
 @dataclass(frozen=True)
 class RankedFailure:
     score: int
     type: str
+    # Optional machine-readable code for stable filtering/ranking.
+    # NOTE: This is propagated into the public payload and should remain short.
+    code: str | None
     summary: str
     step: int | None
     url: str | None
 
     def to_public_dict(self) -> dict[str, Any]:
+        # Keep a stable shape for downstream consumers: all keys are present.
         return {
             "type": self.type,
+            "code": self.code,
             "summary": _truncate(self.summary, max_len=400),
             "step": self.step,
             "url": _safe_url(self.url),
@@ -215,6 +239,7 @@ def rank_failures_for_session(
                     RankedFailure(
                         score=score,
                         type="console",
+                        code=None,
                         summary=summary,
                         step=step_ctx,
                         url=url_ctx,
@@ -259,6 +284,7 @@ def rank_failures_for_session(
                 RankedFailure(
                     score=score,
                     type="network",
+                    code=None,
                     summary=summary,
                     step=step_ctx,
                     url=url_safe or url_ctx,
@@ -295,6 +321,7 @@ def rank_failures_for_session(
                     RankedFailure(
                         score=score,
                         type="agent",
+                        code=None,
                         summary=text,
                         step=None,
                         url=_safe_url(base_url),
@@ -318,23 +345,25 @@ def rank_failures_for_session(
                         candidates.append(
                             RankedFailure(
                                 score=120,
-                                type="judge",
+                                type="agent",
+                                code="judge.failure_reason",
                                 summary=f"judge: {text}",
                                 step=None,
                                 url=_safe_url(base_url),
                             )
                         )
-                for flag, label in (
-                    ("reached_captcha", "judge: reached_captcha"),
-                    ("impossible_task", "judge: impossible_task"),
-                ):
-                    value = getattr(judgement_value, flag, None)
+                for flag, label in _JUDGE_BOOLEAN_FLAGS.items():
+                    normalized_flag = _normalize_judge_flag(flag)
+                    if normalized_flag is None:
+                        continue
+                    value = getattr(judgement_value, normalized_flag, None)
                     if isinstance(value, bool) and value and label not in seen:
                         seen.add(label)
                         candidates.append(
                             RankedFailure(
                                 score=120,
-                                type="judge",
+                                type="agent",
+                                code=f"judge.{normalized_flag}",
                                 summary=label,
                                 step=None,
                                 url=_safe_url(base_url),

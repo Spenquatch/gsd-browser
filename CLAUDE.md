@@ -143,24 +143,11 @@ gsd/
 
 ### Environment Variables
 
-**LLM Provider**:
-- `GSD_LLM_PROVIDER`: `anthropic` | `openai` | `chatbrowseruse` | `ollama`
-- `GSD_MODEL`: Provider-specific model name
-- `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `BROWSER_USE_API_KEY`, `OLLAMA_HOST`
+Canonical reference: `gsd-browser/docs/ENV_VARS.md`.
 
-**Browser & Execution**:
-- `GSD_WEB_EVAL_BUDGET_S`: Task timeout (240s default)
-- `GSD_WEB_EVAL_MAX_STEPS`: Max agent iterations (25 default)
-- `GSD_WEB_EVAL_STEP_TIMEOUT_S`: Per-step timeout (15s default)
-- `GSD_USE_VISION`: `auto` | `true` | `false`
-
-**Streaming**:
-- `STREAMING_MODE`: `cdp` | `screenshot`
-- `STREAMING_QUALITY`: `low` | `med` | `high`
-
-**MCP Tool Controls**:
-- `GSD_MCP_ENABLED_TOOLS`: Allowlist (comma-separated or `all`/`none`)
-- `GSD_MCP_DISABLED_TOOLS`: Denylist (comma-separated)
+The repo has many knobs (JWT, Docket/Redis, Azure Blob artifacts, hardening, dashboard build-time
+env vars). Keep this section lightweight and update `gsd-browser/docs/ENV_VARS.md` when adding or
+renaming env vars.
 
 ### Configuration Files
 

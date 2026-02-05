@@ -1,0 +1,152 @@
+{
+  "$defs": {
+    "OpsErrorPayloadV1": {
+      "additionalProperties": true,
+      "properties": {
+        "code": {
+          "maxLength": 120,
+          "minLength": 1,
+          "title": "Code",
+          "type": "string"
+        },
+        "details": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Details"
+        },
+        "message": {
+          "maxLength": 500,
+          "minLength": 1,
+          "title": "Message",
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "message"
+      ],
+      "title": "OpsErrorPayloadV1",
+      "type": "object"
+    },
+    "TasksListItemV1": {
+      "additionalProperties": true,
+      "properties": {
+        "created_at": {
+          "maxLength": 64,
+          "minLength": 1,
+          "title": "Created At",
+          "type": "string"
+        },
+        "expires_at": {
+          "maxLength": 64,
+          "minLength": 1,
+          "title": "Expires At",
+          "type": "string"
+        },
+        "session_id": {
+          "format": "uuid",
+          "title": "Session Id",
+          "type": "string"
+        },
+        "status": {
+          "enum": [
+            "queued",
+            "running",
+            "completed",
+            "failed",
+            "cancelled"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "task_id": {
+          "format": "uuid",
+          "title": "Task Id",
+          "type": "string"
+        },
+        "tool_name": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Tool Name",
+          "type": "string"
+        },
+        "updated_at": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Updated At"
+        }
+      },
+      "required": [
+        "task_id",
+        "tool_name",
+        "status",
+        "created_at",
+        "expires_at",
+        "session_id"
+      ],
+      "title": "TasksListItemV1",
+      "type": "object"
+    }
+  },
+  "additionalProperties": true,
+  "properties": {
+    "error": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/OpsErrorPayloadV1"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "next_cursor": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Next Cursor"
+    },
+    "tasks": {
+      "items": {
+        "$ref": "#/$defs/TasksListItemV1"
+      },
+      "maxItems": 1000,
+      "title": "Tasks",
+      "type": "array"
+    },
+    "version": {
+      "const": "gsd.tasks_list.v1",
+      "title": "Version",
+      "type": "string"
+    }
+  },
+  "required": [
+    "version",
+    "tasks",
+    "next_cursor",
+    "error"
+  ],
+  "title": "TasksListPayloadV1",
+  "type": "object"
+}

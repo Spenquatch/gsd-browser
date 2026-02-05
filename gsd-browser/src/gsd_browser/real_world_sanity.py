@@ -176,10 +176,23 @@ def _has_payload_failure_reason(payload: dict[str, Any]) -> bool:
         for item in errors_top:
             if not isinstance(item, dict):
                 continue
-            if str(item.get("type") or "").strip().lower() == "judge":
-                summary = str(item.get("summary") or "").strip()
+            # Legacy: some payloads used `type="judge"`.
+            # Current contract uses allowed types only, so judgement-derived failures are surfaced
+            # as `type="agent"` with a stable `code` prefix (`judge.*`) and a `summary` starting
+            # with `judge:` for human readability.
+            item_type = str(item.get("type") or "").strip().lower()
+            item_code = str(item.get("code") or "").strip().lower()
+            summary = str(item.get("summary") or "").strip()
+
+            if item_type == "judge":
                 if summary:
                     return True
+
+            if item_code.startswith("judge."):
+                return True
+
+            if summary.lower().startswith("judge:"):
+                return True
 
     max_depth = 8
     max_nodes = 250

@@ -21,7 +21,6 @@ venv/
 
 # Tooling
 .poetry/
-uv.lock
 
 # Runtime logs
 security.log
@@ -34,3 +33,6 @@ reports/
 Thumbs.db
 .idea/
 .vscode/
+
+# Local Redis harness fallback
+.redistest/

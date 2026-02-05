@@ -1,0 +1,194 @@
+# Option B (FastMCP v2) reference deployment — production-ready (ADR-0015).
+#
+# Topology:
+# - gsd: MCP-over-HTTP server (8080), does NOT execute tasks (FASTMCP_DOCKET_CONCURRENCY=0)
+# - gsd-worker: Docket worker pool that executes tasks (scale this service)
+# - valkey: Redis/Valkey backend (shared via FASTMCP_DOCKET_URL)
+# - seaweedfs: S3-compatible object store for distributed artifact persistence
+#
+# Usage:
+#   docker compose -f gsd-browser/docker/compose.production.yml up --build
+#   docker compose -f gsd-browser/docker/compose.production.yml up --build --scale gsd-worker=3
+#   docker compose -f gsd-browser/docker/compose.production.yml down -v
+#
+# Notes:
+# - HTTP transport requires JWT config; defaults below are placeholders and must be replaced for real use.
+# - SeaweedFS S3 gateway is exposed on 8333 for local testing; in production, front it with appropriate networking.
+
+services:
+  valkey:
+    image: valkey/valkey:7.2-alpine
+    ports:
+      - "127.0.0.1:6379:6379"
+    command: ["valkey-server", "--save", "", "--appendonly", "no"]
+    volumes:
+      - valkey-data:/data
+    healthcheck:
+      test: ["CMD", "valkey-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  seaweedfs:
+    image: chrislusf/seaweedfs:3.71
+    command:
+      [
+        "server",
+        "-ip=seaweedfs",
+        "-ip.bind=0.0.0.0",
+        "-dir=/data",
+        "-filer",
+        "-s3",
+        "-s3.port=8333"
+      ]
+    ports:
+      - "8333:8333"
+    volumes:
+      - seaweedfs-data:/data
+    restart: unless-stopped
+
+  gsd:
+    image: gsd-browser:local
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+      network: host
+    environment:
+      - GSD_DEPLOYMENT_ENV=${GSD_DEPLOYMENT_ENV:-prod}
+      - GSD_TRANSPORT=http
+      - FASTMCP_DOCKET_URL=redis://valkey:6379/0
+      - FASTMCP_DOCKET_NAME=${FASTMCP_DOCKET_NAME:-gsd}
+      - FASTMCP_DOCKET_CONCURRENCY=0
+
+      # JWT auth (required for HTTP mode; canonical spec §8.3).
+      - GSD_JWT_JWKS_URL=${GSD_JWT_JWKS_URL:-http://localhost:8000/.well-known/jwks.json}
+      - GSD_JWT_ISSUER=${GSD_JWT_ISSUER:-https://issuer.example}
+      - GSD_JWT_AUDIENCE=${GSD_JWT_AUDIENCE:-gsd}
+      - GSD_JWT_TENANT_ID_CLAIM=${GSD_JWT_TENANT_ID_CLAIM:-tenant_id}
+      - GSD_JWT_SUBJECT_ID_CLAIM=${GSD_JWT_SUBJECT_ID_CLAIM:-sub}
+
+      # S3/SeaweedFS artifact persistence (canonical spec §8.6).
+      - GSD_S3_ENDPOINT_URL=${GSD_S3_ENDPOINT_URL:-http://seaweedfs:8333}
+      - GSD_S3_BUCKET=${GSD_S3_BUCKET:-gsd-artifacts}
+      - GSD_S3_REGION=${GSD_S3_REGION:-us-east-1}
+      - GSD_S3_ACCESS_KEY_ID=${GSD_S3_ACCESS_KEY_ID:-gsd}
+      - GSD_S3_SECRET_ACCESS_KEY=${GSD_S3_SECRET_ACCESS_KEY:-gsd}
+      - GSD_S3_SSE_MODE=${GSD_S3_SSE_MODE:-none}
+
+      # Artifact delivery (inline vs presigned URLs; canonical spec §8.5).
+      - GSD_ARTIFACT_DELIVERY_MODE=${GSD_ARTIFACT_DELIVERY_MODE:-both}
+      - GSD_PRESIGNED_URL_TTL_S=${GSD_PRESIGNED_URL_TTL_S:-900}
+
+      # LLM provider config (set one of these API keys as needed).
+      - GSD_LLM_PROVIDER=${GSD_LLM_PROVIDER:-anthropic}
+      - GSD_MODEL=${GSD_MODEL:-claude-haiku-4-5}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - BROWSER_USE_API_KEY=${BROWSER_USE_API_KEY}
+      - OLLAMA_HOST=${OLLAMA_HOST}
+    ports:
+      - "8080:8080"
+    entrypoint: ["uvicorn"]
+    command:
+      [
+        "gsd_browser.fastmcp_v2_http:app",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "8080",
+        "--log-level",
+        "info"
+      ]
+    depends_on:
+      valkey:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "curl",
+          "-fsS",
+          "http://localhost:8080/.well-known/oauth-protected-resource"
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+
+  gsd-mgmt:
+    image: gsd-browser:local
+    depends_on:
+      valkey:
+        condition: service_healthy
+    environment:
+      - GSD_DEPLOYMENT_ENV=${GSD_DEPLOYMENT_ENV:-prod}
+      - FASTMCP_DOCKET_URL=redis://valkey:6379/0
+      - FASTMCP_DOCKET_NAME=${FASTMCP_DOCKET_NAME:-gsd}
+
+      # Auth (same identity rules as 8080; HTTP_API.md).
+      - GSD_JWT_JWKS_URL=${GSD_JWT_JWKS_URL:-http://localhost:8000/.well-known/jwks.json}
+      - GSD_JWT_ISSUER=${GSD_JWT_ISSUER:-https://issuer.example}
+      - GSD_JWT_AUDIENCE=${GSD_JWT_AUDIENCE:-gsd}
+      - GSD_JWT_TENANT_ID_CLAIM=${GSD_JWT_TENANT_ID_CLAIM:-tenant_id}
+      - GSD_JWT_SUBJECT_ID_CLAIM=${GSD_JWT_SUBJECT_ID_CLAIM:-sub}
+
+      # API keys (first-class automation mechanism for 8081; HTTP_API.md).
+      - GSD_API_KEYS_FILE=/etc/gsd/api_keys.json
+    volumes:
+      - ./api_keys.example.json:/etc/gsd/api_keys.json:ro
+    ports:
+      - "8081:8081"
+    entrypoint: ["uvicorn"]
+    command:
+      [
+        "gsd_browser.management_api.app:app",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "8081",
+        "--log-level",
+        "info"
+      ]
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8081/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+
+  gsd-worker:
+    image: gsd-browser:local
+    depends_on:
+      valkey:
+        condition: service_healthy
+    environment:
+      - GSD_DEPLOYMENT_ENV=${GSD_DEPLOYMENT_ENV:-prod}
+      - GSD_USE_FASTMCP_V2=true
+      - FASTMCP_DOCKET_URL=redis://valkey:6379/0
+      - FASTMCP_DOCKET_NAME=${FASTMCP_DOCKET_NAME:-gsd}
+      - FASTMCP_DOCKET_CONCURRENCY=${FASTMCP_DOCKET_CONCURRENCY_WORKER:-4}
+
+      - GSD_S3_ENDPOINT_URL=${GSD_S3_ENDPOINT_URL:-http://seaweedfs:8333}
+      - GSD_S3_BUCKET=${GSD_S3_BUCKET:-gsd-artifacts}
+      - GSD_S3_REGION=${GSD_S3_REGION:-us-east-1}
+      - GSD_S3_ACCESS_KEY_ID=${GSD_S3_ACCESS_KEY_ID:-gsd}
+      - GSD_S3_SECRET_ACCESS_KEY=${GSD_S3_SECRET_ACCESS_KEY:-gsd}
+      - GSD_S3_SSE_MODE=${GSD_S3_SSE_MODE:-none}
+
+      - GSD_ARTIFACT_DELIVERY_MODE=${GSD_ARTIFACT_DELIVERY_MODE:-both}
+      - GSD_PRESIGNED_URL_TTL_S=${GSD_PRESIGNED_URL_TTL_S:-900}
+
+      - GSD_LLM_PROVIDER=${GSD_LLM_PROVIDER:-anthropic}
+      - GSD_MODEL=${GSD_MODEL:-claude-haiku-4-5}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - BROWSER_USE_API_KEY=${BROWSER_USE_API_KEY}
+      - OLLAMA_HOST=${OLLAMA_HOST}
+    entrypoint: ["gsd-browser"]
+    command: ["worker"]
+    restart: unless-stopped
+
+volumes:
+  valkey-data: {}
+  seaweedfs-data: {}

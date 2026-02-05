@@ -1,4 +1,4 @@
-.PHONY: help dev lint test smoke diagnose sanity-real prompt-compare docker-build docker-run
+.PHONY: help dev bootstrap check lint test smoke smoke-tasks diagnose sanity-real prompt-compare docker-build docker-run redistest-up redistest-down redistest-logs
 
 UV ?= uv
 SANITY_REAL_CONFIRM ?=
@@ -9,9 +9,15 @@ help:
 	@echo ""
 	@echo "gsd (Python) targets:"
 	@echo "  make dev           Create .venv and install deps"
-	@echo "  make lint          Run Ruff lint (requires dev)"
-	@echo "  make test          Run Pytest (requires dev)"
+	@echo "  make bootstrap     Deterministic Option B bootstrap (uv sync --frozen --extra dev)"
+	@echo "  make check         Bootstrap + lint + test"
+	@echo "  make lint          Run Ruff lint (runs bootstrap first)"
+	@echo "  make test          Run Pytest (runs bootstrap first)"
+	@echo "  make redistest-up  Start local Redis/Valkey harness (for non-skipped integration tests)"
+	@echo "  make redistest-down Stop local Redis/Valkey harness"
+	@echo "  make redistest-logs Tail Redis/Valkey harness logs"
 	@echo "  make smoke         Run smoke test script"
+	@echo "  make smoke-tasks   Run FastMCP v2 / SEP-1686 tasks smoke test (requires redistest-up)"
 	@echo "  make sanity-real   Run real-world sanity harness (manual; requires credentials + internet)"
 	@echo "  make prompt-compare Compare extended vs override-enhanced prompts (manual; requires credentials)"
 	@echo "  make diagnose      Run diagnostics script"
@@ -27,24 +33,27 @@ dev:
 		. .venv/bin/activate && python -m ensurepip --upgrade && pip install --upgrade pip && pip install -e ".[dev]"; \
 	fi
 
-lint:
-	@if [ -x .venv/bin/ruff ]; then \
-		. .venv/bin/activate && ruff check; \
-	else \
-		echo "Run 'make dev' first to create .venv"; \
-		exit 1; \
-	fi
+bootstrap:
+	./scripts/optionb_bootstrap.sh
 
-test:
-	@if [ -x .venv/bin/pytest ]; then \
-		. .venv/bin/activate && pytest; \
-	else \
-		echo "Run 'make dev' first to create .venv"; \
-		exit 1; \
-	fi
+check: bootstrap lint test
+
+lint: bootstrap
+	. .venv/bin/activate && ruff check
+
+test: bootstrap
+	. .venv/bin/activate && pytest
 
 smoke:
 	./scripts/smoke-test.sh
+
+smoke-tasks:
+	@if [ -x .venv/bin/python ]; then \
+		. .venv/bin/activate && python ./scripts/smoke-fastmcp-tasks.py; \
+	else \
+		echo "Run 'make dev' first to create .venv"; \
+		exit 1; \
+	fi
 
 sanity-real:
 	@if [ "$(SANITY_REAL_CONFIRM)" != "1" ]; then \
@@ -96,3 +105,12 @@ docker-build:
 
 docker-run:
 	docker run --rm -e ANTHROPIC_API_KEY=$${ANTHROPIC_API_KEY} gsd:dev
+
+redistest-up:
+	./scripts/redistest_harness.sh up
+
+redistest-down:
+	./scripts/redistest_harness.sh down
+
+redistest-logs:
+	./scripts/redistest_harness.sh logs

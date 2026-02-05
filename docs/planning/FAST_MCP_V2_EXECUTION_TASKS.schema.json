@@ -1,0 +1,215 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "fastmcp_v2_execution_tasks.schema.json",
+  "title": "FastMCP v2 Option B Execution Tasks",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "project", "deepwiki", "global_rules", "phases"],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "fastmcp_v2_execution_tasks.v1"
+    },
+    "project": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "branch", "goal", "single_source_of_truth", "drift_gate"],
+      "properties": {
+        "name": { "type": "string" },
+        "branch": { "type": "string" },
+        "goal": { "type": "string" },
+        "prerequisites": {
+          "type": "array",
+          "minItems": 0,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id", "description", "required", "check_commands"],
+            "properties": {
+              "id": { "type": "string" },
+              "description": { "type": "string" },
+              "required": { "type": "boolean" },
+              "check_commands": {
+                "type": "array",
+                "minItems": 1,
+                "items": { "type": "string" }
+              },
+              "notes": { "type": "string" }
+            }
+          }
+        },
+        "single_source_of_truth": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/reference" }
+        },
+        "drift_gate": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["description", "source_model", "export_command", "enforcement_test"],
+          "properties": {
+            "description": { "type": "string" },
+            "source_model": { "type": "string" },
+            "export_command": { "type": "string" },
+            "enforcement_test": { "type": "string" }
+          }
+        }
+      }
+    },
+    "deepwiki": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["when_to_consult", "repos", "rule"],
+      "properties": {
+        "when_to_consult": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string" }
+        },
+        "repos": {
+          "type": "array",
+          "minItems": 0,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["repo", "use_for"],
+            "properties": {
+              "repo": { "type": "string" },
+              "use_for": { "type": "string" }
+            }
+          }
+        },
+        "rule": { "type": "string" }
+      }
+    },
+    "global_rules": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "no_spec_drift",
+        "validation_before_done",
+        "schema_export_required_when_contracts_change",
+        "session_id_required_for_retrieval_tools"
+      ],
+      "properties": {
+        "no_spec_drift": { "type": "string" },
+        "validation_before_done": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string" }
+        },
+        "schema_export_required_when_contracts_change": { "type": "boolean" },
+        "session_id_required_for_retrieval_tools": { "type": "boolean" },
+        "session_logging": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["required", "directory", "filename_pattern", "template_path", "start_required", "end_required"],
+          "properties": {
+            "required": { "type": "boolean" },
+            "directory": { "type": "string" },
+            "filename_pattern": { "type": "string" },
+            "template_path": { "type": "string" },
+            "start_required": { "type": "boolean" },
+            "end_required": { "type": "boolean" },
+            "notes": { "type": "string" }
+          }
+        },
+        "commit_policy": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["required", "rule"],
+          "properties": {
+            "required": { "type": "boolean" },
+            "rule": { "type": "string" },
+            "notes": { "type": "string" }
+          }
+        }
+      }
+    },
+    "phases": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/phase" }
+    }
+  },
+  "$defs": {
+    "reference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "purpose"],
+      "properties": {
+        "path": { "type": "string" },
+        "purpose": { "type": "string" }
+      }
+    },
+    "validation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["commands", "expect_exit_code"],
+      "properties": {
+        "commands": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string" }
+        },
+        "expect_exit_code": { "type": "integer", "minimum": 0, "maximum": 255 }
+      }
+    },
+    "acceptance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "statement", "validation"],
+      "properties": {
+        "id": { "type": "string" },
+        "statement": { "type": "string" },
+        "validation": { "$ref": "#/$defs/validation" }
+      }
+    },
+    "task": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "title", "status", "depends_on", "references", "kickoff_prompt", "acceptance_criteria"],
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "status": { "type": "string", "enum": ["todo", "in_progress", "blocked", "done"] },
+        "risk": { "type": "string", "enum": ["low", "medium", "high"] },
+        "risk_notes": { "type": "string" },
+        "deliverables": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "depends_on": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "references": {
+          "type": "array",
+          "minItems": 0,
+          "items": { "$ref": "#/$defs/reference" }
+        },
+        "kickoff_prompt": { "type": "string", "minLength": 1 },
+        "acceptance_criteria": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/acceptance" }
+        }
+      }
+    },
+    "phase": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "goal", "tasks"],
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "goal": { "type": "string" },
+        "tasks": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/task" }
+        }
+      }
+    }
+  }
+}

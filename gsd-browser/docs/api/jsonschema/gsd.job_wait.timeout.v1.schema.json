@@ -1,0 +1,123 @@
+{
+  "$defs": {
+    "JobProgressV1": {
+      "additionalProperties": true,
+      "properties": {
+        "current": {
+          "minimum": 0,
+          "title": "Current",
+          "type": "integer"
+        },
+        "percentage": {
+          "maximum": 100.0,
+          "minimum": 0.0,
+          "title": "Percentage",
+          "type": "number"
+        },
+        "total": {
+          "minimum": 0,
+          "title": "Total",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "current",
+        "total",
+        "percentage"
+      ],
+      "title": "JobProgressV1",
+      "type": "object"
+    },
+    "JobWaitTimeoutErrorDetailsV1": {
+      "additionalProperties": true,
+      "properties": {
+        "max_wait_s": {
+          "minimum": 0,
+          "title": "Max Wait S",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "max_wait_s"
+      ],
+      "title": "JobWaitTimeoutErrorDetailsV1",
+      "type": "object"
+    },
+    "JobWaitTimeoutErrorV1": {
+      "additionalProperties": true,
+      "properties": {
+        "code": {
+          "const": "TIMEOUT",
+          "title": "Code",
+          "type": "string"
+        },
+        "details": {
+          "$ref": "#/$defs/JobWaitTimeoutErrorDetailsV1"
+        },
+        "message": {
+          "maxLength": 500,
+          "minLength": 1,
+          "title": "Message",
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "message",
+        "details"
+      ],
+      "title": "JobWaitTimeoutErrorV1",
+      "type": "object"
+    }
+  },
+  "additionalProperties": true,
+  "properties": {
+    "error": {
+      "$ref": "#/$defs/JobWaitTimeoutErrorV1"
+    },
+    "job_id": {
+      "format": "uuid",
+      "title": "Job Id",
+      "type": "string"
+    },
+    "progress": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/JobProgressV1"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "progress_message": {
+      "maxLength": 2000,
+      "minLength": 1,
+      "title": "Progress Message",
+      "type": "string"
+    },
+    "state": {
+      "enum": [
+        "queued",
+        "running"
+      ],
+      "title": "State",
+      "type": "string"
+    },
+    "version": {
+      "const": "gsd.job_wait.timeout.v1",
+      "title": "Version",
+      "type": "string"
+    }
+  },
+  "required": [
+    "version",
+    "job_id",
+    "state",
+    "progress_message",
+    "error"
+  ],
+  "title": "JobWaitTimeoutPayloadV1",
+  "type": "object"
+}

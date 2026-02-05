@@ -6,6 +6,7 @@ PACKAGE="gsd"           # PyPI package name (for pipx)
 CONFIG_NAME="gsd"       # Config directory name
 MANIFEST_FILE="$HOME/.gsd/install.json"
 CONFIG_DIR="$HOME/.gsd"
+VALKEY_CONTAINER_NAME="${GSD_VALKEY_CONTAINER_NAME:-gsd-valkey}"
 
 # Reduce pip noise (defensive; some pipx flows parse JSON).
 export PYTHONUTF8="${PYTHONUTF8:-1}"
@@ -24,6 +25,13 @@ if command -v pipx >/dev/null 2>&1; then
   pipx uninstall "$PACKAGE" || true
 else
   echo "pipx not found; assuming package already removed"
+fi
+
+if command -v docker >/dev/null 2>&1; then
+  if docker ps -a --format '{{.Names}}' | grep -qx "$VALKEY_CONTAINER_NAME"; then
+    echo "Removing Valkey container: $VALKEY_CONTAINER_NAME"
+    docker rm -f "$VALKEY_CONTAINER_NAME" >/dev/null 2>&1 || true
+  fi
 fi
 
 if [ -f "$MANIFEST_FILE" ]; then

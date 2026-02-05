@@ -228,8 +228,17 @@ def test_c5_web_eval_agent_failure_payload_includes_failure_fields(
     assert errors_top, "expected at least one ranked error summary"
     for entry in errors_top:
         assert isinstance(entry, dict)
-        assert entry.get("type") in {"console", "network", "agent", "judge"}
+        assert entry.get("type") in {
+            "console",
+            "network",
+            "agent",
+            "provider",
+            "validation",
+            "timeout",
+            "cancelled",
+        }
         assert isinstance(entry.get("summary"), str)
+        assert "code" in entry
         assert "step" in entry
         assert "url" in entry
 
