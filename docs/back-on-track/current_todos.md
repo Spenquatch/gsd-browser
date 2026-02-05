@@ -1,7 +1,7 @@
 # Suggested TODOs (needs validation) — 2026-02-05
 
 This is a **suggested** follow-up list based on the current deployed state documented in
-`docs/current.md`. Items here are intentionally framed as **research-first** tasks: validate the
+`docs/back-on-track/current.md`. Items here are intentionally framed as **research-first** tasks: validate the
 assumptions, discover missing work, and then decide what to implement.
 
 ## Suggested priorities (research-first)
@@ -107,4 +107,3 @@ assumptions, discover missing work, and then decide what to implement.
   - `gsd-dashboard/src/main.tsx`
   - `gsd-dashboard/src/lib/auth.ts`
   - `docs/adr/ADR-0027-dashboard-frontend-rebuild.md`
-
