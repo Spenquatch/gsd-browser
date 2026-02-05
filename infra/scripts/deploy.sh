@@ -19,7 +19,8 @@ REPO_ROOT="$(dirname "$INFRA_DIR")"
 
 LOCATION="${LOCATION:-eastus}"
 IMAGE_TAG="${IMAGE_TAG:-latest}"
-DEPLOYMENT_NAME="gsd-deploy-$(date +%Y%m%d-%H%M%S)"
+DEPLOYMENT_NAME="${DEPLOYMENT_NAME:-gsd-deploy-$(date +%Y%m%d-%H%M%S)}"
+OUTPUTS_PATH="${GSD_DEPLOY_OUTPUTS_PATH:-}"
 
 # ── Preflight checks ────────────────────────────────────────────────────
 
@@ -77,16 +78,27 @@ az deployment sub show \
   --query properties.outputs \
   -o json
 
+if [ -n "$OUTPUTS_PATH" ]; then
+  az deployment sub show \
+    --name "$DEPLOYMENT_NAME" \
+    --query properties.outputs \
+    -o json > "$OUTPUTS_PATH"
+fi
+
 echo ""
 echo "=== Quick Verification ==="
 API_FQDN=$(az deployment sub show --name "$DEPLOYMENT_NAME" --query "properties.outputs.apiFqdn.value" -o tsv 2>/dev/null || echo "")
 WORKER_FQDN=$(az deployment sub show --name "$DEPLOYMENT_NAME" --query "properties.outputs.workerFqdn.value" -o tsv 2>/dev/null || echo "")
+MGMT_FQDN=$(az deployment sub show --name "$DEPLOYMENT_NAME" --query "properties.outputs.mgmtFqdn.value" -o tsv 2>/dev/null || echo "")
 
 if [ -n "$API_FQDN" ]; then
   echo "API health:    curl https://${API_FQDN}/.well-known/oauth-protected-resource"
 fi
 if [ -n "$WORKER_FQDN" ]; then
   echo "Worker health: curl https://${WORKER_FQDN}/healthz"
+fi
+if [ -n "$MGMT_FQDN" ]; then
+  echo "Mgmt health:   curl https://${MGMT_FQDN}/healthz"
 fi
 
 echo ""

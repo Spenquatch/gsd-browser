@@ -1,17 +1,10 @@
-name: Azure Deploy
+name: Legacy Azure Deploy (deprecated)
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - "gsd-browser/**"
-      - "gsd-dashboard/**"
-      - "infra/**"
-      - ".github/workflows/azure-deploy.yml"
   workflow_dispatch:
     inputs:
       image_tag:
-        description: "Docker image tag to deploy"
+        description: "Docker image tag to deploy (legacy workflow; prefer deploy-prod.yml)"
         required: false
         default: "latest"
 

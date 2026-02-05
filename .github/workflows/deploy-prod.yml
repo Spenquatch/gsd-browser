@@ -1,0 +1,71 @@
+name: Deploy Prod (Bicep)
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: "Image tag to deploy (e.g. sha-<gitsha>, v1.2.3)"
+        required: true
+        type: string
+
+env:
+  LOCATION: eastus
+
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: prod-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy
+    runs-on: ubuntu-latest
+    environment: prod
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Azure Login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Deploy (infra/scripts/deploy.sh)
+        shell: bash
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          IMAGE_TAG: ${{ inputs.image_tag }}
+          DEPLOYMENT_NAME: gsd-prod-${{ github.run_id }}
+          GSD_DEPLOY_OUTPUTS_PATH: deploy-outputs.json
+          LOCATION: ${{ env.LOCATION }}
+        run: ./infra/scripts/deploy.sh
+
+      - name: Read outputs
+        id: outs
+        shell: bash
+        run: |
+          api_fqdn="$(jq -r '.apiFqdn.value' deploy-outputs.json)"
+          worker_fqdn="$(jq -r '.workerFqdn.value' deploy-outputs.json)"
+          mgmt_fqdn="$(jq -r '.mgmtFqdn.value' deploy-outputs.json)"
+
+          echo "api_fqdn=$api_fqdn" >> "$GITHUB_OUTPUT"
+          echo "worker_fqdn=$worker_fqdn" >> "$GITHUB_OUTPUT"
+          echo "mgmt_fqdn=$mgmt_fqdn" >> "$GITHUB_OUTPUT"
+
+      - name: HTTP health smoke (unauthenticated)
+        shell: bash
+        run: |
+          set -euo pipefail
+          api="https://${{ steps.outs.outputs.api_fqdn }}"
+          worker="https://${{ steps.outs.outputs.worker_fqdn }}"
+          mgmt="https://${{ steps.outs.outputs.mgmt_fqdn }}"
+
+          curl -fsS "$api/.well-known/oauth-protected-resource" >/dev/null
+          curl -fsS "$worker/healthz" >/dev/null
+          curl -fsS "$worker/healthz/worker" >/dev/null
+          curl -fsS "$mgmt/healthz" >/dev/null
+

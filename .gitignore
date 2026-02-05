@@ -3,3 +3,7 @@ review_bundles/
 
 *.gz
 *.zip
+.DS_Store
+
+# Dashboard build output (Vite)
+gsd-dashboard/dist/
