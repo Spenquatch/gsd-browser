@@ -65,17 +65,17 @@ az redis console -n gsd-prod-redis -g gsd-prod-rg
 
 ### 1. Screenshot Artifact Accumulation
 
-When Azure Blob storage is not configured or failing, screenshots fall back to Redis.
+If artifact storage is misconfigured or unavailable, screenshots can fall back to Redis.
 Each screenshot is ~50-200KB, quickly consuming memory.
 
 **Symptoms**:
 - Many keys matching `gsd:v1:artifacts:*:blob`
-- Worker logs showing "s3 upload failed, falling back to redis"
+- Worker logs showing `s3_endpoint_incompatible_falling_back_to_redis` or other artifact persistence errors
 
 **Resolution**:
-1. Fix Azure Blob storage configuration (see `GSD_S3_*` env vars)
+1. Fix Azure Blob storage configuration (preferred: `GSD_AZURE_STORAGE_ACCOUNT` + managed identity)
 2. Clean up stale blob keys (see Cleanup section)
-3. After fix: verify new screenshots go to Blob storage
+3. After fix: verify new screenshots go to Blob storage (and Redis blob keys stop increasing)
 
 ### 2. Stale Task/Session Data
 
@@ -156,12 +156,12 @@ az redis update \
 
 ### Configure Azure Blob Storage
 
-Ensure all workers have proper S3/Blob configuration:
+Ensure all workers have proper Azure Blob configuration:
 
 ```bash
-# Verify worker env vars
+# Verify worker env vars (Azure Blob + any legacy S3 config)
 az containerapp show -n gsd-prod-worker -g gsd-prod-rg \
-  --query "properties.template.containers[0].env[?starts_with(name, 'GSD_S3')]"
+  --query "properties.template.containers[0].env[?starts_with(name, 'GSD_AZURE') || starts_with(name, 'GSD_S3') || name == 'GSD_ARTIFACT_DELIVERY_MODE']"
 ```
 
 ### Monitor Blob Upload Success

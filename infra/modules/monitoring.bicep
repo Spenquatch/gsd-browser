@@ -133,6 +133,78 @@ resource restartAlert 'Microsoft.Insights/scheduledQueryRules@2023-03-15-preview
   }
 }
 
+// Log-based alert: Queue backlog age > 5 minutes (requires worker diagnostics logs).
+// See docs/ops/RUNBOOK-queue-backlog.md
+resource queueBacklogAlert 'Microsoft.Insights/scheduledQueryRules@2023-03-15-preview' = {
+  name: '${prefix}-queue-backlog'
+  location: resourceGroup().location
+  properties: {
+    description: 'Queue backlog detected (oldest age > 5m). See docs/ops/RUNBOOK-queue-backlog.md'
+    severity: 2
+    enabled: true
+    scopes: [logAnalyticsWorkspaceId]
+    evaluationFrequency: 'PT5M'
+    windowSize: 'PT15M'
+    criteria: {
+      allOf: [
+        {
+          query: '''
+            ContainerAppConsoleLogs_CL
+            | where ContainerAppName_s == "${prefix}-worker"
+            | where Log_s has "worker.docket.depth"
+            | extend payload = parse_json(Log_s)
+            | extend stream_oldest = todouble(payload.docket_stream_oldest_age_s)
+            | extend queue_overdue = todouble(payload.docket_queue_oldest_overdue_s)
+            | where stream_oldest > 300 or queue_overdue > 300
+            | summarize Count = count()
+          '''
+          timeAggregation: 'Count'
+          operator: 'GreaterThan'
+          threshold: 0
+        }
+      ]
+    }
+    actions: {
+      actionGroups: [actionGroup.id]
+    }
+  }
+}
+
+// Log-based alert: Worker failure signals in logs.
+// See docs/ops/RUNBOOK-worker-failures.md
+resource workerFailureAlert 'Microsoft.Insights/scheduledQueryRules@2023-03-15-preview' = {
+  name: '${prefix}-worker-failures'
+  location: resourceGroup().location
+  properties: {
+    description: 'Worker failure signals detected. See docs/ops/RUNBOOK-worker-failures.md'
+    severity: 2
+    enabled: true
+    scopes: [logAnalyticsWorkspaceId]
+    evaluationFrequency: 'PT5M'
+    windowSize: 'PT15M'
+    criteria: {
+      allOf: [
+        {
+          query: '''
+            ContainerAppConsoleLogs_CL
+            | where ContainerAppName_s == "${prefix}-worker"
+            | where Log_s has "Docket worker stopped unexpectedly"
+              or Log_s has "did not enter polling loop"
+              or Log_s has "worker.docket.depth_failed"
+            | summarize Count = count()
+          '''
+          timeAggregation: 'Count'
+          operator: 'GreaterThan'
+          threshold: 0
+        }
+      ]
+    }
+    actions: {
+      actionGroups: [actionGroup.id]
+    }
+  }
+}
+
 // Alert: Redis memory usage > 80%
 // With noeviction policy, high memory usage can cause write failures.
 // This alert triggers before reaching 100% to allow remediation time.

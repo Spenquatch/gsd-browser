@@ -127,6 +127,8 @@ resource workerApp 'Microsoft.App/containerApps@2024-03-01' = {
             { name: 'FASTMCP_DOCKET_URL', secretRef: 'docket-url' }
             { name: 'FASTMCP_DOCKET_NAME', value: 'gsd' }
             { name: 'FASTMCP_DOCKET_CONCURRENCY', value: '4' }
+            // Periodic diagnostics used by Log Analytics alerts (see infra/modules/monitoring.bicep)
+            { name: 'GSD_WORKER_DIAGNOSTICS_INTERVAL_S', value: '60' }
             // Remote streaming (ADR-0024) + streaming JWT auth (ADR-0023)
             { name: 'GSD_STREAMING_BIND_HOST', value: '0.0.0.0' }
             { name: 'GSD_STREAMING_AUTH_MODE', value: 'jwt' }

@@ -7,6 +7,7 @@ import logging
 import os
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 import typer
@@ -399,12 +400,50 @@ def worker(
                                 pipe = client.pipeline(transaction=False)
                                 pipe.xlen(docket.stream_key)
                                 pipe.zcard(docket.queue_key)
-                                stream_len, queue_len = await pipe.execute()
+                                pipe.xrange(docket.stream_key, min="-", max="+", count=1)
+                                pipe.zrange(docket.queue_key, 0, 0, withscores=True)
+                                stream_len, queue_len, oldest_stream, oldest_scheduled = (
+                                    await pipe.execute()
+                                )
+
+                            now_ms = int(time.time() * 1000)
+                            now_s = float(now_ms) / 1000.0
+                            stream_oldest_age_s: float | None = None
+                            stream_has_messages = False
+                            if oldest_stream:
+                                msg_id = oldest_stream[0][0]
+                                msg_id_str = (
+                                    msg_id.decode("utf-8")
+                                    if isinstance(msg_id, bytes)
+                                    else str(msg_id)
+                                )
+                                head, _, _ = msg_id_str.partition("-")
+                                try:
+                                    stream_oldest_age_s = max(
+                                        0.0, (now_ms - int(head)) / 1000.0
+                                    )
+                                except ValueError:
+                                    stream_oldest_age_s = None
+                                stream_has_messages = True
+
+                            queue_oldest_overdue_s: float | None = None
+                            queue_has_messages = False
+                            if oldest_scheduled:
+                                try:
+                                    score = float(oldest_scheduled[0][1])
+                                    queue_oldest_overdue_s = max(0.0, now_s - score)
+                                except Exception:  # noqa: BLE001
+                                    queue_oldest_overdue_s = None
+                                queue_has_messages = True
                             logger.info(
                                 "worker.docket.depth",
                                 extra={
                                     "docket_stream_len": int(stream_len),
                                     "docket_queue_len": int(queue_len),
+                                    "docket_stream_has_messages": stream_has_messages,
+                                    "docket_stream_oldest_age_s": stream_oldest_age_s,
+                                    "docket_queue_has_messages": queue_has_messages,
+                                    "docket_queue_oldest_overdue_s": queue_oldest_overdue_s,
                                 },
                             )
                         except Exception as exc:  # noqa: BLE001
