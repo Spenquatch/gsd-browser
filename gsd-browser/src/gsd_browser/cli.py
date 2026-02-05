@@ -279,16 +279,44 @@ def worker(
             "execute tasks."
         )
 
+    raw_port = str(os.environ.get("GSD_WORKER_HEALTH_PORT", "")).strip()
+    if not raw_port:
+        raw_port = str(os.environ.get("PORT", "")).strip()
+    worker_port = int(raw_port) if raw_port else 5009
+
+    # Run the combined streaming + health server on the worker ingress port (ADR-0024).
+    # If this fails to start, fall back to the legacy "ok" health server so the worker
+    # remains reachable for basic liveness checks.
+    streaming_started = False
+    try:
+        if not str(os.environ.get("GSD_STREAMING_BIND_HOST", "")).strip():
+            os.environ["GSD_STREAMING_BIND_HOST"] = "0.0.0.0"
+        from .runtime import get_runtime
+
+        runtime = get_runtime()
+        bind_host = str(os.environ.get("GSD_STREAMING_BIND_HOST") or "").strip() or "0.0.0.0"
+        runtime.ensure_dashboard_running(
+            settings=settings,
+            host=bind_host,
+            port=worker_port,
+            startup_timeout_s=10.0,
+        )
+        logger.info(
+            "worker.streaming_server.listening",
+            extra={"host": bind_host, "port": worker_port},
+        )
+        streaming_started = True
+    except Exception as exc:  # noqa: BLE001
+        logger.exception(
+            "worker.streaming_server.failed",
+            extra={"error": str(exc)[:200]},
+        )
+
     async def run_worker_forever() -> None:
         stop_event = asyncio.Event()
         error: Exception | None = None
 
         async def serve_health() -> None:
-            raw_port = str(os.environ.get("GSD_WORKER_HEALTH_PORT", "")).strip()
-            if not raw_port:
-                raw_port = str(os.environ.get("PORT", "")).strip()
-            port = int(raw_port) if raw_port else 5009
-
             async def handler(  # noqa: ANN001
                 reader, writer
             ) -> None:
@@ -312,8 +340,8 @@ def worker(
                     except Exception:
                         pass
 
-            server = await asyncio.start_server(handler, host="0.0.0.0", port=port)
-            logger.info("worker.health_server.listening", extra={"port": port})
+            server = await asyncio.start_server(handler, host="0.0.0.0", port=worker_port)
+            logger.info("worker.health_server.listening", extra={"port": worker_port})
             try:
                 await stop_event.wait()
             finally:
@@ -367,8 +395,8 @@ def worker(
                     docket = getattr(mcp, "_docket", None)
                     if docket is not None:
                         try:
-                            async with docket.redis() as redis:
-                                pipe = redis.pipeline(transaction=False)
+                            async with docket.redis() as client:
+                                pipe = client.pipeline(transaction=False)
                                 pipe.xlen(docket.stream_key)
                                 pipe.zcard(docket.queue_key)
                                 stream_len, queue_len = await pipe.execute()
@@ -415,7 +443,11 @@ def worker(
                 run_cleanup_maintenance_loop(cleanup_runner),
                 name="gsd_optionb_cleanup_maintenance",
             )
-            health_task = asyncio.create_task(serve_health(), name="gsd_worker_health_server")
+            health_task: asyncio.Task[None] | None = None
+            if not streaming_started:
+                health_task = asyncio.create_task(
+                    serve_health(), name="gsd_worker_health_server"
+                )
             monitor_task = asyncio.create_task(monitor_worker(), name="gsd_worker_monitor")
             console.print(
                 f"[bold green]✓[/bold green] Starting worker for [cyan]{mcp.name}[/cyan]"
@@ -431,9 +463,10 @@ def worker(
                 monitor_task.cancel()
                 with contextlib.suppress(asyncio.CancelledError):
                     await monitor_task
-                health_task.cancel()
-                with contextlib.suppress(asyncio.CancelledError):
-                    await health_task
+                if health_task is not None:
+                    health_task.cancel()
+                    with contextlib.suppress(asyncio.CancelledError):
+                        await health_task
                 maintenance_task.cancel()
                 with contextlib.suppress(asyncio.CancelledError):
                     await maintenance_task

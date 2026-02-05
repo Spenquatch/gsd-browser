@@ -397,12 +397,12 @@ async def _read_task_ownership_records(
     records: list[TaskOwnershipRecord] = []
 
     try:
-        async with docket.redis() as redis:
+        async with docket.redis() as client:
             cursor = 0
             while True:
-                cursor, keys = await redis.scan(cursor=cursor, match=pattern, count=250)
+                cursor, keys = await client.scan(cursor=cursor, match=pattern, count=250)
                 if keys:
-                    raw_values = await redis.mget(keys)
+                    raw_values = await client.mget(keys)
                     for raw in raw_values:
                         if raw is None:
                             continue
@@ -482,7 +482,7 @@ async def _sessions_payload_indexed(
     by_session: dict[str, dict[str, Any]] = {}
 
     try:
-        async with docket.redis() as redis:
+        async with docket.redis() as client:
             for record in records_by_id.values():
                 sid = record.session_id
                 created_at_s = int(int(record.created_at_ms) / 1000)
@@ -510,7 +510,7 @@ async def _sessions_payload_indexed(
                 task_key = build_task_key(
                     record.session_id, record.task_id, "tool", record.tool_name
                 )
-                runs_hash = await redis.hgetall(docket.runs_key(task_key))
+                runs_hash = await client.hgetall(docket.runs_key(task_key))
                 if runs_hash:
                     state, last_activity_s = _task_state_from_runs_hash(runs_hash)
                 else:
@@ -567,7 +567,7 @@ async def _sessions_payload_scan(
     import redis.exceptions
 
     try:
-        async with docket.redis() as redis:
+        async with docket.redis() as client:
             for record in records:
                 sid = record.session_id
                 created_at_s = int(int(record.created_at_ms) / 1000)
@@ -595,7 +595,7 @@ async def _sessions_payload_scan(
                 task_key = build_task_key(
                     record.session_id, record.task_id, "tool", record.tool_name
                 )
-                runs_hash = await redis.hgetall(docket.runs_key(task_key))
+                runs_hash = await client.hgetall(docket.runs_key(task_key))
                 if runs_hash:
                     state, last_activity_s = _task_state_from_runs_hash(runs_hash)
                 else:
@@ -750,8 +750,8 @@ async def _list_session_screenshots(request: Request) -> Response:
 
             import redis.exceptions
 
-            async with docket.redis() as redis:
-                candidates = await redis.zrevrange(zset_key, 0, candidate_limit - 1)
+            async with docket.redis() as client:
+                candidates = await client.zrevrange(zset_key, 0, candidate_limit - 1)
 
                 out: list[dict[str, Any]] = []
                 for raw in candidates:
@@ -779,7 +779,7 @@ async def _list_session_screenshots(request: Request) -> Response:
                     data_base64: str | None = None
                     if include_data and str(record.s3_bucket).strip().lower() == "redis":
                         try:
-                            blob = await redis.get(str(record.s3_key))
+                            blob = await client.get(str(record.s3_key))
                         except redis.exceptions.RedisError:
                             blob = None
                         if isinstance(blob, bytes) and blob:

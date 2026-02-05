@@ -140,8 +140,7 @@ async def _call_with_identity(
     /,
     **kwargs: object,
 ) -> T:
-    from .optionb.identity import STDIO_IDENTITY
-    from .optionb.identity import Identity
+    from .optionb.identity import STDIO_IDENTITY, Identity
     from .optionb.request_context import identity_scope
 
     identity = _resolve_identity_from_access_token()
@@ -155,7 +154,9 @@ async def _call_with_identity(
                 transport=job_record.transport,
             )
     if identity is None:
-        identity = STDIO_IDENTITY
+        # stdio/dev fallback: allow tests/operators to override identity resolution
+        # via `_resolve_identity_for_current_call()`.
+        identity = _resolve_identity_for_current_call() or STDIO_IDENTITY
     with identity_scope(identity), sdk_server.session_id_scope(
         getattr(job_record, "session_id", None) if job_record is not None else None
     ):
@@ -563,16 +564,17 @@ async def get_run_events(
             "include_details": bool(include_details),
         },
     )
-    return await _call_with_identity(
-        sdk_server.get_run_events,
-        session_id=session_id,
-        last_n=last_n,
-        event_types=event_types,
-        from_timestamp=from_timestamp,
-        has_error=has_error,
-        include_details=include_details,
-        ctx=ctx,  # type: ignore[arg-type]
-    )
+    with _docket_scope(ctx):
+        return await _call_with_identity(
+            sdk_server.get_run_events,
+            session_id=session_id,
+            last_n=last_n,
+            event_types=event_types,
+            from_timestamp=from_timestamp,
+            has_error=has_error,
+            include_details=include_details,
+            ctx=ctx,  # type: ignore[arg-type]
+        )
 
 
 @mcp.tool(name="setup_browser_state")
@@ -615,16 +617,17 @@ async def get_screenshots(
             "include_images": bool(include_images),
         },
     )
-    return await _call_with_identity(
-        sdk_server.get_screenshots,
-        last_n=last_n,
-        screenshot_type=screenshot_type,
-        session_id=session_id,
-        from_timestamp=from_timestamp,
-        has_error=has_error,
-        include_images=include_images,
-        ctx=ctx,  # type: ignore[arg-type]
-    )
+    with _docket_scope(ctx):
+        return await _call_with_identity(
+            sdk_server.get_screenshots,
+            last_n=last_n,
+            screenshot_type=screenshot_type,
+            session_id=session_id,
+            from_timestamp=from_timestamp,
+            has_error=has_error,
+            include_images=include_images,
+            ctx=ctx,  # type: ignore[arg-type]
+        )
 
 
 @mcp.tool(name="tasks_list")

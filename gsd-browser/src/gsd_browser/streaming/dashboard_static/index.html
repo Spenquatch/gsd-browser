@@ -42,8 +42,16 @@
         <h2>Control</h2>
         <div class="control">
           <div class="field">
+            <label for="sessionId">Session ID</label>
+            <input id="sessionId" type="text" placeholder="optional (dev); required for JWT mode" />
+          </div>
+          <div class="field" id="apiKeyField">
             <label for="apiKey">API key</label>
-            <input id="apiKey" type="password" placeholder="required when auth enabled" />
+            <input id="apiKey" type="password" placeholder="required when HMAC auth enabled" />
+          </div>
+          <div class="field" id="jwtField">
+            <label for="jwtToken">JWT token</label>
+            <input id="jwtToken" type="password" placeholder="required when JWT auth enabled" />
           </div>
           <div class="buttons">
             <button id="btnConnect" class="primary">Connect</button>

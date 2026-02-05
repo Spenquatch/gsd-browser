@@ -126,6 +126,7 @@ module apiApp 'modules/aca-app-api.bicep' = {
     location: location
     prefix: prefix
     environmentId: acaEnv.outputs.environmentId
+    acaEnvironmentDomain: acaEnv.outputs.defaultDomain
     acrName: acr.outputs.acrName
     acrLoginServer: acr.outputs.acrLoginServer
     imageTag: imageTag
@@ -133,6 +134,8 @@ module apiApp 'modules/aca-app-api.bicep' = {
     redisHost: redis.outputs.redisHost
     redisPort: redis.outputs.redisPort
     anthropicApiKey: anthropicApiKey
+    storageAccountName: storage.outputs.storageAccountName
+    azureBlobContainer: 'gsd-artifacts'
     jwtJwksUrl: jwtJwksUrl
     jwtIssuer: jwtIssuer
     jwtAudience: jwtAudience
@@ -149,6 +152,7 @@ module mgmtApp 'modules/aca-app-mgmt.bicep' = {
     location: location
     prefix: prefix
     environmentId: acaEnv.outputs.environmentId
+    acaEnvironmentDomain: acaEnv.outputs.defaultDomain
     acrName: acr.outputs.acrName
     acrLoginServer: acr.outputs.acrLoginServer
     imageTag: imageTag
@@ -171,6 +175,7 @@ module workerApp 'modules/aca-app-worker.bicep' = {
     location: location
     prefix: prefix
     environmentId: acaEnv.outputs.environmentId
+    acaEnvironmentDomain: acaEnv.outputs.defaultDomain
     acrName: acr.outputs.acrName
     acrLoginServer: acr.outputs.acrLoginServer
     imageTag: imageTag
@@ -178,6 +183,10 @@ module workerApp 'modules/aca-app-worker.bicep' = {
     redisHost: redis.outputs.redisHost
     redisPort: redis.outputs.redisPort
     anthropicApiKey: anthropicApiKey
+    jwtJwksUrl: jwtJwksUrl
+    jwtIssuer: jwtIssuer
+    jwtAudience: jwtAudience
+    allowedOrigins: allowedOrigins
     storageAccountName: storage.outputs.storageAccountName
     s3EndpointUrl: storage.outputs.blobEndpoint
     s3Bucket: 'gsd-artifacts'
@@ -196,6 +205,16 @@ module workerStorageRbac 'modules/storage-rbac.bicep' = {
   params: {
     storageAccountName: storage.outputs.storageAccountName
     principalId: workerApp.outputs.principalId
+  }
+}
+
+// Grant api app Storage Blob Data Contributor role so it can generate SAS URLs for artifacts.
+module apiStorageRbac 'modules/storage-rbac.bicep' = {
+  name: 'api-storage-rbac'
+  scope: rg
+  params: {
+    storageAccountName: storage.outputs.storageAccountName
+    principalId: apiApp.outputs.principalId
   }
 }
 

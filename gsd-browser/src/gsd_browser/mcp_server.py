@@ -208,11 +208,13 @@ def _register_session_in_registry(
             )
 
     try:
+        stream_url = _build_stream_url(settings, session_id)
         create(
             session_id=session_id,
             owner_tenant_id=tenant_id,
             owner_subject_id=subject_id,
             worker_id=worker_id,
+            stream_url=stream_url,
         )
     except Exception:  # noqa: BLE001
         logger.debug(
@@ -254,15 +256,21 @@ def _build_stream_url(settings: Settings, session_id: str) -> str | None:
     localhost dashboard URL. Returns None if no dashboard is available.
     """
     public_host = getattr(settings, "streaming_public_host", "") or ""
-    public_scheme = getattr(settings, "streaming_public_scheme", "") or "wss"
+    raw_scheme = getattr(settings, "streaming_public_scheme", "") or "wss"
+    scheme = str(raw_scheme).strip().lower() or "wss"
+    if scheme == "wss":
+        scheme = "https"
+    elif scheme == "ws":
+        scheme = "http"
     if public_host:
-        return f"{public_scheme}://{public_host}/stream"
+        return f"{scheme}://{public_host}"
 
     bind_host = (
         getattr(settings, "streaming_bind_host", "")
         or DEFAULT_DASHBOARD_HOST
     )
-    return f"ws://{bind_host}:{DEFAULT_DASHBOARD_PORT}/stream"
+    _ = session_id
+    return f"http://{bind_host}:{DEFAULT_DASHBOARD_PORT}"
 
 
 def _select_web_eval_agent_mode(*, normalized_url: str, explicit: str | None) -> str:
@@ -1353,13 +1361,13 @@ async def web_eval_agent(
             # Register direct dispatcher so Socket.IO handlers can dispatch
             # CDP input immediately (like web-agent) instead of only via queue.
             main_loop = asyncio.get_running_loop()
-            control_state.set_input_dispatcher(
-                cdp_dispatcher.dispatch, main_loop
-            )
-            logger.info(
-                "Registered direct CDP input dispatcher on control_state (loop=%s)",
-                id(main_loop),
-            )
+            set_input_dispatcher = getattr(control_state, "set_input_dispatcher", None)
+            if callable(set_input_dispatcher):
+                set_input_dispatcher(cdp_dispatcher.dispatch, main_loop)
+                logger.info(
+                    "Registered direct CDP input dispatcher on control_state (loop=%s)",
+                    id(main_loop),
+                )
 
         cdp_attached = False
 
@@ -2404,11 +2412,11 @@ async def get_run_events(
                 min_score: int | None = None
                 if parsed_from_timestamp is not None:
                     min_score = int(float(parsed_from_timestamp) * 1000)
-                async with docket.redis() as redis:
+                async with docket.redis() as client:
                     if min_score is None:
-                        candidates = await redis.zrevrange(zset_key, 0, candidate_limit - 1)
+                        candidates = await client.zrevrange(zset_key, 0, candidate_limit - 1)
                     else:
-                        candidates = await redis.zrevrangebyscore(
+                        candidates = await client.zrevrangebyscore(
                             zset_key, "+inf", min_score, start=0, num=candidate_limit
                         )
 
@@ -2695,25 +2703,40 @@ async def get_screenshots(
     used_distributed = False
 
     try:
-        from .optionb.s3_client import has_complete_s3_config
-
-        s3_available = has_complete_s3_config()
-    except ImportError:
-        s3_available = False
-
-    if s3_available:
+        from .optionb.artifact_index import get_artifact_index_store
+        from .optionb.identity import STDIO_IDENTITY
+        from .optionb.request_context import get_current_identity
+    except Exception:  # noqa: BLE001
+        pass
+    else:
         try:
-            from .optionb.artifact_index import get_artifact_index_store
-            from .optionb.identity import STDIO_IDENTITY
-            from .optionb.request_context import get_current_identity
-            from .optionb.s3_client import get_s3_client
-
             identity = get_current_identity() or STDIO_IDENTITY
             store = get_artifact_index_store()
             docket = store.docket_getter()
             if docket is not None:
                 used_distributed = True
-                s3 = get_s3_client()
+
+                s3 = None
+                try:
+                    from .optionb.s3_client import get_s3_client, has_complete_s3_config
+
+                    if has_complete_s3_config():
+                        s3 = get_s3_client()
+                except Exception:  # noqa: BLE001
+                    s3 = None
+
+                azure_client = None
+                try:
+                    from .optionb.azure_blob_client import (
+                        get_azure_blob_client,
+                        has_azure_blob_config,
+                    )
+
+                    if has_azure_blob_config():
+                        azure_client = get_azure_blob_client()
+                except Exception:  # noqa: BLE001
+                    azure_client = None
+
                 zset_key = (
                     f"gsd:v1:tenants:{identity.tenant_id}:subjects:{identity.subject_id}"
                     f":sessions:{session_id}:screenshots:z"
@@ -2722,11 +2745,11 @@ async def get_screenshots(
                 min_score: int | None = None
                 if from_timestamp is not None:
                     min_score = int(float(from_timestamp) * 1000)
-                async with docket.redis() as redis:
+                async with docket.redis() as client:
                     if min_score is None:
-                        candidates = await redis.zrevrange(zset_key, 0, candidate_limit - 1)
+                        candidates = await client.zrevrange(zset_key, 0, candidate_limit - 1)
                     else:
-                        candidates = await redis.zrevrangebyscore(
+                        candidates = await client.zrevrangebyscore(
                             zset_key, "+inf", min_score, start=0, num=candidate_limit
                         )
 
@@ -2750,43 +2773,80 @@ async def get_screenshots(
                     if has_error is not None and bool(record.has_error) != bool(has_error):
                         continue
 
+                    backend = "s3"
+                    try:
+                        backend = str(record.get_effective_backend())
+                    except Exception:  # noqa: BLE001
+                        backend = "s3"
+
                     inline_included = False
                     image_base64: str | None = None
                     want_inline = bool(
                         include_images
-                        and (
-                            delivery_mode in {"inline", "both"}
-                            or str(record.s3_bucket or "").strip().lower() == "redis"
-                        )
+                        and (delivery_mode in {"inline", "both"} or backend == "redis")
                     )
                     if want_inline:
                         image_bytes = b""
-                        if str(record.s3_bucket or "").strip().lower() == "redis":
+                        if backend == "redis":
                             try:
-                                async with docket.redis() as redis:
-                                    raw_bytes = await redis.get(str(record.s3_key))
+                                async with docket.redis() as client:
+                                    raw_bytes = await client.get(str(record.s3_key))
                                 if isinstance(raw_bytes, bytes):
                                     image_bytes = raw_bytes
                                 elif isinstance(raw_bytes, str):
                                     image_bytes = raw_bytes.encode("utf-8")
                             except Exception:  # noqa: BLE001
                                 image_bytes = b""
+                        elif backend == "azure":
+                            if azure_client is None:
+                                if error is None:
+                                    error = (
+                                        "Azure artifacts require GSD_AZURE_STORAGE_ACCOUNT "
+                                        "(and Container App managed identity RBAC) to retrieve."
+                                    )
+                            else:
+                                try:
+                                    image_bytes = azure_client.get_bytes(
+                                        blob_name=str(record.s3_key)
+                                    )
+                                except Exception:  # noqa: BLE001
+                                    image_bytes = b""
                         else:
-                            try:
-                                image_bytes = s3.get_bytes(key=record.s3_key)
-                            except Exception:  # noqa: BLE001
-                                image_bytes = b""
+                            if s3 is None:
+                                if error is None:
+                                    error = (
+                                        "S3 artifacts require complete GSD_S3_* config to retrieve."
+                                    )
+                            else:
+                                try:
+                                    image_bytes = s3.get_bytes(key=str(record.s3_key))
+                                except Exception:  # noqa: BLE001
+                                    image_bytes = b""
+
                         if image_bytes:
                             inline_included = True
                             image_base64 = base64.b64encode(image_bytes).decode("ascii")
 
                     artifact_url: str | None = None
                     artifact_url_expires_at: float | None = None
-                    if include_presigned and str(record.s3_bucket or "").strip().lower() != "redis":
+                    if include_presigned and backend != "redis":
                         try:
-                            artifact_url, artifact_url_expires_at = s3.presign_get(
-                                key=record.s3_key, ttl_s=ttl_s
-                            )
+                            if backend == "azure":
+                                if azure_client is None:
+                                    raise RuntimeError("Azure blob client not configured")
+                                artifact_url, artifact_url_expires_at = (
+                                    azure_client.generate_sas_url(
+                                        blob_name=str(record.s3_key),
+                                        ttl_s=int(ttl_s),
+                                    )
+                                )
+                            else:
+                                if s3 is None:
+                                    raise RuntimeError("S3 client not configured")
+                                artifact_url, artifact_url_expires_at = s3.presign_get(
+                                    key=str(record.s3_key), ttl_s=int(ttl_s)
+                                )
+
                             logger.info(
                                 "audit.presign_issued",
                                 extra={
@@ -2794,20 +2854,26 @@ async def get_screenshots(
                                     "tenant_id": identity.tenant_id,
                                     "subject_id": identity.subject_id,
                                     "session_id": session_id,
+                                    "backend": backend,
                                     "expires_at": artifact_url_expires_at,
                                 },
                             )
                         except Exception as exc:  # noqa: BLE001
                             logger.warning(
                                 "audit.presign_failed",
-                                extra={"artifact_id": artifact_id, "session_id": session_id},
+                                extra={
+                                    "artifact_id": artifact_id,
+                                    "session_id": session_id,
+                                    "backend": backend,
+                                },
                             )
                             artifact_url = None
                             artifact_url_expires_at = None
-                            error = _truncate(
-                                f"One or more artifacts could not be presigned: {exc}",
-                                max_len=2000,
-                            )
+                            if error is None:
+                                error = _truncate(
+                                    f"One or more artifacts could not be presigned: {exc}",
+                                    max_len=2000,
+                                )
 
                     header_screenshots.append(
                         {
@@ -2842,11 +2908,15 @@ async def get_screenshots(
 
                     if len(header_screenshots) >= last_n:
                         break
-        except Exception:  # noqa: BLE001
+        except Exception as exc:  # noqa: BLE001
             header_screenshots = []
             inline_images = []
-            error = None
             used_distributed = False
+            if error is None:
+                error = _truncate(
+                    f"Distributed artifact lookup failed: {exc}",
+                    max_len=2000,
+                )
 
     legacy_screenshots: list[dict[str, Any]] = []
     if not used_distributed:

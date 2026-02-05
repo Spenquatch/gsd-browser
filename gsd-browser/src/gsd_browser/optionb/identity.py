@@ -32,6 +32,11 @@ class JwtAudienceMismatch:
 
 STDIO_IDENTITY = Identity(tenant_id="local", subject_id="local", transport="stdio")
 
+_JWT_VERIFIER_CACHE: tuple[
+    tuple[str, str, str, str, str, str],
+    GsdJwtVerifier | None,
+] | None = None
+
 
 def _env(name: str) -> str:
     return str(os.environ.get(name, "")).strip()
@@ -43,6 +48,60 @@ def get_jwt_tenant_id_claim_name() -> str:
 
 def get_jwt_subject_id_claim_name() -> str:
     return _env("GSD_JWT_SUBJECT_ID_CLAIM") or "sub"
+
+
+def get_jwt_verifier() -> GsdJwtVerifier | None:
+    """Return a configured JWT verifier for GSD services.
+
+    Streaming and management endpoints treat JWT verification as optional unless explicitly
+    enabled. Callers should fail closed when they require JWT mode.
+
+    Required env vars:
+    - `GSD_JWT_ISSUER`
+    - `GSD_JWT_AUDIENCE`
+    - Exactly one of:
+      - `GSD_JWT_JWKS_URL` (preferred in production), or
+      - `GSD_JWT_PUBLIC_KEY` (useful for offline tests/local dev)
+    """
+    global _JWT_VERIFIER_CACHE
+
+    jwks_url = _env("GSD_JWT_JWKS_URL")
+    public_key = _env("GSD_JWT_PUBLIC_KEY")
+    issuer = _env("GSD_JWT_ISSUER")
+    audience = _env("GSD_JWT_AUDIENCE")
+    tenant_id_claim = get_jwt_tenant_id_claim_name()
+    subject_id_claim = get_jwt_subject_id_claim_name()
+
+    cache_key = (
+        jwks_url,
+        public_key,
+        issuer,
+        audience,
+        tenant_id_claim,
+        subject_id_claim,
+    )
+    if _JWT_VERIFIER_CACHE is not None and _JWT_VERIFIER_CACHE[0] == cache_key:
+        return _JWT_VERIFIER_CACHE[1]
+
+    if not issuer or not audience:
+        _JWT_VERIFIER_CACHE = (cache_key, None)
+        return None
+
+    if bool(jwks_url) == bool(public_key):
+        # Require exactly one: fail safe-by-default.
+        _JWT_VERIFIER_CACHE = (cache_key, None)
+        return None
+
+    verifier = GsdJwtVerifier(
+        jwks_uri=jwks_url or None,
+        public_key=public_key or None,
+        issuer=issuer,
+        audience=audience,
+        tenant_id_claim=tenant_id_claim,
+        subject_id_claim=subject_id_claim,
+    )
+    _JWT_VERIFIER_CACHE = (cache_key, verifier)
+    return verifier
 
 
 def _normalize_identity_component(value: Any, *, field_name: str) -> str:

@@ -52,6 +52,7 @@ export function useStreamSocket(opts: UseStreamSocketOpts): UseStreamSocketResul
     const socket = io(`${url}/stream`, {
       path: "/socket.io",
       transports: ["websocket", "polling"],
+      query: { session_id: sessionId },
       auth: jwt ? { token: jwt } : undefined,
       autoConnect: true,
       reconnection: true,

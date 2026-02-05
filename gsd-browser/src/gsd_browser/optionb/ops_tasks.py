@@ -296,12 +296,12 @@ class OpsTasksService:
         records: list[TaskOwnershipRecord] = []
 
         try:
-            async with docket.redis() as redis:
+            async with docket.redis() as client:
                 cursor = 0
                 while True:
-                    cursor, keys = await redis.scan(cursor=cursor, match=pattern, count=250)
+                    cursor, keys = await client.scan(cursor=cursor, match=pattern, count=250)
                     if keys:
-                        raw_values = await redis.mget(keys)
+                        raw_values = await client.mget(keys)
                         for raw in raw_values:
                             if raw is None:
                                 continue
@@ -380,7 +380,7 @@ class OpsTasksService:
         last_cursor_task_id: str | None = None
 
         docket = self._require_docket()
-        async with docket.redis() as redis:
+        async with docket.redis() as client:
             for record in filtered:
                 status = "queued"
                 updated_at: datetime | None = None
@@ -390,7 +390,7 @@ class OpsTasksService:
                         tool_name=record.tool_name,
                         session_id=record.session_id,
                     )
-                    runs_hash = await redis.hgetall(docket.runs_key(task_key))
+                    runs_hash = await client.hgetall(docket.runs_key(task_key))
                     if runs_hash:
                         status, updated_at = _hydrate_status_from_runs_hash(runs_hash=runs_hash)
                 except Exception:  # noqa: BLE001
@@ -492,7 +492,7 @@ class OpsTasksService:
         last_cursor_task_id: str | None = None
 
         docket = self._require_docket()
-        async with docket.redis() as redis:
+        async with docket.redis() as client:
             for record in filtered:
                 status = "queued"
                 updated_at: datetime | None = None
@@ -502,7 +502,7 @@ class OpsTasksService:
                         tool_name=record.tool_name,
                         session_id=record.session_id,
                     )
-                    runs_hash = await redis.hgetall(docket.runs_key(task_key))
+                    runs_hash = await client.hgetall(docket.runs_key(task_key))
                     if runs_hash:
                         status, updated_at = _hydrate_status_from_runs_hash(runs_hash=runs_hash)
                 except Exception:  # noqa: BLE001

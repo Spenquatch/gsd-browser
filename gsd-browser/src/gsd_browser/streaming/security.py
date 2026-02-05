@@ -336,7 +336,12 @@ def _authorize_jwt(
     jwt_verifier: Any | None,
     sid_identity_map: dict[str, Any] | None,
 ) -> bool:
-    """Validate JWT token from Socket.IO auth payload."""
+    """Validate the presence of a JWT token for Socket.IO connect.
+
+    The connect handler is async and performs full JWT verification + identity extraction.
+    This helper is intentionally conservative and only validates that a token is present
+    and JWT mode is configured.
+    """
     if jwt_verifier is None:
         logger.error(
             "JWT auth mode enabled but no jwt_verifier configured"
@@ -366,23 +371,6 @@ def _authorize_jwt(
         )
         return False
 
-    # JWT verification is async but Socket.IO connect is sync context.
-    # The caller should handle async verification; here we store the
-    # token for deferred validation or trust the caller already validated.
-    # For now, we mark this as needing async verification by the caller.
-    import asyncio
-
-    try:
-        loop = asyncio.get_running_loop()
-    except RuntimeError:
-        loop = None
-
-    if loop is not None:
-        # We're in an async context — the caller should verify the token
-        # before calling this function, or use the async wrapper.
-        # Store token for the caller to verify.
-        pass
-
     sec.info(
         "jwt_auth_attempt",
         extra={
@@ -392,9 +380,5 @@ def _authorize_jwt(
         },
     )
 
-    # Token will be validated by the async connect handler.
-    # Store the raw token so the handler can verify it.
-    if sid_identity_map is not None:
-        sid_identity_map[sid] = {"_pending_token": token}
-
+    _ = sid_identity_map
     return True

@@ -86,10 +86,10 @@ class TaskOwnershipStore:
         created_at_ms = int(record.created_at_ms)
 
         try:
-            async with docket.redis() as redis:
+            async with docket.redis() as client:
                 # Get current TTLs to apply max rule
-                session_idx_ttl = await redis.pttl(session_idx_key)
-                task_idx_ttl = await redis.pttl(task_idx_key)
+                session_idx_ttl = await client.pttl(session_idx_key)
+                task_idx_ttl = await client.pttl(task_idx_key)
 
                 # Calculate new expiry using max rule
                 now_ms = _now_ms()
@@ -101,7 +101,7 @@ class TaskOwnershipStore:
                 session_idx_new_expiry = max(session_idx_current_expiry, expires_at_ms)
                 task_idx_new_expiry = max(task_idx_current_expiry, expires_at_ms)
 
-                pipe = redis.pipeline(transaction=True)
+                pipe = client.pipeline(transaction=True)
                 # Write ownership record
                 pipe.set(key, payload)
                 pipe.pexpireat(key, expires_at_ms)
@@ -124,8 +124,8 @@ class TaskOwnershipStore:
 
         key = _redis_key(task_id)
         try:
-            async with docket.redis() as redis:
-                raw = await redis.get(key)
+            async with docket.redis() as client:
+                raw = await client.get(key)
         except redis.exceptions.RedisError as exc:
             raise RuntimeError("Failed to read TaskOwnershipRecord") from exc
 
@@ -173,16 +173,16 @@ class TaskOwnershipStore:
         )
 
         try:
-            async with docket.redis() as redis:
+            async with docket.redis() as client:
                 # Get total count
-                total = await redis.zcard(session_idx_key)
+                total = await client.zcard(session_idx_key)
                 if total == 0:
                     return [], 0
 
                 # Get paginated results (newest first via ZREVRANGE)
                 start = offset
                 end = offset + limit - 1
-                members = await redis.zrevrange(session_idx_key, start, end)
+                members = await client.zrevrange(session_idx_key, start, end)
 
                 session_ids = [
                     m.decode("utf-8") if isinstance(m, bytes) else str(m) for m in members
@@ -213,8 +213,8 @@ class TaskOwnershipStore:
         )
 
         try:
-            async with docket.redis() as redis:
-                members = await redis.zrange(task_idx_key, 0, -1)
+            async with docket.redis() as client:
+                members = await client.zrange(task_idx_key, 0, -1)
                 return [m.decode("utf-8") if isinstance(m, bytes) else str(m) for m in members]
         except redis.exceptions.RedisError as exc:
             raise RuntimeError("Failed to list tasks by session") from exc
@@ -239,8 +239,8 @@ class TaskOwnershipStore:
         now_ms = _now_ms()
 
         try:
-            async with docket.redis() as redis:
-                raw_values = await redis.mget(keys)
+            async with docket.redis() as client:
+                raw_values = await client.mget(keys)
 
             result: dict[str, TaskOwnershipRecord] = {}
             for tid, raw in zip(task_ids, raw_values, strict=False):
@@ -275,8 +275,8 @@ class TaskOwnershipStore:
         )
 
         try:
-            async with docket.redis() as redis:
-                return await redis.exists(session_idx_key) > 0
+            async with docket.redis() as client:
+                return await client.exists(session_idx_key) > 0
         except redis.exceptions.RedisError:
             return False
 

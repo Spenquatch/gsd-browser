@@ -65,6 +65,7 @@ let streamSocket = null;
 let ctrlSocket = null;
 let ctrlSid = null;
 let authRequired = false;
+let authMode = 'hmac';
 let lastFrameWallTs = null;
 let fpsCounter = { t0: nowMs(), frames: 0 };
 let sampleSeen = 0;
@@ -76,19 +77,66 @@ let lastControlState = {
 };
 let lastDeviceSize = null;
 
-async function connectSockets() {
-  const config = await getAuthConfig();
-  authRequired = Boolean(config?.auth_required);
+function queryParam(name) {
+  try {
+    return new URLSearchParams(window.location.search).get(name);
+  } catch {
+    return null;
+  }
+}
 
+function configureAuthUi() {
+  const apiKeyField = $('apiKeyField');
+  const jwtField = $('jwtField');
   const apiKeyInput = $('apiKey');
-  apiKeyInput.disabled = !authRequired;
-  if (authRequired && !apiKeyInput.value) {
-    toast('Auth is enabled; enter API key then Connect', 'bad');
+  const jwtInput = $('jwtToken');
+
+  if (authMode === 'jwt') {
+    if (apiKeyField) apiKeyField.style.display = 'none';
+    if (jwtField) jwtField.style.display = 'block';
+    if (apiKeyInput) apiKeyInput.disabled = true;
+    if (jwtInput) jwtInput.disabled = false;
     return;
   }
 
+  if (apiKeyField) apiKeyField.style.display = 'block';
+  if (jwtField) jwtField.style.display = 'none';
+  if (apiKeyInput) apiKeyInput.disabled = !authRequired;
+  if (jwtInput) jwtInput.disabled = true;
+}
+
+async function connectSockets() {
+  const config = await getAuthConfig();
+  authRequired = Boolean(config?.auth_required);
+  authMode = (config?.auth_mode ?? 'hmac').toLowerCase() === 'jwt' ? 'jwt' : 'hmac';
+  configureAuthUi();
+
+  const sessionIdInput = $('sessionId');
+  const sessionIdRaw = (sessionIdInput?.value || queryParam('session_id') || '').trim();
+  if (sessionIdInput && !sessionIdInput.value && sessionIdRaw) {
+    sessionIdInput.value = sessionIdRaw;
+  }
+
+  const apiKeyInput = $('apiKey');
+  const jwtInput = $('jwtToken');
+
   let auth = undefined;
-  if (authRequired) {
+  if (authMode === 'jwt') {
+    const token = (jwtInput?.value || queryParam('token') || '').trim();
+    if (!token) {
+      toast('JWT auth is enabled; provide a token (?token=... or paste it) then Connect', 'bad');
+      return;
+    }
+    if (!sessionIdRaw) {
+      toast('JWT mode requires a session id (?session_id=... or paste it) to join a room', 'bad');
+      return;
+    }
+    auth = { token };
+  } else if (authRequired) {
+    if (!apiKeyInput?.value) {
+      toast('Auth is enabled; enter API key then Connect', 'bad');
+      return;
+    }
     const { nonce } = await issueNonce();
     const sig = await hmacSha256Hex(apiKeyInput.value, nonce);
     auth = { nonce, sig };
@@ -96,24 +144,35 @@ async function connectSockets() {
 
   setPill($('connStatus'), 'connecting…', 'pill-warn');
 
-  streamSocket = io('/stream', {
+  const streamOpts = {
     transports: ['websocket'],
     auth,
     reconnection: true,
     reconnectionAttempts: 10,
     timeout: 5000
-  });
+  };
+  if (sessionIdRaw) streamOpts.query = { session_id: sessionIdRaw };
 
-  ctrlSocket = io('/ctrl', {
+  const ctrlOpts = {
     transports: ['websocket'],
     auth,
     reconnection: true,
     reconnectionAttempts: 10,
     timeout: 5000
-  });
+  };
+  if (sessionIdRaw) ctrlOpts.query = { session_id: sessionIdRaw };
+
+  streamSocket = io('/stream', streamOpts);
+  ctrlSocket = io('/ctrl', ctrlOpts);
 
   streamSocket.on('connect', () => {
     setPill($('connStatus'), 'stream connected', 'pill-good');
+    if (sessionIdRaw) {
+      streamSocket.emit('join_session', { session_id: sessionIdRaw }, (resp) => {
+        if (resp?.ok) return;
+        toast(`join_session failed: ${resp?.error ?? 'unknown_error'}`, 'bad');
+      });
+    }
   });
   streamSocket.on('disconnect', (reason) => {
     setPill($('connStatus'), `disconnected (${reason})`, 'pill-bad');
@@ -506,8 +565,18 @@ async function boot() {
   try {
     const cfg = await getAuthConfig();
     authRequired = Boolean(cfg?.auth_required);
-    $('apiKey').disabled = !authRequired;
-    if (!authRequired) {
+    authMode = (cfg?.auth_mode ?? 'hmac').toLowerCase() === 'jwt' ? 'jwt' : 'hmac';
+    configureAuthUi();
+
+    const jwtInput = $('jwtToken');
+    const apiKeyInput = $('apiKey');
+    const sessionIdInput = $('sessionId');
+    const qpToken = (queryParam('token') || '').trim();
+    const qpSession = (queryParam('session_id') || '').trim();
+    if (jwtInput && !jwtInput.value && qpToken) jwtInput.value = qpToken;
+    if (sessionIdInput && !sessionIdInput.value && qpSession) sessionIdInput.value = qpSession;
+
+    if (!authRequired && authMode !== 'jwt') {
       await connectSockets();
     }
   } catch (e) {

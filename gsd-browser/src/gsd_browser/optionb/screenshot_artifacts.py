@@ -223,8 +223,8 @@ async def persist_screenshot(
             expires_at_ms = int(created_at_ms + _retention_seconds() * 1000)
 
             async def upload() -> None:
-                async with docket.redis() as redis:
-                    pipe = redis.pipeline(transaction=True)
+                async with docket.redis() as client:
+                    pipe = client.pipeline(transaction=True)
                     pipe.set(blob_key, shot.image_bytes or b"")
                     pipe.pexpireat(blob_key, int(expires_at_ms))
                     await pipe.execute()

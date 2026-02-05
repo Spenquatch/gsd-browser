@@ -42,6 +42,7 @@ export function useControlSocket(opts: UseControlSocketOpts): UseControlSocketRe
     const socket = io(`${url}/ctrl`, {
       path: "/socket.io",
       transports: ["websocket", "polling"],
+      query: { session_id: sessionId },
       auth: jwt ? { token: jwt } : undefined,
       autoConnect: true,
       reconnection: true,

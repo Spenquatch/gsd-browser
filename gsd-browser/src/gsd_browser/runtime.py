@@ -135,12 +135,15 @@ def _run_uvicorn_in_thread(
 
 
 def _wait_for_port(*, host: str, port: int, timeout_s: float) -> None:
+    connect_host = host
+    if connect_host in {"0.0.0.0", "::"}:
+        connect_host = "127.0.0.1"
     start = time.time()
     while time.time() - start < timeout_s:
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
             sock.settimeout(0.5)
             try:
-                result = sock.connect_ex((host, port))
+                result = sock.connect_ex((connect_host, port))
             except OSError:
                 result = 1
         if result == 0:

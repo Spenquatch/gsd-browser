@@ -43,6 +43,9 @@ param jwtAudience string
 @description('Allowed origins for CORS (comma-separated URLs)')
 param allowedOrigins string = ''
 
+@description('ACA environment domain (e.g. yellowplant-...eastus.azurecontainerapps.io)')
+param acaEnvironmentDomain string
+
 // Reference ACR as existing to call listCredentials() directly
 resource acr 'Microsoft.ContainerRegistry/registries@2023-11-01-preview' existing = {
   name: acrName
@@ -109,6 +112,9 @@ resource mgmtApp 'Microsoft.App/containerApps@2024-03-01' = {
             { name: 'GSD_DEPLOYMENT_ENV', value: 'prod' }
             { name: 'FASTMCP_DOCKET_URL', secretRef: 'docket-url' }
             { name: 'FASTMCP_DOCKET_NAME', value: 'gsd' }
+            // Streaming base URL advertised to the dashboard (ADR-0024)
+            { name: 'GSD_STREAMING_PUBLIC_HOST', value: '${prefix}-worker.${acaEnvironmentDomain}' }
+            { name: 'GSD_STREAMING_PUBLIC_SCHEME', value: 'https' }
             { name: 'GSD_JWT_JWKS_URL', value: jwtJwksUrl }
             { name: 'GSD_JWT_ISSUER', value: jwtIssuer }
             { name: 'GSD_JWT_AUDIENCE', value: jwtAudience }

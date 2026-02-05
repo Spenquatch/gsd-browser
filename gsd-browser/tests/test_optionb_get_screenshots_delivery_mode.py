@@ -245,3 +245,222 @@ def test_get_screenshots_is_non_enumerable_across_tenants(
             assert payload["screenshots"] == []
 
     asyncio.run(run())
+
+
+def test_get_screenshots_uses_distributed_store_without_s3_env(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _configure_memory_docket(monkeypatch, label="screenshots-no-s3-env")
+    monkeypatch.setenv("GSD_ARTIFACT_DELIVERY_MODE", "inline")
+
+    for name in (
+        "GSD_S3_ENDPOINT_URL",
+        "GSD_S3_BUCKET",
+        "GSD_S3_REGION",
+        "GSD_S3_ACCESS_KEY_ID",
+        "GSD_S3_SECRET_ACCESS_KEY",
+    ):
+        monkeypatch.delenv(name, raising=False)
+
+    session_id = str(uuid.uuid4())
+    server = GsdFastMCP("screenshots-no-s3-env", tasks=True)
+    server._resolve_identity_for_current_request = lambda: Identity(  # type: ignore[method-assign]
+        tenant_id="t1",
+        subject_id="s1",
+        transport="stdio",
+    )
+
+    @server.tool(name="persist_only")
+    async def persist_only() -> str:
+        from gsd_browser.screenshot_manager import Screenshot
+
+        artifact_id = str(uuid.uuid4())
+        shot = Screenshot(
+            id=artifact_id,
+            timestamp=time.time(),
+            screenshot_type="agent_step",
+            source="test",
+            session_id=session_id,
+            has_error=False,
+            metadata={"source": "test"},
+            image_bytes=b"hello",
+            mime_type="image/png",
+            url="https://example.test",
+            step=1,
+        )
+        await persist_screenshot(shot)
+        return artifact_id
+
+    @server.tool(name="get_screenshots")
+    async def get_screenshots_tool(  # noqa: D401
+        last_n: int = 5,
+        screenshot_type: str = "agent_step",
+        session_id: str = "",
+        from_timestamp: float | None = None,
+        has_error: bool | None = None,
+        include_images: bool = True,
+        ctx: object | None = None,
+    ):
+        return await sdk_server.get_screenshots(
+            last_n=last_n,
+            screenshot_type=screenshot_type,
+            session_id=session_id,
+            from_timestamp=from_timestamp,
+            has_error=has_error,
+            include_images=include_images,
+            ctx=ctx,  # type: ignore[arg-type]
+        )
+
+    async def run() -> None:
+        async with Client(server) as client:
+            _ = await client.call_tool("persist_only", {})
+            result = await client.call_tool_mcp(
+                name="get_screenshots",
+                arguments={
+                    "session_id": session_id,
+                    "last_n": 5,
+                    "screenshot_type": "agent_step",
+                    "include_images": True,
+                },
+            )
+            assert result.isError is False
+            assert result.content
+
+            header = result.content[0]
+            assert isinstance(header, TextContent)
+            payload = json.loads(header.text)
+            assert payload["session_id"] == session_id
+            assert payload["error"] is None
+            assert len(payload["screenshots"]) == 1
+
+            shot = payload["screenshots"][0]
+            assert shot["inline_included"] is True
+
+            image_blocks = [
+                entry for entry in result.content[1:] if isinstance(entry, ImageContent)
+            ]
+            assert len(image_blocks) == 1
+
+    asyncio.run(run())
+
+
+def test_get_screenshots_supports_azure_backend(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _configure_memory_docket(monkeypatch, label="screenshots-azure-backend")
+    monkeypatch.setenv("GSD_AZURE_STORAGE_ACCOUNT", "testacct")
+    monkeypatch.setenv("GSD_AZURE_BLOB_CONTAINER", "gsd-artifacts")
+    monkeypatch.setenv("GSD_ARTIFACT_DELIVERY_MODE", "both")
+    monkeypatch.setenv("GSD_PRESIGNED_URL_TTL_S", "900")
+
+    @dataclass(frozen=True, slots=True)
+    class _FakeAzureBlob:
+        storage_account_name: str
+        container_name: str
+        _objects: dict[str, bytes]
+
+        def put_bytes(self, *, blob_name: str, body: bytes, content_type: str) -> None:  # noqa: ARG002
+            self._objects[str(blob_name)] = bytes(body)
+
+        def get_bytes(self, *, blob_name: str) -> bytes:
+            return bytes(self._objects.get(str(blob_name), b""))
+
+        def generate_sas_url(self, *, blob_name: str, ttl_s: int) -> tuple[str, float]:
+            return (
+                f"https://{self.storage_account_name}.blob.core.windows.net/"
+                f"{self.container_name}/{blob_name}?sig=fake&ttl={int(ttl_s)}",
+                float(time.time() + int(ttl_s)),
+            )
+
+    from gsd_browser.optionb import azure_blob_client as azure_blob_mod
+
+    fake_azure = _FakeAzureBlob(
+        storage_account_name="testacct",
+        container_name="gsd-artifacts",
+        _objects={},
+    )
+    monkeypatch.setattr(azure_blob_mod, "get_azure_blob_client", lambda: fake_azure)
+
+    session_id = str(uuid.uuid4())
+    server = GsdFastMCP("screenshots-azure-backend", tasks=True)
+    server._resolve_identity_for_current_request = lambda: Identity(  # type: ignore[method-assign]
+        tenant_id="t1",
+        subject_id="s1",
+        transport="stdio",
+    )
+
+    @server.tool(name="persist_only")
+    async def persist_only() -> str:
+        from gsd_browser.screenshot_manager import Screenshot
+
+        artifact_id = str(uuid.uuid4())
+        shot = Screenshot(
+            id=artifact_id,
+            timestamp=time.time(),
+            screenshot_type="agent_step",
+            source="test",
+            session_id=session_id,
+            has_error=False,
+            metadata={"source": "test"},
+            image_bytes=b"hello",
+            mime_type="image/png",
+            url="https://example.test",
+            step=1,
+        )
+        await persist_screenshot(shot)
+        return artifact_id
+
+    @server.tool(name="get_screenshots")
+    async def get_screenshots_tool(  # noqa: D401
+        last_n: int = 5,
+        screenshot_type: str = "agent_step",
+        session_id: str = "",
+        from_timestamp: float | None = None,
+        has_error: bool | None = None,
+        include_images: bool = True,
+        ctx: object | None = None,
+    ):
+        return await sdk_server.get_screenshots(
+            last_n=last_n,
+            screenshot_type=screenshot_type,
+            session_id=session_id,
+            from_timestamp=from_timestamp,
+            has_error=has_error,
+            include_images=include_images,
+            ctx=ctx,  # type: ignore[arg-type]
+        )
+
+    async def run() -> None:
+        async with Client(server) as client:
+            _ = await client.call_tool("persist_only", {})
+            result = await client.call_tool_mcp(
+                name="get_screenshots",
+                arguments={
+                    "session_id": session_id,
+                    "last_n": 5,
+                    "screenshot_type": "agent_step",
+                    "include_images": True,
+                },
+            )
+            assert result.isError is False
+            assert result.content
+
+            header = result.content[0]
+            assert isinstance(header, TextContent)
+            payload = json.loads(header.text)
+            assert payload["session_id"] == session_id
+            assert payload["error"] is None
+            assert len(payload["screenshots"]) == 1
+
+            shot = payload["screenshots"][0]
+            assert shot["inline_included"] is True
+            assert isinstance(shot["artifact"]["url"], str)
+            assert shot["artifact"]["url"].startswith("https://testacct.blob.core.windows.net/")
+            assert shot["artifact"]["url_expires_at"] is not None
+
+            image_blocks = [
+                entry for entry in result.content[1:] if isinstance(entry, ImageContent)
+            ]
+            assert len(image_blocks) == 1
+
+    asyncio.run(run())

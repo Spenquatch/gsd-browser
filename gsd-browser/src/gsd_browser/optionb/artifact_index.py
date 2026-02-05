@@ -124,8 +124,8 @@ class ArtifactIndexStore:
         key = _meta_key(record.artifact_id)
         payload = json.dumps(record.model_dump(mode="json"), separators=(",", ":"), sort_keys=True)
         try:
-            async with docket.redis() as redis:
-                pipe = redis.pipeline(transaction=True)
+            async with docket.redis() as client:
+                pipe = client.pipeline(transaction=True)
                 pipe.set(key, payload)
                 pipe.pexpireat(key, int(expires_at_ms))
                 await pipe.execute()
@@ -141,8 +141,8 @@ class ArtifactIndexStore:
 
         key = _meta_key(artifact_id)
         try:
-            async with docket.redis() as redis:
-                raw = await redis.get(key)
+            async with docket.redis() as client:
+                raw = await client.get(key)
         except redis.exceptions.RedisError as exc:
             raise RuntimeError("Failed to read ArtifactIndexRecord") from exc
 
@@ -164,8 +164,8 @@ class ArtifactIndexStore:
         if docket is None:
             raise RuntimeError("Docket is required for artifact indexing")
         try:
-            async with docket.redis() as redis:
-                await redis.delete(_meta_key(artifact_id))
+            async with docket.redis() as client:
+                await client.delete(_meta_key(artifact_id))
         except redis.exceptions.RedisError as exc:
             raise RuntimeError("Failed to delete ArtifactIndexRecord") from exc
 
@@ -188,8 +188,8 @@ class ArtifactIndexStore:
             tenant_id=tenant_id, subject_id=subject_id, session_id=session_id, kind=kind
         )
         try:
-            async with docket.redis() as redis:
-                await redis.zadd(key, {artifact_id: int(timestamp_ms)})
+            async with docket.redis() as client:
+                await client.zadd(key, {artifact_id: int(timestamp_ms)})
         except redis.exceptions.RedisError as exc:
             raise RuntimeError("Failed to update artifact session zset") from exc
 
@@ -211,8 +211,8 @@ class ArtifactIndexStore:
             tenant_id=tenant_id, subject_id=subject_id, session_id=session_id, kind=kind
         )
         try:
-            async with docket.redis() as redis:
-                await redis.zrem(key, artifact_id)
+            async with docket.redis() as client:
+                await client.zrem(key, artifact_id)
         except redis.exceptions.RedisError as exc:
             raise RuntimeError("Failed to update artifact session zset") from exc
 
@@ -233,8 +233,8 @@ class ArtifactIndexStore:
         )
         payload = json.dumps(ready.model_dump(mode="json"), separators=(",", ":"), sort_keys=True)
         try:
-            async with docket.redis() as redis:
-                pipe = redis.pipeline(transaction=True)
+            async with docket.redis() as client:
+                pipe = client.pipeline(transaction=True)
                 pipe.set(meta_key, payload)
                 pipe.pexpireat(meta_key, int(expires_at_ms))
                 pipe.zadd(zset_key, {ready.artifact_id: int(ready.created_at_ms)})
@@ -314,9 +314,9 @@ class CleanupRunner:
         if lease_ms < 10000:
             lease_ms = 10000
 
-        async with docket.redis() as redis:
+        async with docket.redis() as client:
             token = str(uuid.uuid4())
-            acquired = await redis.set(_CLEANUP_LOCK_KEY, token, nx=True, px=lease_ms)
+            acquired = await client.set(_CLEANUP_LOCK_KEY, token, nx=True, px=lease_ms)
             if not acquired:
                 return False
 
@@ -330,9 +330,9 @@ class CleanupRunner:
             return []
         cursor: int = 0
         keys: list[str] = []
-        async with docket.redis() as redis:
+        async with docket.redis() as client:
             while True:
-                cursor, batch = await redis.scan(cursor=cursor, match=pattern, count=count)
+                cursor, batch = await client.scan(cursor=cursor, match=pattern, count=count)
                 for item in batch:
                     if isinstance(item, bytes):
                         keys.append(item.decode("utf-8"))
@@ -400,15 +400,15 @@ class CleanupRunner:
         )
         for pattern in patterns:
             for zset_key in await self._scan_keys(pattern):
-                async with docket.redis() as redis:
-                    members = await redis.zrange(zset_key, 0, -1)
+                async with docket.redis() as client:
+                    members = await client.zrange(zset_key, 0, -1)
                 for member in members:
                     artifact_id = (
                         member.decode("utf-8") if isinstance(member, bytes) else str(member)
                     )
                     if await self.index.get_meta(artifact_id) is None:
-                        async with docket.redis() as redis:
-                            await redis.zrem(zset_key, artifact_id)
+                        async with docket.redis() as client:
+                            await client.zrem(zset_key, artifact_id)
 
 
 def get_artifact_index_store() -> ArtifactIndexStore:

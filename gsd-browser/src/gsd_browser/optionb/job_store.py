@@ -93,8 +93,8 @@ class JobStore:
         task_key_index_key = _task_key_index_key(_task_key_for_record(record))
 
         try:
-            async with docket.redis() as redis:
-                pipe = redis.pipeline(transaction=True)
+            async with docket.redis() as client:
+                pipe = client.pipeline(transaction=True)
                 pipe.set(key, payload)
                 pipe.pexpireat(key, int(record.expires_at_ms))
                 pipe.set(task_key_index_key, record.job_id)
@@ -113,8 +113,8 @@ class JobStore:
         job_id_value = _require_uuid(job_id, name="job_id")
         key = _redis_key(job_id_value)
         try:
-            async with docket.redis() as redis:
-                raw = await redis.get(key)
+            async with docket.redis() as client:
+                raw = await client.get(key)
         except redis.exceptions.RedisError as exc:
             raise RuntimeError("Failed to read JobRecord") from exc
 
@@ -146,8 +146,8 @@ class JobStore:
 
         key = _task_key_index_key(str(task_key))
         try:
-            async with docket.redis() as redis:
-                raw = await redis.get(key)
+            async with docket.redis() as client:
+                raw = await client.get(key)
         except redis.exceptions.RedisError as exc:
             raise RuntimeError("Failed to read job task-key mapping") from exc
 

@@ -57,7 +57,7 @@ async def run_minimal_task() -> None:
 
     start_time = time.time()
     try:
-        result = await web_eval_agent(
+        await web_eval_agent(
             url="https://example.com",
             task="Read the main heading on the page and confirm you can see it.",
             ctx=FakeContext(),
@@ -83,7 +83,10 @@ async def run_minimal_task() -> None:
     print(f"  frames_received: {health.get('frames_received')}")
     print(f"  frames_emitted: {health.get('frames_emitted')}")
     print(f"  frames_dropped: {health.get('frames_dropped')}")
-    print(f"  sampler (seen/stored): {health.get('sampler_totals', {}).get('seen')}/{health.get('sampler_totals', {}).get('stored')}")
+    totals = health.get("sampler_totals", {}) or {}
+    print(
+        f"  sampler (seen/stored): {totals.get('seen')}/{totals.get('stored')}"
+    )
 
     # Step 5: Diagnose issues
     print("\n[5/5] Diagnosis:")
@@ -95,7 +98,7 @@ async def run_minimal_task() -> None:
         print("  ✓ CDP streaming is WORKING!")
         print(f"    - Received {frames_received} frames")
         print(f"    - Emitted {frames_emitted} frames")
-        print(f"    - Dashboard should show live browser view")
+        print("    - Dashboard should show live browser view")
     elif cdp_available and frames_received == 0:
         print("  ⚠ CDP attached but no frames received")
         print("    - CDP session connected but not streaming")

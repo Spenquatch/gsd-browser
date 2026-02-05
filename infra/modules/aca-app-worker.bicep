@@ -44,6 +44,21 @@ param s3EndpointUrl string
 @description('S3 bucket name')
 param s3Bucket string
 
+@description('ACA environment domain (e.g. yellowplant-...eastus.azurecontainerapps.io)')
+param acaEnvironmentDomain string
+
+@description('Clerk JWKS URL')
+param jwtJwksUrl string
+
+@description('Clerk JWT issuer')
+param jwtIssuer string
+
+@description('Clerk JWT audience')
+param jwtAudience string
+
+@description('Allowed origins for streaming (comma-separated URLs)')
+param allowedOrigins string = ''
+
 // Reference ACR as existing to call listCredentials() directly
 resource acr 'Microsoft.ContainerRegistry/registries@2023-11-01-preview' existing = {
   name: acrName
@@ -112,6 +127,17 @@ resource workerApp 'Microsoft.App/containerApps@2024-03-01' = {
             { name: 'FASTMCP_DOCKET_URL', secretRef: 'docket-url' }
             { name: 'FASTMCP_DOCKET_NAME', value: 'gsd' }
             { name: 'FASTMCP_DOCKET_CONCURRENCY', value: '4' }
+            // Remote streaming (ADR-0024) + streaming JWT auth (ADR-0023)
+            { name: 'GSD_STREAMING_BIND_HOST', value: '0.0.0.0' }
+            { name: 'GSD_STREAMING_AUTH_MODE', value: 'jwt' }
+            { name: 'GSD_STREAMING_PUBLIC_HOST', value: '${prefix}-worker.${acaEnvironmentDomain}' }
+            { name: 'GSD_STREAMING_PUBLIC_SCHEME', value: 'https' }
+            { name: 'STREAMING_ALLOWED_ORIGINS', value: empty(allowedOrigins) ? '*' : allowedOrigins }
+            { name: 'GSD_JWT_JWKS_URL', value: jwtJwksUrl }
+            { name: 'GSD_JWT_ISSUER', value: jwtIssuer }
+            { name: 'GSD_JWT_AUDIENCE', value: jwtAudience }
+            { name: 'GSD_JWT_TENANT_ID_CLAIM', value: 'tenant_id' }
+            { name: 'GSD_JWT_SUBJECT_ID_CLAIM', value: 'sub' }
             // Azure Blob Storage (preferred for artifacts)
             { name: 'GSD_AZURE_STORAGE_ACCOUNT', value: storageAccountName }
             { name: 'GSD_AZURE_BLOB_CONTAINER', value: s3Bucket }
@@ -128,7 +154,7 @@ resource workerApp 'Microsoft.App/containerApps@2024-03-01' = {
             { name: 'GSD_LLM_PROVIDER', value: 'anthropic' }
             { name: 'GSD_MODEL', value: 'claude-haiku-4-5' }
           ]
-          // Worker is a Docket task processor without HTTP server.
+          // Worker is a Docket task processor and runs the streaming + health server on port 5009.
           // ACA will restart if the container exits. No probe needed.
           probes: []
         }

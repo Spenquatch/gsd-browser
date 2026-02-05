@@ -47,6 +47,15 @@ param jwtAudience string
 @description('Allowed origins for CORS (comma-separated URLs)')
 param allowedOrigins string = ''
 
+@description('ACA environment domain (e.g. yellowplant-...eastus.azurecontainerapps.io)')
+param acaEnvironmentDomain string
+
+@description('Storage account name (for Azure Blob artifacts)')
+param storageAccountName string
+
+@description('Azure Blob container name for artifacts')
+param azureBlobContainer string = 'gsd-artifacts'
+
 // Reference ACR as existing to call listCredentials() directly
 resource acr 'Microsoft.ContainerRegistry/registries@2023-11-01-preview' existing = {
   name: acrName
@@ -60,6 +69,9 @@ resource redis 'Microsoft.Cache/redis@2023-08-01' existing = {
 resource apiApp 'Microsoft.App/containerApps@2024-03-01' = {
   name: '${prefix}-api'
   location: location
+  identity: {
+    type: 'SystemAssigned'
+  }
   properties: {
     managedEnvironmentId: environmentId
     workloadProfileName: 'Consumption'
@@ -116,6 +128,15 @@ resource apiApp 'Microsoft.App/containerApps@2024-03-01' = {
             { name: 'FASTMCP_DOCKET_URL', secretRef: 'docket-url' }
             { name: 'FASTMCP_DOCKET_NAME', value: 'gsd' }
             { name: 'FASTMCP_DOCKET_CONCURRENCY', value: '0' }
+            // Azure Blob Storage (artifacts + screenshot retrieval)
+            { name: 'GSD_AZURE_STORAGE_ACCOUNT', value: storageAccountName }
+            { name: 'GSD_AZURE_BLOB_CONTAINER', value: azureBlobContainer }
+            // Prefer "both" for robustness: inline images for CLI + presigned URLs for dashboards.
+            { name: 'GSD_ARTIFACT_DELIVERY_MODE', value: 'both' }
+            { name: 'GSD_PRESIGNED_URL_TTL_S', value: '900' }
+            // Streaming base URL (used by tool responses in dev/prod parity)
+            { name: 'GSD_STREAMING_PUBLIC_HOST', value: '${prefix}-worker.${acaEnvironmentDomain}' }
+            { name: 'GSD_STREAMING_PUBLIC_SCHEME', value: 'https' }
             { name: 'GSD_JWT_JWKS_URL', value: jwtJwksUrl }
             { name: 'GSD_JWT_ISSUER', value: jwtIssuer }
             { name: 'GSD_JWT_AUDIENCE', value: jwtAudience }
@@ -169,3 +190,4 @@ resource apiApp 'Microsoft.App/containerApps@2024-03-01' = {
 
 output fqdn string = apiApp.properties.configuration.ingress.fqdn
 output appId string = apiApp.id
+output principalId string = apiApp.identity.principalId

@@ -1,7 +1,7 @@
 # ADR-0024: Remote Streaming Architecture
 
 ## Status
-Proposed
+Accepted (2026-02-05)
 
 ## Context
 The current streaming architecture assumes localhost access:
@@ -52,19 +52,23 @@ The `web_eval_agent` tool response includes a `stream_url` field pointing to the
 {
   "job_id": "abc123",
   "session_id": "sess_xyz",
-  "stream_url": "wss://gsd.example.com/stream?worker=worker-7"
+  "stream_url": "https://gsd.example.com"
 }
 ```
 
-- In production: `stream_url` resolves to the worker via load balancer session affinity
-- In development: `stream_url` is `ws://127.0.0.1:5009/stream` (current behavior)
-- The `stream_url` is stable for the lifetime of the session
+- `stream_url` is the **HTTP(S) origin** for the streaming server (no namespace path).
+- Clients connect Socket.IO namespaces by appending:
+  - `${stream_url}/stream` for frames
+  - `${stream_url}/ctrl` for take-control
+- In production: `stream_url` resolves to the worker via load balancer session affinity.
+- In development: `stream_url` is `http://127.0.0.1:5009` (current behavior).
+- The `stream_url` is stable for the lifetime of the session.
 
 ### 4) Session affinity via load balancer
 ACA's Envoy proxy provides session affinity for WebSocket connections:
 
 - Initial HTTP upgrade request routed to the worker hosting the session
-- Affinity key: `session_id` query parameter or cookie
+- Affinity key: `session_id` query parameter (preferred) or cookie
 - Once upgraded, the WebSocket connection is pinned to the worker
 - If the worker restarts, Socket.IO client reconnects and re-routes
 
@@ -83,15 +87,23 @@ This enables the load balancer to route session-specific connections to the corr
 The `stream_url` is constructed by the worker at session creation time:
 
 ```python
-stream_url = f"{scheme}://{public_host}/stream?session_id={session_id}"
+stream_url = f"{scheme}://{public_host}"
 ```
 
 Where:
-- `scheme`: `wss` in production, `ws` in development
+- `scheme`: `https` in production, `http` in development
 - `public_host`: From `GSD_STREAMING_PUBLIC_HOST` env var (e.g., `gsd.example.com`)
-- `session_id`: Used as affinity key for load balancer routing
+- `session_id`: Passed by clients as a Socket.IO query parameter for load balancer routing
 
-In development, `stream_url` defaults to `ws://127.0.0.1:{port}/stream`.
+In development, `stream_url` defaults to `http://127.0.0.1:{port}`.
+
+### 7) Worker-embedded combined server (prod shape)
+The worker process runs a combined **streaming + health** server on port `5009`:
+- Socket.IO namespaces: `/stream` and `/ctrl`
+- Health endpoints: `/healthz`, `/healthz/worker`, `/healthz/sessions/{session_id}`
+
+This keeps the runtime topology simple (no extra Container App) and ensures the same
+process that owns the browser session also owns the streaming sockets.
 
 ## Consequences
 
@@ -114,7 +126,8 @@ In development, `stream_url` defaults to `ws://127.0.0.1:{port}/stream`.
 ```env
 GSD_STREAMING_BIND_HOST=127.0.0.1        # Bind address (default: localhost)
 GSD_STREAMING_PUBLIC_HOST=                 # Public hostname for stream_url construction
-GSD_STREAMING_PUBLIC_SCHEME=wss            # ws or wss (default: wss in production)
+GSD_STREAMING_PUBLIC_SCHEME=https          # http or https (default: https in production)
+GSD_STREAMING_AUTH_MODE=jwt                # hmac (dev) or jwt (prod)
 ```
 
 ### Frame emission change
@@ -128,7 +141,7 @@ await sio.emit("frame", frame_data, room=session_id, namespace="/stream")
 
 ### Client connection flow
 1. Client calls `web_eval_agent` (or queries session API) → gets `stream_url`
-2. Client connects Socket.IO to `stream_url` with JWT auth
+2. Client connects Socket.IO to `${stream_url}/stream` with JWT auth and `session_id` query param
 3. Server validates JWT, extracts identity, checks tenant authorization
 4. Client emits `join_session` with `session_id`
 5. Server verifies identity is authorized for session, adds socket to room
