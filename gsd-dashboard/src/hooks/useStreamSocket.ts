@@ -25,6 +25,14 @@ export interface UseStreamSocketResult {
   stats: StreamStats;
 }
 
+type BrowserUpdatePayload = {
+  image_base64?: unknown;
+  mime_type?: unknown;
+  timestamp?: unknown;
+  session_id?: unknown;
+  metadata?: unknown;
+};
+
 export function useStreamSocket(opts: UseStreamSocketOpts): UseStreamSocketResult {
   const { sessionId, streamUrl, token: tokenProp } = opts;
   const [connected, setConnected] = useState(false);
@@ -80,12 +88,15 @@ export function useStreamSocket(opts: UseStreamSocketOpts): UseStreamSocketResul
       }));
     });
 
-    socket.on("browser_update", (payload: any) => {
+    socket.on("browser_update", (payload: BrowserUpdatePayload) => {
       const b64 = payload?.image_base64;
       if (typeof b64 !== "string" || !b64) return;
       const mime = typeof payload?.mime_type === "string" ? payload.mime_type : "image/png";
       const nextSeq = (seqRef.current += 1);
       const ts = typeof payload?.timestamp === "number" ? payload.timestamp : Date.now() / 1000;
+      const metadataRaw = payload?.metadata;
+      const metadata =
+        metadataRaw && typeof metadataRaw === "object" ? (metadataRaw as Record<string, unknown>) : {};
 
       const nextFrame: FrameEvent = {
         seq: nextSeq,
@@ -95,7 +106,7 @@ export function useStreamSocket(opts: UseStreamSocketOpts): UseStreamSocketResul
         latency_ms: 0,
         data_base64: b64,
         mime_type: mime,
-        metadata: typeof payload?.metadata === "object" && payload?.metadata ? payload.metadata : {},
+        metadata,
       };
 
       setFrame(nextFrame);
