@@ -1011,7 +1011,6 @@ dependencies = [
     { name = "fastmcp" },
     { name = "mcp" },
     { name = "pydantic" },
-    { name = "pytest" },
     { name = "python-dotenv" },
     { name = "python-socketio" },
     { name = "redis" },
@@ -1025,6 +1024,7 @@ dev = [
     { name = "aiohttp" },
     { name = "httpx" },
     { name = "mypy" },
+    { name = "pytest" },
     { name = "ruff" },
 ]
 
@@ -1040,7 +1040,7 @@ requires-dist = [
     { name = "mcp", specifier = ">=1.6,<2.0" },
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.11" },
     { name = "pydantic", specifier = ">=2.12,<2.13" },
-    { name = "pytest", specifier = ">=8.3,<10.0" },
+    { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.3,<10.0" },
     { name = "python-dotenv", specifier = ">=1.0,<2.0" },
     { name = "python-socketio", specifier = ">=5.11,<6.0" },
     { name = "redis", specifier = ">=5.0,<6.0" },

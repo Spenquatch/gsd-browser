@@ -74,14 +74,14 @@ export function SessionsPage() {
                   </td>
                   <td className="whitespace-nowrap px-4 py-3 text-sm">
                     <div className="flex items-center gap-3">
-                      {(session.status === "active" || session.status === "paused") && (
-                        <Link
-                          to={`/sessions/${session.session_id}`}
-                          className="font-medium text-gsd-600 hover:text-gsd-800"
-                        >
-                          View Live
-                        </Link>
-                      )}
+                      <Link
+                        to={`/sessions/${session.session_id}`}
+                        className="font-medium text-gsd-600 hover:text-gsd-800"
+                      >
+                        {session.status === "active" || session.status === "paused"
+                          ? "View Live"
+                          : "View"}
+                      </Link>
                       {session.status !== "terminated" && (
                         <button
                           onClick={() => handleTerminate(session.session_id)}

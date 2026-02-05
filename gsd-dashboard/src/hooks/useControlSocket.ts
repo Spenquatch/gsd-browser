@@ -3,7 +3,13 @@ import { io, Socket } from "socket.io-client";
 import type { ControlStateEvent, InputEvent } from "../lib/types";
 import { useGsdToken } from "../lib/auth";
 
-const BASE_URL = import.meta.env.VITE_GSD_API_BASE_URL || "";
+function normalizeStreamBaseUrl(raw: string): string {
+  const trimmed = (raw || "").trim().replace(/\/+$/, "");
+  if (!trimmed) return trimmed;
+  if (trimmed.endsWith("/stream")) return trimmed.slice(0, -"/stream".length);
+  if (trimmed.endsWith("/ctrl")) return trimmed.slice(0, -"/ctrl".length);
+  return trimmed;
+}
 
 interface UseControlSocketOpts {
   sessionId: string;
@@ -30,7 +36,8 @@ export function useControlSocket(opts: UseControlSocketOpts): UseControlSocketRe
     if (!sessionId) return;
 
     const jwt = tokenProp ?? (await getToken());
-    const url = streamUrl || BASE_URL || window.location.origin;
+    const url = normalizeStreamBaseUrl(streamUrl || "");
+    if (!url) return;
 
     const socket = io(`${url}/ctrl`, {
       path: "/socket.io",

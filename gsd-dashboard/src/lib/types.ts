@@ -18,6 +18,8 @@ export interface FrameEvent {
   emitted_ts: number;
   latency_ms: number;
   data_base64: string;
+  /** Optional; defaults to image/jpeg for CDP frames */
+  mime_type?: string;
   metadata: Record<string, unknown>;
 }
 

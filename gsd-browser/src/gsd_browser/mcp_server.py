@@ -11,6 +11,7 @@ import os
 import time
 import traceback
 import uuid
+from contextlib import contextmanager
 from contextvars import ContextVar
 from datetime import UTC, datetime
 from pathlib import Path
@@ -51,6 +52,22 @@ _BROWSER_STATE_ID_OVERRIDE: ContextVar[object] = ContextVar(
 _PROMPT_PROFILE_OVERRIDE: ContextVar[str] = ContextVar(
     "gsd_browser_prompt_profile_override", default="web_eval"
 )
+_SESSION_ID_OVERRIDE: ContextVar[object] = ContextVar(
+    "gsd_browser_session_id_override", default=_UNSET
+)
+
+
+@contextmanager
+def session_id_scope(session_id: str | None) -> object:
+    """Optionally override the web_eval_agent session_id for this task."""
+    if not session_id:
+        yield
+        return
+    token = _SESSION_ID_OVERRIDE.set(str(session_id))
+    try:
+        yield
+    finally:
+        _SESSION_ID_OVERRIDE.reset(token)
 
 
 def apply_configured_tool_policy(*, settings: Settings) -> None:
@@ -748,7 +765,8 @@ async def web_eval_agent(
     session_registry = getattr(streaming_runtime, "registry", None) if streaming_runtime else None
 
     tool_call_id = str(uuid.uuid4())
-    session_id = str(uuid.uuid4())
+    override = _SESSION_ID_OVERRIDE.get()
+    session_id = str(uuid.uuid4()) if override is _UNSET else str(override)
     started = datetime.now(UTC).timestamp()
     normalized_url = _normalize_url(url)
 
@@ -1338,7 +1356,10 @@ async def web_eval_agent(
             control_state.set_input_dispatcher(
                 cdp_dispatcher.dispatch, main_loop
             )
-            logger.info("Registered direct CDP input dispatcher on control_state (loop=%s)", id(main_loop))
+            logger.info(
+                "Registered direct CDP input dispatcher on control_state (loop=%s)",
+                id(main_loop),
+            )
 
         cdp_attached = False
 
@@ -1892,7 +1913,28 @@ async def web_eval_agent(
         return [TextContent(type="text", text=json.dumps(payload, ensure_ascii=False))]
     except TimeoutError:
         duration_s = max(0.0, datetime.now(UTC).timestamp() - started)
-        warnings = _dedupe([*warnings, f"timed_out_after_s={effective_budget_s:g}"])[:20]
+        if effective_budget_s is not None:
+            warnings = _dedupe([*warnings, f"timed_out_after_s={effective_budget_s:g}"])[:20]
+            timeout_summary = _truncate(
+                f"Timeout: tool budget exceeded (budget_s={effective_budget_s:g}).",
+                max_len=2000,
+            )
+            next_actions = [
+                "Increase budget_s (or reduce task scope) and retry.",
+            ]
+        else:
+            warnings = _dedupe([*warnings, "timed_out"])[:20]
+            timeout_summary = _truncate(
+                "Timeout: browser start or operation exceeded an internal timeout. "
+                "Try again, or increase TIMEOUT_BrowserStartEvent/TIMEOUT_BrowserLaunchEvent "
+                "in the worker.",
+                max_len=2000,
+            )
+            next_actions = [
+                "Retry the tool call.",
+                "If this consistently times out, increase TIMEOUT_BrowserStartEvent/"
+                "TIMEOUT_BrowserLaunchEvent in the worker.",
+            ]
 
         logger.info(
             "web_eval_agent timed out",
@@ -1914,10 +1956,7 @@ async def web_eval_agent(
             "requested_mode": str(mode) if mode is not None else None,
             "status": "failed",
             "result": None,
-            "summary": _truncate(
-                f"Timeout: tool budget exceeded (budget_s={effective_budget_s:g}).",
-                max_len=2000,
-            ),
+            "summary": timeout_summary,
             "page": {"url": _public_url(last_page_url), "title": last_page_title or None},
             "errors_top": rank_failures_for_session(
                 run_events=run_events,
@@ -1945,7 +1984,7 @@ async def web_eval_agent(
                 ),
             },
             "next_actions": [
-                "Increase budget_s (or reduce task scope) and retry.",
+                *next_actions,
                 (
                     "Use get_run_events(session_id="
                     f"'{session_id}', event_types=['console','network'], has_error=true, last_n=50)"
@@ -2627,7 +2666,6 @@ async def get_screenshots(
         return value
 
     delivery_mode = _delivery_mode()
-    include_inline = bool(include_images and delivery_mode in {"inline", "both"})
     include_presigned = delivery_mode in {"presigned", "both"}
 
     try:
@@ -2714,18 +2752,37 @@ async def get_screenshots(
 
                     inline_included = False
                     image_base64: str | None = None
-                    if include_inline:
-                        try:
-                            image_bytes = s3.get_bytes(key=record.s3_key)
-                        except Exception:  # noqa: BLE001
-                            image_bytes = b""
+                    want_inline = bool(
+                        include_images
+                        and (
+                            delivery_mode in {"inline", "both"}
+                            or str(record.s3_bucket or "").strip().lower() == "redis"
+                        )
+                    )
+                    if want_inline:
+                        image_bytes = b""
+                        if str(record.s3_bucket or "").strip().lower() == "redis":
+                            try:
+                                async with docket.redis() as redis:
+                                    raw_bytes = await redis.get(str(record.s3_key))
+                                if isinstance(raw_bytes, bytes):
+                                    image_bytes = raw_bytes
+                                elif isinstance(raw_bytes, str):
+                                    image_bytes = raw_bytes.encode("utf-8")
+                            except Exception:  # noqa: BLE001
+                                image_bytes = b""
+                        else:
+                            try:
+                                image_bytes = s3.get_bytes(key=record.s3_key)
+                            except Exception:  # noqa: BLE001
+                                image_bytes = b""
                         if image_bytes:
                             inline_included = True
                             image_base64 = base64.b64encode(image_bytes).decode("ascii")
 
                     artifact_url: str | None = None
                     artifact_url_expires_at: float | None = None
-                    if include_presigned:
+                    if include_presigned and str(record.s3_bucket or "").strip().lower() != "redis":
                         try:
                             artifact_url, artifact_url_expires_at = s3.presign_get(
                                 key=record.s3_key, ttl_s=ttl_s

@@ -11,6 +11,8 @@ from ..http_base_path import detect_base_path
 from ..http_oauth_metadata import PROTECTED_RESOURCE_METADATA_PATH
 from .identity import JwtAudienceMismatch
 
+AsgiMessage = dict[str, Any]
+
 
 def _env(name: str) -> str:
     return str(os.environ.get(name, "")).strip()
@@ -119,29 +121,57 @@ def _http_headers(scope: Mapping[str, Any]) -> dict[str, str]:
     return headers
 
 
-async def _read_body(receive: Callable[[], Awaitable[dict[str, Any]]]) -> bytes:
+async def _read_body_with_buffer(
+    receive: Callable[[], Awaitable[AsgiMessage]],
+) -> tuple[bytes, list[AsgiMessage]]:
+    """Read an HTTP request body while buffering messages for downstream replay.
+
+    Why this exists:
+    - We need the JSON-RPC payload to enforce per-tool scopes.
+    - The underlying Streamable HTTP transport (SSE) also relies on `receive()` for
+      `http.disconnect` notifications. Replacing `receive()` with a body-only replay
+      breaks disconnect handling and can leak/hang SSE requests.
+    """
+
     chunks: list[bytes] = []
+    buffered: list[AsgiMessage] = []
+
     more_body = True
     while more_body:
         message = await receive()
-        if message.get("type") != "http.request":
+        buffered.append(message)
+
+        message_type = message.get("type")
+        if message_type == "http.request":
+            body = message.get("body", b"") or b""
+            if body:
+                chunks.append(body)
+            more_body = bool(message.get("more_body"))
             continue
-        body = message.get("body", b"") or b""
-        if body:
-            chunks.append(body)
-        more_body = bool(message.get("more_body"))
-    return b"".join(chunks)
+
+        if message_type == "http.disconnect":
+            # Client disconnected before the request body fully arrived.
+            break
+
+        # Unknown message types should not cause an infinite read loop.
+        break
+
+    return b"".join(chunks), buffered
 
 
-def _replay_receive(body: bytes) -> Callable[[], Awaitable[dict[str, Any]]]:
-    sent = False
+def _replay_receive(
+    buffered: list[AsgiMessage],
+    receive: Callable[[], Awaitable[AsgiMessage]],
+) -> Callable[[], Awaitable[AsgiMessage]]:
+    idx = 0
 
-    async def _receive() -> dict[str, Any]:
-        nonlocal sent
-        if sent:
-            return {"type": "http.request", "body": b"", "more_body": False}
-        sent = True
-        return {"type": "http.request", "body": body, "more_body": False}
+    async def _receive() -> AsgiMessage:
+        nonlocal idx
+        if idx < len(buffered):
+            message = buffered[idx]
+            idx += 1
+            return message
+        return await receive()
 
     return _receive
 
@@ -211,8 +241,8 @@ class HttpAuthMiddleware:
             await response(scope, receive, send)
             return
 
-        body = await _read_body(receive)
-        receive = _replay_receive(body)
+        body, buffered = await _read_body_with_buffer(receive)
+        receive = _replay_receive(buffered, receive)
 
         required_scope_string: str | None = None
         try:
@@ -226,10 +256,7 @@ class HttpAuthMiddleware:
         if required_scope_string:
             scopes = _extract_scopes_from_claims(getattr(access_token, "claims", {}) or {})
             if not _has_required_scope(required=required_scope_string, scopes=scopes):
-                challenge = (
-                    'Bearer error="insufficient_scope", '
-                    f'scope="{required_scope_string}"'
-                )
+                challenge = f'Bearer error="insufficient_scope", scope="{required_scope_string}"'
                 response = Response(status_code=403, headers={"WWW-Authenticate": challenge})
                 await response(scope, receive, send)
                 return

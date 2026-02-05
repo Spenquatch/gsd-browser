@@ -41,6 +41,39 @@ _MCP_TOOLS_SET_DISABLED_ARG = typer.Argument(None, help="Tool name(s) to denylis
 _TRUE_ENV_VALUES = {"1", "true", "yes"}
 
 
+def _redact_url_password(url: str) -> str:
+    """Redact embedded passwords in URLs (e.g. rediss://:pwd@host:6380/0)."""
+    raw = str(url or "").strip()
+    if not raw:
+        return raw
+    try:
+        from urllib.parse import urlsplit, urlunsplit
+
+        parts = urlsplit(raw)
+        if parts.password is None:
+            return raw
+
+        hostname = parts.hostname or ""
+        port = f":{parts.port}" if parts.port is not None else ""
+
+        # Keep username if present; always redact password.
+        if parts.username is not None:
+            userinfo = f"{parts.username}:****@"
+        else:
+            # Password-only URLs like rediss://:pwd@host
+            userinfo = ":****@"
+
+        netloc = f"{userinfo}{hostname}{port}"
+        return urlunsplit((parts.scheme, netloc, parts.path, parts.query, parts.fragment))
+    except Exception:
+        # Best-effort string redaction.
+        scheme_sep = raw.find("://")
+        at = raw.find("@", scheme_sep + 3 if scheme_sep >= 0 else 0)
+        if scheme_sep >= 0 and at > scheme_sep:
+            return f"{raw[:scheme_sep+3]}****@{raw[at+1:]}"
+        return raw
+
+
 def _env_path_for_user_config() -> Path:
     override = (os.getenv("GSD_ENV_FILE") or "").strip()
     return Path(override).expanduser() if override else default_env_path()
@@ -217,6 +250,7 @@ def worker(
     """Start a FastMCP/Docket worker process (Option B runtime)."""
     import asyncio
     import contextlib
+    import os
 
     overrides: dict[str, str] = {}
     if llm_provider is not None:
@@ -246,6 +280,14 @@ def worker(
 
     apply_configured_tool_policy(settings=settings)
 
+    # Docket >= 0.16 uses Redis XAUTOCLAIM for redelivery. Redis 6.0 (not 6.2+)
+    # does not support XAUTOCLAIM, which can crash the internal worker task and
+    # leave jobs stuck in "queued" with no visible logs. Patch redis-py to
+    # tolerate missing XAUTOCLAIM so we can still process new deliveries.
+    from .optionb.docket_redis_compat import apply_xautoclaim_compat_patch
+
+    apply_xautoclaim_compat_patch()
+
     import fastmcp
 
     docket_url = str(fastmcp.settings.docket.url)
@@ -266,6 +308,115 @@ def worker(
         )
 
     async def run_worker_forever() -> None:
+        stop_event = asyncio.Event()
+        error: Exception | None = None
+
+        async def serve_health() -> None:
+            raw_port = str(os.environ.get("GSD_WORKER_HEALTH_PORT", "")).strip()
+            if not raw_port:
+                raw_port = str(os.environ.get("PORT", "")).strip()
+            port = int(raw_port) if raw_port else 5009
+
+            async def handler(  # noqa: ANN001
+                reader, writer
+            ) -> None:
+                try:
+                    await reader.read(1024)
+                    writer.write(
+                        b"HTTP/1.1 200 OK\r\n"
+                        b"Content-Type: text/plain\r\n"
+                        b"Content-Length: 2\r\n"
+                        b"Connection: close\r\n"
+                        b"\r\n"
+                        b"ok"
+                    )
+                    await writer.drain()
+                except Exception:
+                    pass
+                finally:
+                    try:
+                        writer.close()
+                        await writer.wait_closed()
+                    except Exception:
+                        pass
+
+            server = await asyncio.start_server(handler, host="0.0.0.0", port=port)
+            logger.info("worker.health_server.listening", extra={"port": port})
+            try:
+                await stop_event.wait()
+            finally:
+                server.close()
+                await server.wait_closed()
+
+        async def monitor_worker() -> None:
+            nonlocal error
+            # FastMCP stores the Docket Worker instance on the server, but it is
+            # created asynchronously as part of the server lifespan startup.
+            deadline = asyncio.get_running_loop().time() + 5.0
+            worker = None
+            while asyncio.get_running_loop().time() < deadline:
+                worker = getattr(mcp, "_worker", None)
+                if worker is not None:
+                    break
+                await asyncio.sleep(0.05)
+            if worker is None:
+                error = RuntimeError("FastMCP did not start a Docket worker within 5s")
+                stop_event.set()
+                return
+
+            worker_done = getattr(worker, "_worker_done", None)
+            if worker_done is None:
+                error = RuntimeError("Docket worker missing internal done event")
+                stop_event.set()
+                return
+
+            # Wait for the worker to enter its polling loop (it clears _worker_done).
+            deadline = asyncio.get_running_loop().time() + 5.0
+            while worker_done.is_set() and asyncio.get_running_loop().time() < deadline:
+                await asyncio.sleep(0.05)
+            if worker_done.is_set():
+                error = RuntimeError(
+                    "Docket worker did not enter polling loop (likely crashed during startup)"
+                )
+                stop_event.set()
+                return
+
+            # Optional periodic diagnostics to make failures visible in production logs.
+            interval_s_raw = str(os.environ.get("GSD_WORKER_DIAGNOSTICS_INTERVAL_S", "")).strip()
+            interval_s = int(interval_s_raw) if interval_s_raw else 0
+
+            while True:
+                if worker_done.is_set():
+                    error = RuntimeError("Docket worker stopped unexpectedly")
+                    stop_event.set()
+                    return
+
+                if interval_s > 0:
+                    docket = getattr(mcp, "_docket", None)
+                    if docket is not None:
+                        try:
+                            async with docket.redis() as redis:
+                                pipe = redis.pipeline(transaction=False)
+                                pipe.xlen(docket.stream_key)
+                                pipe.zcard(docket.queue_key)
+                                stream_len, queue_len = await pipe.execute()
+                            logger.info(
+                                "worker.docket.depth",
+                                extra={
+                                    "docket_stream_len": int(stream_len),
+                                    "docket_queue_len": int(queue_len),
+                                },
+                            )
+                        except Exception as exc:  # noqa: BLE001
+                            logger.exception(
+                                "worker.docket.depth_failed",
+                                extra={"error": str(exc)},
+                            )
+                    await asyncio.sleep(float(interval_s))
+                    continue
+
+                await asyncio.sleep(1.0)
+
         async with mcp._lifespan_manager():
             from .optionb.artifact_index import ArtifactIndexStore, CleanupRunner
             from .optionb.maintenance import run_cleanup_maintenance_loop
@@ -292,16 +443,25 @@ def worker(
                 run_cleanup_maintenance_loop(cleanup_runner),
                 name="gsd_optionb_cleanup_maintenance",
             )
+            health_task = asyncio.create_task(serve_health(), name="gsd_worker_health_server")
+            monitor_task = asyncio.create_task(monitor_worker(), name="gsd_worker_monitor")
             console.print(
                 f"[bold green]✓[/bold green] Starting worker for [cyan]{mcp.name}[/cyan]"
             )
             console.print(f"  Docket: {fastmcp.settings.docket.name}")
-            console.print(f"  Backend: {fastmcp.settings.docket.url}")
+            console.print(f"  Backend: {_redact_url_password(str(fastmcp.settings.docket.url))}")
             console.print(f"  Concurrency: {fastmcp.settings.docket.concurrency}")
             try:
-                while True:
-                    await asyncio.sleep(3600)
+                await stop_event.wait()
+                if error is not None:
+                    raise error
             finally:
+                monitor_task.cancel()
+                with contextlib.suppress(asyncio.CancelledError):
+                    await monitor_task
+                health_task.cancel()
+                with contextlib.suppress(asyncio.CancelledError):
+                    await health_task
                 maintenance_task.cancel()
                 with contextlib.suppress(asyncio.CancelledError):
                     await maintenance_task

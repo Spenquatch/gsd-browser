@@ -235,8 +235,10 @@ class ArtifactWriter:
         self,
         record: ArtifactIndexRecord,
         *,
-        upload: Callable[[], None],
+        upload: Callable[[], object],
     ) -> None:
+        import inspect
+
         artifact_id = _require_uuid(record.artifact_id, name="artifact_id")
         _ = _require_uuid(record.session_id, name="session_id")
         retention_ms = int(_retention_seconds() * 1000)
@@ -246,7 +248,9 @@ class ArtifactWriter:
         await self.index.write_meta(pending, expires_at_ms=expires_at_ms)
 
         try:
-            upload()
+            result = upload()
+            if inspect.isawaitable(result):
+                await result
         except Exception:  # noqa: BLE001
             await self.index.delete_meta(artifact_id)
             raise

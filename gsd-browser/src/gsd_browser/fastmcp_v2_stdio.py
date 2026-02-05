@@ -73,11 +73,10 @@ def _terminal_phase_from_result(result: list[TextContent]) -> tuple[str, str]:
     return "done", f"status={status or 'unknown'}"
 
 
-def _resolve_identity_for_current_call() -> Identity:
+def _resolve_identity_from_access_token() -> Identity | None:
     from fastmcp.server.dependencies import get_access_token
 
     from .optionb.identity import (
-        STDIO_IDENTITY,
         get_jwt_subject_id_claim_name,
         get_jwt_tenant_id_claim_name,
         identity_from_claims,
@@ -85,7 +84,7 @@ def _resolve_identity_for_current_call() -> Identity:
 
     access_token = get_access_token()
     if access_token is None:
-        return STDIO_IDENTITY
+        return None
 
     return identity_from_claims(
         access_token.claims,
@@ -94,15 +93,72 @@ def _resolve_identity_for_current_call() -> Identity:
     )
 
 
+def _resolve_identity_for_current_call() -> Identity:
+    from .optionb.identity import STDIO_IDENTITY
+
+    return _resolve_identity_from_access_token() or STDIO_IDENTITY
+
+
+async def _resolve_identity_for_docket_execution() -> Identity | None:
+    record = await _resolve_job_record_for_docket_execution()
+    if record is None:
+        return None
+    try:
+        from .optionb.identity import Identity
+
+        return Identity(
+            tenant_id=record.tenant_id,
+            subject_id=record.subject_id,
+            transport=record.transport,
+        )
+    except Exception:  # noqa: BLE001
+        return None
+
+
+async def _resolve_job_record_for_docket_execution():  # noqa: ANN001
+    try:
+        from docket.dependencies import Dependency as DocketDependency
+
+        task_key = DocketDependency.execution.get().key
+    except LookupError:
+        return None
+
+    try:
+        from .optionb.job_store import get_job_store
+
+        store = get_job_store()
+        job_id = await store.get_job_id_for_task_key(str(task_key))
+        if not job_id:
+            return None
+        return await store.get(job_id)
+    except Exception:  # noqa: BLE001
+        return None
+
+
 async def _call_with_identity(
     fn: Callable[..., Awaitable[T]],
     /,
     **kwargs: object,
 ) -> T:
+    from .optionb.identity import STDIO_IDENTITY
+    from .optionb.identity import Identity
     from .optionb.request_context import identity_scope
 
-    identity = _resolve_identity_for_current_call()
-    with identity_scope(identity):
+    identity = _resolve_identity_from_access_token()
+    job_record = None
+    if identity is None:
+        job_record = await _resolve_job_record_for_docket_execution()
+        if job_record is not None:
+            identity = Identity(
+                tenant_id=job_record.tenant_id,
+                subject_id=job_record.subject_id,
+                transport=job_record.transport,
+            )
+    if identity is None:
+        identity = STDIO_IDENTITY
+    with identity_scope(identity), sdk_server.session_id_scope(
+        getattr(job_record, "session_id", None) if job_record is not None else None
+    ):
         return await fn(**kwargs)
 
 
@@ -175,7 +231,7 @@ async def web_eval_agent(
     url: str,
     task: str,
     ctx: Context | None = None,
-    headless_browser: bool = False,
+    headless_browser: bool = True,
     mode: str | None = None,
     budget_s: float | None = None,
     max_steps: int | None = None,
@@ -229,7 +285,7 @@ async def web_task_agent(
     url: str,
     task: str,
     ctx: Context | None = None,
-    headless_browser: bool = False,
+    headless_browser: bool = True,
     mode: str | None = None,
     budget_s: float | None = None,
     max_steps: int | None = None,
@@ -283,7 +339,7 @@ async def web_task_agent_github(
     url: str,
     task: str,
     ctx: Context | None = None,
-    headless_browser: bool = False,
+    headless_browser: bool = True,
     mode: str | None = None,
     budget_s: float | None = None,
     max_steps: int | None = None,
@@ -337,7 +393,7 @@ async def web_eval_agent_submit(
     url: str,
     task: str,
     ctx: Context | None = None,
-    headless_browser: bool = False,
+    headless_browser: bool = True,
     mode: str | None = None,
     budget_s: float | None = None,
     max_steps: int | None = None,
@@ -367,7 +423,7 @@ async def web_task_agent_submit(
     url: str,
     task: str,
     ctx: Context | None = None,
-    headless_browser: bool = False,
+    headless_browser: bool = True,
     mode: str | None = None,
     budget_s: float | None = None,
     max_steps: int | None = None,
@@ -397,7 +453,7 @@ async def web_task_agent_github_submit(
     url: str,
     task: str,
     ctx: Context | None = None,
-    headless_browser: bool = False,
+    headless_browser: bool = True,
     mode: str | None = None,
     budget_s: float | None = None,
     max_steps: int | None = None,

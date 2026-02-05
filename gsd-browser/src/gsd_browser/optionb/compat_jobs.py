@@ -177,6 +177,29 @@ async def submit_job(
             ),
         )
 
+    # Persist TaskOwnershipRecord so the management API/dashboard can list sessions.
+    try:
+        from .request_context import require_current_identity
+        from .task_ownership import build_record as build_task_owner_record
+        from .task_ownership import get_task_ownership_store
+
+        identity = require_current_identity()
+        ttl_ms = max(0, int(record.expires_at_ms) - int(record.created_at_ms))
+        owner_record = build_task_owner_record(
+            task_id=task_id,
+            tool_name=str(tool_name),
+            identity=identity,
+            session_id=session_id,
+            ttl_ms=ttl_ms,
+            created_at_ms=int(record.created_at_ms),
+        )
+        await get_task_ownership_store().write(owner_record)
+    except Exception:  # noqa: BLE001
+        logger.exception(
+            "compat_job_task_ownership_persist_failed",
+            extra={"tool_name": tool_name, "task_id": task_id, "session_id": session_id},
+        )
+
     return JobSubmitPayloadV1(
         version="gsd.job_submit.v1",
         job_id=_parse_uuid4(record.job_id, name="job_id"),

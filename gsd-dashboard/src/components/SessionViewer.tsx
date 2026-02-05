@@ -39,7 +39,8 @@ export function SessionViewer({
       }
       ctx.drawImage(img, 0, 0);
     };
-    img.src = `data:image/jpeg;base64,${frame.data_base64}`;
+    const mime = frame.mime_type || "image/jpeg";
+    img.src = `data:${mime};base64,${frame.data_base64}`;
     imgRef.current = img;
   }, [frame]);
 

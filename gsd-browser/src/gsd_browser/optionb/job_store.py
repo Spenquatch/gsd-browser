@@ -45,6 +45,16 @@ def _redis_key(job_id: str) -> str:
     return f"gsd:v1:jobs:{job_id}:record"
 
 
+def _task_key_index_key(task_key: str) -> str:
+    return f"gsd:v1:jobs:task_keys:{task_key}"
+
+
+def _task_key_for_record(record: JobRecord) -> str:
+    from fastmcp.server.tasks.keys import build_task_key
+
+    return build_task_key(record.session_id, record.task_id, "tool", record.tool_name)
+
+
 def _deployment_env() -> str:
     env = str(os.environ.get("GSD_DEPLOYMENT_ENV", "dev")).strip().lower() or "dev"
     return env if env in {"dev", "prod"} else "dev"
@@ -80,12 +90,15 @@ class JobStore:
             sort_keys=True,
         )
         key = _redis_key(record.job_id)
+        task_key_index_key = _task_key_index_key(_task_key_for_record(record))
 
         try:
             async with docket.redis() as redis:
                 pipe = redis.pipeline(transaction=True)
                 pipe.set(key, payload)
                 pipe.pexpireat(key, int(record.expires_at_ms))
+                pipe.set(task_key_index_key, record.job_id)
+                pipe.pexpireat(task_key_index_key, int(record.expires_at_ms))
                 await pipe.execute()
         except redis.exceptions.RedisError as exc:
             raise RuntimeError("Failed to write JobRecord") from exc
@@ -123,6 +136,29 @@ class JobStore:
         if record.tenant_id != identity.tenant_id or record.subject_id != identity.subject_id:
             return None
         return record
+
+    async def get_job_id_for_task_key(self, task_key: str) -> str | None:
+        import redis.exceptions
+
+        docket = self.docket_getter()
+        if docket is None:
+            raise RuntimeError("Docket is required for job lookup")
+
+        key = _task_key_index_key(str(task_key))
+        try:
+            async with docket.redis() as redis:
+                raw = await redis.get(key)
+        except redis.exceptions.RedisError as exc:
+            raise RuntimeError("Failed to read job task-key mapping") from exc
+
+        if raw is None:
+            return None
+        if isinstance(raw, bytes):
+            raw = raw.decode("utf-8")
+        if not isinstance(raw, str):
+            return None
+        job_id_value = raw.strip()
+        return job_id_value or None
 
 
 _store: JobStore | None = None
@@ -180,4 +216,3 @@ async def get_job(job_id: str, *, identity: Identity | None = None) -> JobRecord
     identity_value = require_current_identity() if identity is None else identity
     store = get_job_store()
     return await store.require_owner(job_id, identity_value)
-
