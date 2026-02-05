@@ -8,6 +8,8 @@ from __future__ import annotations
 import os
 from urllib.parse import urlparse
 
+from ..utils.secrets import redact_url_password
+
 
 def validate_docket_url(url: str) -> None:
     """Validate that the Docket backend is Redis/Valkey (no memory backend)."""
@@ -21,8 +23,10 @@ def validate_docket_url(url: str) -> None:
     if scheme in {"memory"}:
         raise RuntimeError("FASTMCP_DOCKET_URL must be a Redis URL (memory backend is forbidden)")
     if scheme not in {"redis", "rediss"}:
+        # Redact the URL in error messages to avoid exposing passwords in logs
+        redacted = redact_url_password(raw)
         raise RuntimeError(
-            f"FASTMCP_DOCKET_URL must be a Redis URL (got scheme={scheme!r}, url={raw!r})"
+            f"FASTMCP_DOCKET_URL must be a Redis URL (got scheme={scheme!r}, url={redacted!r})"
         )
 
 

@@ -20,8 +20,8 @@ resource acr 'Microsoft.ContainerRegistry/registries@2023-11-01-preview' = {
   }
 }
 
+// Non-secret outputs only — consuming modules reference this resource as 'existing'
+// and call listCredentials() directly to avoid secrets in deployment outputs
 output acrId string = acr.id
 output acrName string = acr.name
 output acrLoginServer string = acr.properties.loginServer
-output acrUsername string = acr.listCredentials().username
-output acrPassword string = acr.listCredentials().passwords[0].value

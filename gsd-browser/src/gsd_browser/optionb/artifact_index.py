@@ -20,6 +20,8 @@ ArtifactIndexVersion = Literal["gsd.artifact_index.v1"]
 ArtifactState = Literal["pending", "ready"]
 ArtifactKind = Literal["screenshot", "run_event_chunk"]
 ScreenshotType = Literal["agent_step", "stream_sample"] | None
+# Backend type for artifact storage. None means legacy (infer from s3_bucket field).
+ArtifactBackend = Literal["s3", "azure", "redis"] | None
 
 _META_KEY_PREFIX = "gsd:v1:artifacts:"
 _CLEANUP_LOCK_KEY = "gsd:v1:maintenance:cleanup:lock"
@@ -41,9 +43,24 @@ class ArtifactIndexRecord(BaseModel):
     screenshot_type: ScreenshotType = None
     step: int | None = None
     page_url: str | None = None
+    # Storage location fields
     s3_bucket: str
     s3_key: str
     sha256_hex: str | None = None
+    # Backend type for multi-backend support. None = legacy (infer from s3_bucket).
+    # - "s3": S3-compatible storage (MinIO, actual S3, etc.)
+    # - "azure": Azure Blob Storage
+    # - "redis": Redis blob fallback
+    artifact_backend: ArtifactBackend = None
+
+    def get_effective_backend(self) -> str:
+        """Get the effective backend type, inferring from legacy fields if needed."""
+        if self.artifact_backend is not None:
+            return self.artifact_backend
+        # Legacy inference: s3_bucket == "redis" means Redis backend
+        if self.s3_bucket == "redis":
+            return "redis"
+        return "s3"
 
 
 def _require_uuid(value: str, *, name: str) -> str:
@@ -419,6 +436,7 @@ def build_record(
     step: int | None = None,
     page_url: str | None = None,
     sha256_hex: str | None = None,
+    artifact_backend: ArtifactBackend = None,
 ) -> ArtifactIndexRecord:
     _ = _require_uuid(artifact_id, name="artifact_id")
     _ = _require_uuid(session_id, name="session_id")
@@ -439,4 +457,5 @@ def build_record(
         s3_bucket=str(s3_bucket),
         s3_key=str(s3_key),
         sha256_hex=sha256_hex,
+        artifact_backend=artifact_backend,
     )

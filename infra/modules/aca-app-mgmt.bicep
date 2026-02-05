@@ -1,4 +1,8 @@
 // modules/aca-app-mgmt.bicep — Management API container app (port 8081)
+//
+// This module references Redis and ACR as existing resources and calls
+// listKeys()/listCredentials() directly to construct secrets. This avoids passing
+// secrets through module outputs, which would expose them in deployment metadata.
 
 @description('Azure region')
 param location string
@@ -9,22 +13,23 @@ param prefix string
 @description('ACA environment ID')
 param environmentId string
 
+@description('ACR name (for existing resource reference)')
+param acrName string
+
 @description('ACR login server')
 param acrLoginServer string
-
-@description('ACR username')
-param acrUsername string
-
-@description('ACR password')
-@secure()
-param acrPassword string
 
 @description('Container image tag')
 param imageTag string = 'latest'
 
-@description('Redis Docket URL (rediss://...)')
-@secure()
-param docketUrl string
+@description('Redis name (for existing resource reference)')
+param redisName string
+
+@description('Redis host')
+param redisHost string
+
+@description('Redis SSL port')
+param redisPort int
 
 @description('Clerk JWKS URL')
 param jwtJwksUrl string
@@ -37,6 +42,16 @@ param jwtAudience string
 
 @description('Allowed origins for CORS (comma-separated URLs)')
 param allowedOrigins string = ''
+
+// Reference ACR as existing to call listCredentials() directly
+resource acr 'Microsoft.ContainerRegistry/registries@2023-11-01-preview' existing = {
+  name: acrName
+}
+
+// Reference Redis as existing to call listKeys() directly
+resource redis 'Microsoft.Cache/redis@2023-08-01' existing = {
+  name: redisName
+}
 
 resource mgmtApp 'Microsoft.App/containerApps@2024-03-01' = {
   name: '${prefix}-mgmt'
@@ -59,13 +74,16 @@ resource mgmtApp 'Microsoft.App/containerApps@2024-03-01' = {
       registries: [
         {
           server: acrLoginServer
-          username: acrUsername
+          username: acr.listCredentials().username
           passwordSecretRef: 'acr-password'
         }
       ]
       secrets: [
-        { name: 'acr-password', value: acrPassword }
-        { name: 'docket-url', value: docketUrl }
+        // Secrets are derived directly from existing resource references, avoiding
+        // secrets in module outputs. listKeys()/listCredentials() calls are still
+        // in the deployment graph but never appear in deployment outputs.
+        { name: 'acr-password', value: acr.listCredentials().passwords[0].value }
+        { name: 'docket-url', value: 'rediss://:${redis.listKeys().primaryKey}@${redisHost}:${redisPort}/0' }
       ]
     }
     template: {
@@ -97,6 +115,8 @@ resource mgmtApp 'Microsoft.App/containerApps@2024-03-01' = {
             { name: 'GSD_JWT_TENANT_ID_CLAIM', value: 'tenant_id' }
             { name: 'GSD_JWT_SUBJECT_ID_CLAIM', value: 'sub' }
             { name: 'GSD_HTTP_ALLOWED_ORIGINS', value: allowedOrigins }
+            // Allow server-to-server requests (no Origin header) for CLI scripts and internal tooling
+            { name: 'GSD_HTTP_ALLOW_NULL_ORIGIN', value: 'true' }
           ]
           probes: [
             {

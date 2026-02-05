@@ -17,6 +17,8 @@ resource workspace 'Microsoft.OperationalInsights/workspaces@2023-09-01' = {
   }
 }
 
+// Non-secret outputs only — consuming modules reference this resource as 'existing'
+// and call listKeys() directly to avoid secrets in deployment outputs
+output workspaceName string = workspace.name
 output workspaceId string = workspace.id
 output customerId string = workspace.properties.customerId
-output sharedKey string = workspace.listKeys().primarySharedKey

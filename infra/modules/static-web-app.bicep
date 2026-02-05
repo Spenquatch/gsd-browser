@@ -22,6 +22,8 @@ resource swa 'Microsoft.Web/staticSites@2023-12-01' = {
   }
 }
 
+// Non-secret outputs only — deployment token should be retrieved via az CLI when needed:
+//   az staticwebapp secrets list -n gsd-prod-dashboard --query properties.apiKey -o tsv
 output swaId string = swa.id
+output swaName string = swa.name
 output swaDefaultHostname string = swa.properties.defaultHostname
-output swaDeploymentToken string = swa.listSecrets().properties.apiKey

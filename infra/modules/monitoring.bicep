@@ -1,4 +1,4 @@
-// modules/monitoring.bicep — Alert rules for ACA apps
+// modules/monitoring.bicep — Alert rules for ACA apps and Redis
 
 @description('Resource name prefix')
 param prefix string
@@ -11,6 +11,9 @@ param apiAppId string
 
 @description('Worker container app resource ID')
 param workerAppId string
+
+@description('Redis cache resource ID')
+param redisId string
 
 // Action group for alert notifications
 resource actionGroup 'Microsoft.Insights/actionGroups@2023-01-01' = {
@@ -127,5 +130,40 @@ resource restartAlert 'Microsoft.Insights/scheduledQueryRules@2023-03-15-preview
     actions: {
       actionGroups: [actionGroup.id]
     }
+  }
+}
+
+// Alert: Redis memory usage > 80%
+// With noeviction policy, high memory usage can cause write failures.
+// This alert triggers before reaching 100% to allow remediation time.
+resource redisMemoryAlert 'Microsoft.Insights/metricAlerts@2018-03-01' = {
+  name: '${prefix}-redis-high-memory'
+  location: 'global'
+  properties: {
+    description: 'Redis memory usage exceeds 80%. Consider cleanup or scaling. See docs/ops/RUNBOOK-redis-memory.md'
+    severity: 2
+    enabled: true
+    scopes: [redisId]
+    evaluationFrequency: 'PT5M'
+    windowSize: 'PT15M'
+    criteria: {
+      'odata.type': 'Microsoft.Azure.Monitor.SingleResourceMultipleMetricCriteria'
+      allOf: [
+        {
+          name: 'HighMemoryUsage'
+          criterionType: 'StaticThresholdCriterion'
+          metricName: 'usedmemorypercentage'
+          metricNamespace: 'Microsoft.Cache/redis'
+          operator: 'GreaterThan'
+          threshold: 80
+          timeAggregation: 'Average'
+        }
+      ]
+    }
+    actions: [
+      {
+        actionGroupId: actionGroup.id
+      }
+    ]
   }
 }

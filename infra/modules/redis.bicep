@@ -85,8 +85,9 @@ resource dnsGroup 'Microsoft.Network/privateEndpoints/privateDnsZoneGroups@2023-
   }
 }
 
-// Construct rediss:// URL (TLS on port 6380)
+// Non-secret outputs only — consuming modules reference this resource as 'existing'
+// and call listKeys() directly to avoid secrets in deployment outputs
+output redisName string = redis.name
 output redisHost string = redis.properties.hostName
 output redisPort int = redis.properties.sslPort
-output redisPrimaryKey string = redis.listKeys().primaryKey
-output docketUrl string = 'rediss://:${redis.listKeys().primaryKey}@${redis.properties.hostName}:${redis.properties.sslPort}/0'
+output redisId string = redis.id

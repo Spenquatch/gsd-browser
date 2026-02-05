@@ -97,8 +97,9 @@ resource dnsGroup 'Microsoft.Network/privateEndpoints/privateDnsZoneGroups@2023-
   }
 }
 
-// Outputs mapped to GSD_S3_* env vars
+// Non-secret outputs only — consuming modules reference this resource as 'existing'
+// and call listKeys() directly to avoid secrets in deployment outputs
 output storageAccountName string = storage.name
 output blobEndpoint string = storage.properties.primaryEndpoints.blob
 output accessKeyId string = storage.name
-output secretAccessKey string = storage.listKeys().keys[0].value
+output storageId string = storage.id

@@ -110,8 +110,10 @@ module acaEnv 'modules/aca-environment.bicep' = {
     location: location
     prefix: prefix
     acaSubnetId: vnet.outputs.acaSubnetId
+    logAnalyticsWorkspaceName: logAnalytics.outputs.workspaceName
     logAnalyticsCustomerId: logAnalytics.outputs.customerId
-    logAnalyticsSharedKey: logAnalytics.outputs.sharedKey
+    // Note: sharedKey is no longer passed — aca-environment.bicep references
+    // the workspace as 'existing' and calls listKeys() directly
   }
 }
 
@@ -124,16 +126,19 @@ module apiApp 'modules/aca-app-api.bicep' = {
     location: location
     prefix: prefix
     environmentId: acaEnv.outputs.environmentId
+    acrName: acr.outputs.acrName
     acrLoginServer: acr.outputs.acrLoginServer
-    acrUsername: acr.outputs.acrUsername
-    acrPassword: acr.outputs.acrPassword
     imageTag: imageTag
-    docketUrl: redis.outputs.docketUrl
+    redisName: redis.outputs.redisName
+    redisHost: redis.outputs.redisHost
+    redisPort: redis.outputs.redisPort
     anthropicApiKey: anthropicApiKey
     jwtJwksUrl: jwtJwksUrl
     jwtIssuer: jwtIssuer
     jwtAudience: jwtAudience
     allowedOrigins: allowedOrigins
+    // Note: docketUrl and acrPassword are no longer passed — aca-app-api.bicep
+    // references Redis/ACR as 'existing' and calls listKeys()/listCredentials() directly
   }
 }
 
@@ -144,15 +149,18 @@ module mgmtApp 'modules/aca-app-mgmt.bicep' = {
     location: location
     prefix: prefix
     environmentId: acaEnv.outputs.environmentId
+    acrName: acr.outputs.acrName
     acrLoginServer: acr.outputs.acrLoginServer
-    acrUsername: acr.outputs.acrUsername
-    acrPassword: acr.outputs.acrPassword
     imageTag: imageTag
-    docketUrl: redis.outputs.docketUrl
+    redisName: redis.outputs.redisName
+    redisHost: redis.outputs.redisHost
+    redisPort: redis.outputs.redisPort
     jwtJwksUrl: jwtJwksUrl
     jwtIssuer: jwtIssuer
     jwtAudience: jwtAudience
     allowedOrigins: allowedOrigins
+    // Note: docketUrl and acrPassword are no longer passed — aca-app-mgmt.bicep
+    // references Redis/ACR as 'existing' and calls listKeys()/listCredentials() directly
   }
 }
 
@@ -163,16 +171,31 @@ module workerApp 'modules/aca-app-worker.bicep' = {
     location: location
     prefix: prefix
     environmentId: acaEnv.outputs.environmentId
+    acrName: acr.outputs.acrName
     acrLoginServer: acr.outputs.acrLoginServer
-    acrUsername: acr.outputs.acrUsername
-    acrPassword: acr.outputs.acrPassword
     imageTag: imageTag
-    docketUrl: redis.outputs.docketUrl
+    redisName: redis.outputs.redisName
+    redisHost: redis.outputs.redisHost
+    redisPort: redis.outputs.redisPort
     anthropicApiKey: anthropicApiKey
+    storageAccountName: storage.outputs.storageAccountName
     s3EndpointUrl: storage.outputs.blobEndpoint
     s3Bucket: 'gsd-artifacts'
-    s3AccessKeyId: storage.outputs.accessKeyId
-    s3SecretAccessKey: storage.outputs.secretAccessKey
+    // Note: docketUrl, acrPassword, and s3SecretAccessKey are no longer passed —
+    // aca-app-worker.bicep references Redis/ACR/Storage as 'existing' and calls
+    // listKeys()/listCredentials() directly
+  }
+}
+
+// ── RBAC for Managed Identity ──────────────────────────────────────────
+
+// Grant worker app Storage Blob Data Contributor role for Azure Blob artifacts
+module workerStorageRbac 'modules/storage-rbac.bicep' = {
+  name: 'worker-storage-rbac'
+  scope: rg
+  params: {
+    storageAccountName: storage.outputs.storageAccountName
+    principalId: workerApp.outputs.principalId
   }
 }
 
@@ -197,6 +220,7 @@ module monitoring 'modules/monitoring.bicep' = {
     logAnalyticsWorkspaceId: logAnalytics.outputs.workspaceId
     apiAppId: apiApp.outputs.appId
     workerAppId: workerApp.outputs.appId
+    redisId: redis.outputs.redisId
   }
 }
 

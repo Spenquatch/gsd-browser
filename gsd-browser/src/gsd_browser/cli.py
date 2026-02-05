@@ -24,6 +24,7 @@ from .mcp_tool_policy import (
     parse_tool_selector,
 )
 from .user_config import default_env_path, ensure_env_file, update_env_file
+from .utils.secrets import redact_url_password
 
 console = Console()
 logger = logging.getLogger("gsd_browser.cli")
@@ -41,37 +42,8 @@ _MCP_TOOLS_SET_DISABLED_ARG = typer.Argument(None, help="Tool name(s) to denylis
 _TRUE_ENV_VALUES = {"1", "true", "yes"}
 
 
-def _redact_url_password(url: str) -> str:
-    """Redact embedded passwords in URLs (e.g. rediss://:pwd@host:6380/0)."""
-    raw = str(url or "").strip()
-    if not raw:
-        return raw
-    try:
-        from urllib.parse import urlsplit, urlunsplit
-
-        parts = urlsplit(raw)
-        if parts.password is None:
-            return raw
-
-        hostname = parts.hostname or ""
-        port = f":{parts.port}" if parts.port is not None else ""
-
-        # Keep username if present; always redact password.
-        if parts.username is not None:
-            userinfo = f"{parts.username}:****@"
-        else:
-            # Password-only URLs like rediss://:pwd@host
-            userinfo = ":****@"
-
-        netloc = f"{userinfo}{hostname}{port}"
-        return urlunsplit((parts.scheme, netloc, parts.path, parts.query, parts.fragment))
-    except Exception:
-        # Best-effort string redaction.
-        scheme_sep = raw.find("://")
-        at = raw.find("@", scheme_sep + 3 if scheme_sep >= 0 else 0)
-        if scheme_sep >= 0 and at > scheme_sep:
-            return f"{raw[:scheme_sep+3]}****@{raw[at+1:]}"
-        return raw
+# Backward compatibility alias for internal usage
+_redact_url_password = redact_url_password
 
 
 def _env_path_for_user_config() -> Path:
