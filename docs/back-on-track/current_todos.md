@@ -52,6 +52,9 @@ assumptions, discover missing work, and then decide what to implement.
     - How will multi-replica workers route viewers to the correct streamer?
   - Deliverable: an ADR that pins the architecture + a deployment plan + success criteria.
 
+- [ ] Tech debt: **After landing streaming JWT auth via “Option B” (verify in async connect handler), refactor to “Option A”**.
+  - Goal: make `authorize_socket_connection()` async and perform `await verifier.verify(token)` inside it, centralizing auth and avoiding any “pending token” staging (`gsd-browser/src/gsd_browser/streaming/security.py`).
+
 ### Suggested P2 — release process + reproducibility
 
 - [ ] Suggested: **Introduce CI/CD to pin releases and avoid “manual env var” drift** (especially for the dashboard).
