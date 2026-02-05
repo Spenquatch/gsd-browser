@@ -7,7 +7,7 @@ Proposed
 GSD needs a reference cloud deployment for multi-tenant SaaS operation supporting 5-20 concurrent browser automation sessions. Requirements:
 - Container-based compute with autoscaling
 - Managed Redis for task state, artifact metadata, and pub/sub
-- Object storage for screenshots and artifacts (existing `S3Client` interface)
+- Object storage for screenshots and artifacts
 - Static asset hosting for React dashboard (CDN, custom domains, SSL)
 - WebSocket support for real-time frame streaming
 - VNet isolation for backend services
@@ -43,18 +43,17 @@ Azure was selected as the primary cloud provider. Three compute options were eva
 - **Access**: Private endpoint in VNet (no public access)
 - **TLS**: Enabled (Azure default)
 - **Usage**: Task ownership records, job state (FastMCP Docket), session metadata
-- **Connection**: Via `REDIS_URL` env var (existing `GSD_REDIS_URL` config)
+- **Connection**: Via FastMCP Docket config (`FASTMCP_DOCKET_URL` / `FASTMCP_DOCKET_NAME`)
 
-### 3) Storage: Azure Blob Storage with S3-compatible endpoint
+### 3) Storage: Azure Blob Storage (native SDK)
 
 - **Account type**: General-purpose v2, Hot tier
 - **Access**: Private endpoint in VNet
-- **S3 compatibility**: Azure Blob Storage supports S3-compatible API via the Blob REST API
 - **Container**: `gsd-artifacts` for screenshots, recordings, and task artifacts
-- **Authentication**: Managed identity (preferred) or access key (fallback)
-- **Connection**: Existing `S3Client` interface with Azure Blob S3-compat endpoint URL
+- **Authentication**: Managed identity (preferred) or connection string (fallback)
+- **Connection**: Native `azure-storage-blob` SDK via `GSD_AZURE_STORAGE_ACCOUNT`
 
-**Fallback plan**: If S3-compat proves insufficient (e.g., presigned URL edge cases), use `azure-storage-blob` SDK with a thin adapter implementing the same `ArtifactStore` interface.
+**Note**: Azure Blob Storage is not S3-compatible at the HTTP API level. We use the native SDK adapter implemented in Phase 2 (`gsd_browser.optionb.azure_blob_client`).
 
 ### 4) Frontend: Azure Static Web Apps
 
@@ -126,14 +125,18 @@ Terraform is an alternative for teams with existing Terraform workflows.
 
 ### Environment variable mapping for ACA
 ```env
-# Redis
-GSD_REDIS_URL=rediss://<redis-name>.redis.cache.windows.net:6380
+# FastMCP / Docket (queue + state)
+FASTMCP_DOCKET_NAME=gsd
+FASTMCP_DOCKET_URL=rediss://:<redis-key>@<redis-name>.redis.cache.windows.net:6380/0
 
-# Blob Storage (S3-compat)
-GSD_S3_ENDPOINT_URL=https://<storage-account>.blob.core.windows.net
-GSD_S3_BUCKET=gsd-artifacts
-GSD_S3_ACCESS_KEY_ID=<storage-account-name>
-GSD_S3_SECRET_ACCESS_KEY=<storage-account-key>
+# Blob Storage (Azure native)
+GSD_AZURE_STORAGE_ACCOUNT=<storage-account-name>
+GSD_AZURE_BLOB_CONTAINER=gsd-artifacts
+# Optional fallback:
+# GSD_AZURE_STORAGE_CONNECTION_STRING="DefaultEndpointsProtocol=...;AccountName=...;AccountKey=...;EndpointSuffix=core.windows.net"
+
+# Artifact delivery mode (MCP tool responses)
+GSD_ARTIFACT_DELIVERY_MODE=both  # inline|presigned|both
 
 # Streaming
 GSD_STREAMING_BIND_HOST=0.0.0.0
@@ -143,7 +146,7 @@ GSD_STREAMING_AUTH_MODE=jwt
 
 # JWT (Clerk)
 GSD_JWT_ISSUER=https://<clerk-domain>
-GSD_JWT_JWKS_URI=https://<clerk-domain>/.well-known/jwks.json
+GSD_JWT_JWKS_URL=https://<clerk-domain>/.well-known/jwks.json
 GSD_JWT_AUDIENCE=gsd
 
 # LLM

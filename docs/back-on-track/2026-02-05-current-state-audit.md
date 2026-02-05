@@ -91,7 +91,7 @@ emit secrets” operational posture.
 
 ---
 
-### 1.3 Screenshots/artifacts persistence + retrieval (and the Redis fallback)
+### 1.3 Screenshots/artifacts persistence + retrieval
 
 **What’s implemented**
 
@@ -107,25 +107,25 @@ emit secrets” operational posture.
   - Index writer + “pending → ready” finalize: `gsd-browser/src/gsd_browser/optionb/artifact_index.py`
     (`ArtifactWriter.write`, `ArtifactIndexStore.finalize_ready`).
 
-- Azure Blob endpoint forces a deliberate fallback to Redis-backed blob storage:
-  - Endpoint compatibility check: `gsd-browser/src/gsd_browser/optionb/screenshot_artifacts.py:33`
-    (`_endpoint_is_probably_s3_compatible` returns false for `*.blob.core.windows.net`).
-  - Redis blob key format is implemented as: `gsd:v1:artifacts:{artifact_id}:blob`
-    (`screenshot_artifacts.py`).
+- Azure Blob is supported via a native SDK adapter:
+  - Config and client: `gsd-browser/src/gsd_browser/optionb/azure_blob_client.py`
+    (`GSD_AZURE_STORAGE_ACCOUNT`, managed identity by default).
+  - Backend selection: `gsd-browser/src/gsd_browser/optionb/screenshot_artifacts.py`
+    prefers Azure Blob when Azure config is present, and will also detect Blob-style endpoints.
 
 - Retrieval:
-  - Mgmt API endpoint supports `include_data=true` for Redis-backed screenshots:
-    `gsd-browser/src/gsd_browser/management_api/app.py:571` (`_list_session_screenshots`).
-  - MCP tool retrieval exists too: `gsd-browser/src/gsd_browser/mcp_server.py:2618`
-    (`get_screenshots`), reading Redis when `s3_bucket == "redis"`.
+  - MCP tool: `gsd-browser/src/gsd_browser/mcp_server.py` (`get_screenshots`) supports inline images
+    and/or presigned URLs (see `GSD_ARTIFACT_DELIVERY_MODE`).
+  - Mgmt API: `gsd-browser/src/gsd_browser/management_api/app.py` (`_list_session_screenshots`) only
+    returns `data_base64` for legacy Redis-backed artifacts; Azure-backed artifacts are currently
+    metadata-only via this endpoint.
 
 **Brittle assumptions / mismatches**
 
-- **Cleanup is S3-centric:** `CleanupRunner` deletes blobs via a `delete_s3(...)` callback, but
-  Redis-backed blobs rely on TTL expiry; the cleanup code path is misleading/fragile if extended.
-- **Operational risk:** storing image blobs in Redis + setting Redis `maxmemory-policy` to `noeviction`
-  in IaC (`infra/modules/redis.bicep`) creates a failure mode where the platform stops accepting
-  writes when memory fills (jobs can fail in surprising ways).
+- **Mgmt screenshots endpoint drift:** the dashboard expects inline base64 images; Azure-backed
+  artifacts need signed-URL support (or mgmt endpoint enhancements) for thumbnails.
+- **Cleanup coverage:** artifact cleanup is S3-centric today; Azure-backed blob deletion should be
+  handled explicitly (or via storage lifecycle policies) to avoid storage growth.
 
 ---
 
@@ -186,13 +186,13 @@ emit secrets” operational posture.
 
 | Area | Expected (ADR/Plan) | Actual (code + prod) | Risk / Impact |
 |---|---|---|---|
-| Azure Blob “S3-compatible” artifacts | ADR-0025 claims Blob S3-compat works for `S3Client` | Code explicitly treats `*.blob.core.windows.net` as incompatible and falls back to Redis blobs (`screenshot_artifacts.py:33`, `screenshot_artifacts.py:66`) | Long-term cost/reliability risk; Redis memory pressure and operational coupling |
-| Artifact storage design | ADR-0009 says “keep binaries out of Redis; store in object storage” | Redis is storing screenshot blobs (by design fallback) | Breaks scale economics; increases blast radius (Redis outage = queue + artifacts outage) |
+| Azure Blob artifacts | ADR-0025 claimed Blob was S3-compatible | Implementation uses a native Azure Blob adapter (`azure_blob_client.py`) and prefers it when configured | Low risk if docs are corrected; remaining risk is lifecycle/cleanup and UI retrieval ergonomics |
+| Artifact storage design | ADR-0009 says “keep binaries out of Redis; store in object storage” | Binaries are stored in Azure Blob; Redis holds only indexes/metadata | Remaining risk: ensure blob lifecycle/cleanup and signed URL support for consumers |
 | Streaming auth (JWT mode) | ADR-0023/Plan: JWT verified on Socket.IO connect, sid→Identity map | JWT mode not fully implemented/wired (`security.py:220`, `server.py:157`) and not deployed | “View Live” cannot be hardened for SaaS; risk of insecure/incorrect auth if rushed |
 | Remote streaming architecture | ADR-0024: workers expose Socket.IO; session affinity routing; session-aware health endpoints | Prod worker exposes health server only; no session-aware health endpoint; mgmt `stream_url` usually null unless configured | Missing key SaaS feature; architecture decision not realized operationally |
 | Multi-session model | ADR-0026: per-session control + per-session streamer + lifecycle cleanup | SessionRegistry exists (`session_registry.py`), but streaming server is not deployed and control/streamer remain largely singleton-based | Concurrency + isolation gaps; inconsistent behavior vs docs/plan |
 | Sessions listing scalability | ADR-0018 suggests secondary index for identity-scoped listing | Mgmt scans Redis keys (`management_api/app.py:396`, `management_api/app.py:435`) | Latency/Redis load grows with tenants/tasks; operability issues |
-| Env var naming consistency | ADR-0022/0025 use `GSD_JWT_JWKS_URI` | Implementation uses `GSD_JWT_JWKS_URL` | Operator confusion + misconfig risk; docs drift |
+| Env var naming consistency | ADR-0022/0025 referenced the wrong JWKS env var name | Implementation uses `GSD_JWT_JWKS_URL` | Operator confusion + misconfig risk; docs drift |
 | Release process | Plan implies reproducible infra + CI/CD | Prod uses manual image tags and manual SWA build-time env process | Release safety risk; hard to audit provenance and roll back safely |
 | Secrets hygiene | ADRs imply safe secret handling | IaC outputs multiple secrets (`infra/modules/*`) | High-severity security issue; increases likelihood of credential compromise |
 
@@ -212,8 +212,8 @@ emit secrets” operational posture.
   `GSD_HTTP_ALLOW_NULL_ORIGIN`).
 
 ### Reliability
-- **HIGH — Redis is a single point of failure for both queue and (fallback) artifact blobs**
-  (Option B architecture + Redis blob fallback in `screenshot_artifacts.py:66`).
+- **HIGH — Redis is a single point of failure for both queue and artifact indexing**
+  (Option B architecture uses Redis for Docket + artifact index/zsets).
 - **MED — Redis 6.0 compatibility relies on monkey-patching `redis-py`**:
   `docket_redis_compat.py:15` (fragile across dependency updates).
 - **MED — Sessions listing relies on SCAN** which can degrade under load:
@@ -247,9 +247,9 @@ emit secrets” operational posture.
 2) **Rotate compromised/at-risk credentials** (dependency: #1 plan + confirmation; research:
    medium) — Redis keys, storage keys, ACR admin password, Log Analytics shared key; verify no
    downstream dependencies break.
-3) **Implement native Azure Blob artifact store adapter** (dependency: decision; research: medium/high)
-   — replace Redis blob fallback with real object storage (managed identity or SAS), and switch
-   dashboard to thumbnails via signed URLs rather than base64 by default.
+3) **Finish Azure Blob artifact consumer integration** (dependency: UI/API decisions; research: medium)
+   — the native Blob adapter exists; remaining work is signed URL support in the mgmt API and/or
+   dashboard so Azure-backed artifacts render without inline base64.
 4) **Add identity-scoped secondary index for sessions** (dependency: none; research: low) — avoid
    Redis SCAN by writing `ZSET tenants:{t}:subjects:{s}:sessions` at job submit time; update mgmt
    listing to use it.
@@ -262,9 +262,8 @@ emit secrets” operational posture.
 7) **Unify release process (CI/CD + pinned image tags)** (dependency: #1 if secrets handling changes;
    research: medium) — pipeline builds backend image tags immutably and deploys via IaC; dashboard
    build injects Vite env values via CI secrets.
-8) **Reconcile doc drift** (dependency: none; research: low) — correct `GSD_JWT_JWKS_URI` →
-   `GSD_JWT_JWKS_URL` in ADRs, remove `GSD_REDIS_URL` references per ADR-0016, update ADR-0025’s
-   Blob “S3-compat” claim.
+8) **Reconcile doc drift** (dependency: none; research: low) — ensure ADRs use `GSD_JWT_JWKS_URL`,
+   remove `GSD_REDIS_URL` references per ADR-0016, update ADR-0025’s Blob storage claims.
 9) **Add observability for queue health + artifact pressure** (dependency: #3/#4 helpful; research:
    medium) — metrics for queued age, running count, failure rate, and artifact bytes written; alerts
    + runbooks.

@@ -60,7 +60,7 @@ Required environment variables for a Clerk-backed deployment:
 
 ```env
 GSD_JWT_ISSUER=https://<clerk-domain>
-GSD_JWT_JWKS_URI=https://<clerk-domain>/.well-known/jwks.json
+GSD_JWT_JWKS_URL=https://<clerk-domain>/.well-known/jwks.json
 GSD_JWT_AUDIENCE=gsd
 GSD_JWT_TENANT_ID_CLAIM=tenant_id
 GSD_JWT_SUBJECT_ID_CLAIM=sub

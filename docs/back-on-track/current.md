@@ -12,9 +12,10 @@ drive cleanup + hardening work.
 - **Sessions list works**: the Management API (`/api/v1/sessions`) returns sessions for compat jobs
   and they show up in the dashboard (including terminated sessions until TTL).
 - **Screenshots persist and are retrievable**:
-  - Worker captures step screenshots and persists them as artifacts.
-  - Dashboard can list + render screenshot thumbnails via Management API.
-  - CLI script can download screenshots by `session_id`.
+  - Worker captures step screenshots and persists them as artifacts (Azure Blob-backed).
+  - CLI script can download screenshots by `session_id` (via `get_screenshots`).
+  - Mgmt API `/api/v1/sessions/{id}/screenshots` returns screenshot metadata; `include_data=true`
+    currently only includes inline base64 for legacy Redis-backed artifacts (dashboard thumbnail support needs follow-up for Azure-backed blobs).
 
 ## High-level architecture (prod)
 
@@ -32,13 +33,31 @@ drive cleanup + hardening work.
 
 Resource Group: `gsd-prod-rg` (East US)
 
+Latest validated prod image tag (Phase 3 smoke run): `phase3-streaming-1770320691`
+
 ### Container Apps
 
 | Component | Name | FQDN | Latest Ready Revision | Image |
 |---|---|---|---|---|
-| MCP API | `gsd-prod-api` | `https://gsd-prod-api.yellowplant-7a34cb33.eastus.azurecontainerapps.io` | `gsd-prod-api--0000015` | `gsdprodacr.azurecr.io/gsd-browser:fix-session-linking-1770250193` |
-| Worker | `gsd-prod-worker` | `https://gsd-prod-worker.yellowplant-7a34cb33.eastus.azurecontainerapps.io` | `gsd-prod-worker--0000010` | `gsdprodacr.azurecr.io/gsd-browser:fix-session-linking-1770250193` |
-| Mgmt API | `gsd-prod-mgmt` | `https://gsd-prod-mgmt.yellowplant-7a34cb33.eastus.azurecontainerapps.io` | `gsd-prod-mgmt--0000011` | `gsdprodacr.azurecr.io/gsd-browser:fix-session-linking-1770250193` |
+| MCP API | `gsd-prod-api` | `https://gsd-prod-api.yellowplant-7a34cb33.eastus.azurecontainerapps.io` | `gsd-prod-api--0000019` | `gsdprodacr.azurecr.io/gsd-browser:phase3-streaming-1770320691` |
+| Worker | `gsd-prod-worker` | `https://gsd-prod-worker.yellowplant-7a34cb33.eastus.azurecontainerapps.io` | `gsd-prod-worker--0000014` | `gsdprodacr.azurecr.io/gsd-browser:phase3-streaming-1770320691` |
+| Mgmt API | `gsd-prod-mgmt` | `https://gsd-prod-mgmt.yellowplant-7a34cb33.eastus.azurecontainerapps.io` | `gsd-prod-mgmt--0000015` | `gsdprodacr.azurecr.io/gsd-browser:phase3-streaming-1770320691` |
+
+### Smoke checks (passed)
+
+HTTP health:
+
+```bash
+curl -sS "https://gsd-prod-api.yellowplant-7a34cb33.eastus.azurecontainerapps.io/.well-known/oauth-protected-resource"
+curl -sS -i "https://gsd-prod-worker.yellowplant-7a34cb33.eastus.azurecontainerapps.io/healthz/worker"
+```
+
+In-container artifact smoke (Azure Blob + Managed Identity + `get_screenshots`):
+
+```bash
+az containerapp exec -g gsd-prod-rg -n gsd-prod-worker --command \
+  "python -m gsd_browser.optionb.smoke_artifacts --delivery-mode both --cleanup"
+```
 
 ### Static Web App (dashboard)
 
@@ -119,23 +138,22 @@ Mgmt sessions payload includes:
 
 ## Artifacts (screenshots)
 
-### Current persistence path (Redis-backed fallback)
+### Current persistence path (Azure Blob-backed)
 
-The original artifact upload path used an S3 client, but in prod the endpoint was an Azure Blob
-URL (`*.blob.core.windows.net`), which is **not S3-compatible**.
-
-Current behavior:
-
-- If `GSD_S3_ENDPOINT_URL` looks like Azure Blob, screenshots fall back to **Redis blob storage**.
-- Blob key format: `gsd:v1:artifacts:{artifact_id}:blob`
-- Screenshot index is still written (meta + zset) so the rest of the system can discover it.
+Production uses **Azure Blob Storage** via the native SDK (Managed Identity), and supports inline
+and/or presigned delivery in tool responses.
 
 Implementation:
 
 - `gsd-browser/src/gsd_browser/optionb/screenshot_artifacts.py`
 - `gsd-browser/src/gsd_browser/optionb/artifact_index.py`
+- `gsd-browser/src/gsd_browser/optionb/azure_blob_client.py`
 - retrieval support in MCP tool: `gsd-browser/src/gsd_browser/mcp_server.py` (`get_screenshots`)
 - retrieval support in Mgmt API: `gsd-browser/src/gsd_browser/management_api/app.py`
+
+Validated in Azure:
+
+- In-container artifact smoke (`python -m gsd_browser.optionb.smoke_artifacts --delivery-mode both --cleanup`) succeeded.
 
 ### Mgmt API endpoint (for dashboard)
 
@@ -143,8 +161,8 @@ Implementation:
 
 Notes:
 
-- `include_data=true` returns `data_base64` for Redis-backed screenshots (so the dashboard can render).
-- This is intentionally capped (`last_n` max 20) to avoid huge payloads.
+- `include_data=true` only returns `data_base64` for legacy Redis-backed screenshots.
+- This endpoint is intentionally capped (`last_n` max 20) to avoid huge payloads.
 
 ### CLI scripts for prod
 
@@ -176,23 +194,15 @@ Current production state:
 
 ### Build + push backend image (manual)
 
-From `gsd-browser/`:
+From repo root:
 
 ```bash
-TAG="fix-$(date +%s)"
-cd gsd-browser
-docker build -t gsdprodacr.azurecr.io/gsd-browser:$TAG -f docker/Dockerfile .
-az acr login -n gsdprodacr
-docker push gsdprodacr.azurecr.io/gsd-browser:$TAG
+TAG="phase3-streaming-$(date +%s)"
+IMAGE_TAG="$TAG" ACR_NAME=gsdprodacr RESOURCE_GROUP=gsd-prod-rg ./infra/scripts/build-push.sh
+IMAGE_TAG="$TAG" ./infra/scripts/deploy.sh
 ```
 
-Deploy to Container Apps:
-
-```bash
-az containerapp update -n gsd-prod-api -g gsd-prod-rg --image gsdprodacr.azurecr.io/gsd-browser:$TAG
-az containerapp update -n gsd-prod-worker -g gsd-prod-rg --image gsdprodacr.azurecr.io/gsd-browser:$TAG
-az containerapp update -n gsd-prod-mgmt -g gsd-prod-rg --image gsdprodacr.azurecr.io/gsd-browser:$TAG
-```
+Preferred: use GitHub Actions (`.github/workflows/backend-build.yml`, `.github/workflows/deploy-prod.yml`).
 
 ### Build + deploy dashboard (manual)
 
@@ -216,8 +226,7 @@ npx -y @azure/static-web-apps-cli deploy ./dist --env production
 
 1. **Secrets leaked in old logs**: an older worker revision printed the full Redis URL including
    password. This is now redacted, but the secret should still be rotated.
-2. **Artifacts stored in Redis**: workable, but not ideal long-term (cost + memory pressure).
-   We should implement native Azure Blob uploads (or switch to true S3-compatible storage).
+2. **Queue/worker observability**: add metrics + alerts for backlog age and worker failures.
 3. **Mgmt API “Origin required” behavior**: curl without an `Origin` header can return
    `{"error":"origin_not_allowed","origin":""}`. Options:
    - set `GSD_HTTP_ALLOW_NULL_ORIGIN=1` for mgmt, or
@@ -239,4 +248,3 @@ npx -y @azure/static-web-apps-cli deploy ./dist --env production
    - backend: build/push ACR image with immutable tag
    - dashboard: build with publishable key + mgmt base URL and deploy SWA
 5. Document env vars in one place and reconcile with `infra/` Bicep + ADRs.
-

@@ -1,112 +1,26 @@
-# Suggested TODOs (needs validation) — 2026-02-05
+# TODOs (Phase 4 only) — 2026-02-05
 
-This is a **suggested** follow-up list based on the current deployed state documented in
-`docs/back-on-track/current.md`. Items here are intentionally framed as **research-first** tasks: validate the
-assumptions, discover missing work, and then decide what to implement.
+This list is scoped to the remaining Phase 4 work from the back-on-track plan:
+release process + documentation drift + observability. Phases 1–3 are treated as done/validated.
 
-## Suggested priorities (research-first)
+## 4.1 Release process (GitHub Actions)
 
-### Suggested P0 — security + operational safety
+- [ ] Confirm repo secrets exist and are named consistently (see `docs/ops/CI-CD.md`).
+- [ ] Use `.github/workflows/backend-build.yml` to build/push immutable backend tags to ACR.
+- [ ] Use `.github/workflows/deploy-prod.yml` for production deploys (environment approvals).
+- [ ] Use `.github/workflows/dashboard-build.yml` to build/deploy `gsd-dashboard` with build-time Vite env vars.
+- [ ] Remove or keep legacy `.github/workflows/azure-deploy.yml` intentionally (it is now `workflow_dispatch` only).
 
-- [ ] Suggested: **Rotate Redis credentials** (validate whether secrets leaked in logs and whether rotation is required anyway).
-  - Research:
-    - Confirm which revisions logged `FASTMCP_DOCKET_URL` with password (Container App logs + timestamps).
-    - Confirm whether the Redis credential is a primary/secondary key and rotation path.
-    - Confirm which Container Apps use the `docket-url` secret (`gsd-prod-api`, `gsd-prod-worker`, `gsd-prod-mgmt`).
-  - Deliverable: a rotation runbook + verification steps (no downtime or controlled rollout).
+## 4.2 Docs drift
 
-- [ ] Suggested: **Audit “Origin required” behavior on Management API** (ensure it’s intentional and doesn’t break tooling).
-  - Research:
-    - Identify which middleware is returning `{"error":"origin_not_allowed"}` and when.
-    - Confirm whether dashboards/scripts/automations always send an `Origin` header.
-  - Deliverable: a clear policy decision + consistent behavior across prod/dev.
+- [ ] Keep env var docs consolidated in `gsd-browser/docs/ENV_VARS.md`.
+- [ ] Update ADRs when implementation changes (especially deployment + storage assumptions).
 
-- [ ] Suggested: **Review secret handling in logs** across API/worker/mgmt.
-  - Research:
-    - Search for any remaining prints of URLs/headers (especially `Authorization`, Redis URLs, S3 creds).
-  - Deliverable: centralized redaction utilities + a “safe logging” checklist.
+## 4.3 Observability
 
-### Suggested P1 — durability + cost
+- [ ] Add authenticated metrics endpoint (`/metrics`) on the management API.
+- [ ] Add alert stubs and runbooks for queue backlog + worker failures.
 
-- [ ] Suggested: **Replace Redis-backed screenshot blobs with real object storage**.
-  - Current reality: screenshots fall back to Redis when `GSD_S3_ENDPOINT_URL` points at Azure Blob (not S3-compatible).
-  - Research:
-    - Decide target storage: Azure Blob native SDK, S3-compatible service, or R2/etc.
-    - Define lifecycle/retention, encryption, and access model (private + presigned URLs vs inline base64).
-    - Confirm expected artifact volume and cost profile (Redis memory pressure vs object storage).
-  - Deliverable: an artifact storage ADR + implementation plan + migration strategy.
+## Follow-ups (product UX)
 
-- [ ] Suggested: **Hardening for artifact retrieval APIs**.
-  - Research:
-    - Confirm payload size limits and front-end behavior when `include_data=true`.
-    - Decide whether to add pagination, “signed URL only” mode, or downscaled thumbnails.
-  - Deliverable: versioned API contract for artifacts + UI behavior spec.
-
-### Suggested P1 — “live sessions” experience (streaming)
-
-- [ ] Suggested: **Decide and document the production streaming architecture**.
-  - Current reality: dashboard lists sessions + artifacts, but live streaming is not hardened for prod.
-  - Research:
-    - Should streaming be a dedicated Container App (`serve-streaming`) vs embedded inside worker?
-    - How will `stream_url` be computed and exposed? (`GSD_STREAMING_PUBLIC_HOST`, ingress, TLS)
-    - How will multi-replica workers route viewers to the correct streamer?
-  - Deliverable: an ADR that pins the architecture + a deployment plan + success criteria.
-
-- [ ] Tech debt: **After landing streaming JWT auth via “Option B” (verify in async connect handler), refactor to “Option A”**.
-  - Goal: make `authorize_socket_connection()` async and perform `await verifier.verify(token)` inside it, centralizing auth and avoiding any “pending token” staging (`gsd-browser/src/gsd_browser/streaming/security.py`).
-
-### Suggested P2 — release process + reproducibility
-
-- [ ] Suggested: **Introduce CI/CD to pin releases and avoid “manual env var” drift** (especially for the dashboard).
-  - Research:
-    - Decide source of truth for prod env values (Bicep parameters vs CI secrets vs SWA build pipeline).
-    - Confirm how the Static Web App should be deployed (GitHub Actions, Azure DevOps, or `swa deploy` in CI).
-  - Deliverable: repeatable pipeline that builds backend images + dashboard with immutable versions.
-
-- [ ] Suggested: **Reconcile infra plans vs reality**.
-  - Research:
-    - Compare `infra/` Bicep + `docs/adr/*` against the currently deployed resources and runtime behavior.
-  - Deliverable: “diff report” + changes needed to bring infra-as-code back in sync.
-
-### Suggested P2 — observability + debugging ergonomics
-
-- [ ] Suggested: **Operational dashboards/alerts** for queue depth and worker liveness.
-  - Research:
-    - Identify which metrics/logs exist today (ACA logs, Redis metrics).
-    - Decide SLOs and alert thresholds (queued age, processing latency, failure rate).
-  - Deliverable: minimal alerts + runbook links.
-
-- [ ] Suggested: **First-class run history** (beyond current retention keys).
-  - Research:
-    - Decide whether “sessions” should be an explicit durable record (DB) vs derived from redis keys.
-    - Decide retention needs and tenant isolation requirements.
-  - Deliverable: storage + API contract proposal for historical runs.
-
-## Suggested validation checklist (quick)
-
-- [ ] Suggested: Confirm current prod versions:
-  - `az containerapp show -n gsd-prod-api -g gsd-prod-rg --query properties.template.containers[0].image -o tsv`
-  - `az containerapp show -n gsd-prod-worker -g gsd-prod-rg --query properties.template.containers[0].image -o tsv`
-  - `az containerapp show -n gsd-prod-mgmt -g gsd-prod-rg --query properties.template.containers[0].image -o tsv`
-- [ ] Suggested: Submit a job and confirm:
-  - `job_submit.session_id == job_wait.session_id`
-  - `/api/v1/sessions` includes the session
-  - `/api/v1/sessions/{id}/screenshots` returns records with `data_base64` (for Redis-backed blobs)
-
-## Suggested pointers (where to look)
-
-- Sessions ownership + listing:
-  - `gsd-browser/src/gsd_browser/optionb/task_ownership.py`
-  - `gsd-browser/src/gsd_browser/optionb/compat_jobs.py`
-  - `gsd-browser/src/gsd_browser/management_api/app.py`
-- Session ID linking (job → tool execution):
-  - `gsd-browser/src/gsd_browser/optionb/job_store.py`
-  - `gsd-browser/src/gsd_browser/fastmcp_v2_stdio.py`
-  - `gsd-browser/src/gsd_browser/mcp_server.py`
-- Artifacts (screenshots):
-  - `gsd-browser/src/gsd_browser/optionb/screenshot_artifacts.py`
-  - `gsd-browser/src/gsd_browser/optionb/artifact_index.py`
-- Dashboard build-time config + Clerk:
-  - `gsd-dashboard/src/main.tsx`
-  - `gsd-dashboard/src/lib/auth.ts`
-  - `docs/adr/ADR-0027-dashboard-frontend-rebuild.md`
+- [ ] Dashboard screenshot thumbnails: mgmt `/api/v1/sessions/{id}/screenshots` currently only returns `data_base64` for legacy Redis-backed artifacts. For Azure Blob-backed artifacts, add signed URLs and update the dashboard to render them.
