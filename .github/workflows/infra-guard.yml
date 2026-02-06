@@ -1,0 +1,26 @@
+name: Infra Guards
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "infra/modules/**/*.bicep"
+      - "infra/scripts/guard_no_secret_outputs.py"
+      - ".github/workflows/infra-guard.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  no-secret-outputs:
+    name: No Secret-ish Bicep Outputs
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Guard: infra/modules outputs
+        run: python3 infra/scripts/guard_no_secret_outputs.py

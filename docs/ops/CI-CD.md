@@ -7,6 +7,7 @@ This repo uses GitHub Actions to build and deploy the backend (`gsd-browser`) an
 - Backend build/push (ACR): `.github/workflows/backend-build.yml`
 - Backend deploy (Bicep): `.github/workflows/deploy-prod.yml`
 - Dashboard build/deploy (Static Web Apps): `.github/workflows/dashboard-build.yml`
+- Infra guards (PR): `.github/workflows/infra-guard.yml`
 - Legacy all-in-one (deprecated / manual only): `.github/workflows/azure-deploy.yml`
 
 ## Required GitHub settings
@@ -53,3 +54,18 @@ Dashboard build-time Vite env:
 
 See `docs/ops/ROLLBACK.md`.
 
+## Infra guards (Bicep)
+
+This repo includes a deterministic CI guard that fails PRs if any `infra/modules/*.bicep` declares
+secret-ish outputs (e.g., output names containing `secret`, `password`, `token`, or a `*Key*`-style
+segment).
+
+Run locally:
+
+- `python3 infra/scripts/guard_no_secret_outputs.py`
+
+Notes:
+
+- The guard is intentionally name-based to keep it deterministic and fast.
+- A small allowlist exists in `infra/scripts/guard_no_secret_outputs.py` for known-benign cases
+  like `accessKeyId`.
