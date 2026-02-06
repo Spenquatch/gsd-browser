@@ -1,9 +1,16 @@
-# Current State (prod) — 2026-02-05
+# Current State (prod) — 2026-02-06 (truth pass)
 
 This file captures the **current deployed state** of the GSD Browser system in Azure, including
 the ad-hoc patches applied to reach a functional end-to-end workflow. The goal is to give a
 fresh agent a reliable “ground truth” snapshot to compare against earlier plans/ADRs and then
 drive cleanup + hardening work.
+
+Notes on this snapshot:
+
+- “Prod” specifics (resource names, image tags) reflect the most recent observed deploy noted in
+  this doc (2026-02-05).
+- Behavior statements in the focus areas below were cross-checked against **in-repo code + infra**
+  on 2026-02-06 (this truth pass).
 
 ## What is working (today)
 
@@ -12,7 +19,7 @@ drive cleanup + hardening work.
 - **Sessions list works**: the Management API (`/api/v1/sessions`) returns sessions for compat jobs
   and they show up in the dashboard (including terminated sessions until TTL).
 - **Screenshots persist and are retrievable**:
-  - Worker captures step screenshots and persists them as artifacts (Azure Blob-backed).
+  - Worker captures step screenshots and persists them as artifacts (Azure Blob-backed in prod; S3/Redis supported).
   - CLI script can download screenshots by `session_id` (via `get_screenshots`).
   - Mgmt API `/api/v1/sessions/{id}/screenshots` returns screenshot metadata; `include_data=true`
     currently only includes inline base64 for legacy Redis-backed artifacts (dashboard thumbnail support needs follow-up for Azure-backed blobs).
@@ -24,7 +31,8 @@ drive cleanup + hardening work.
 2. **MCP API (`gsd-prod-api`)** accepts MCP JSON-RPC (`/mcp`) and submits long-running jobs into
    **Docket (Redis backend)**.
 3. **Worker (`gsd-prod-worker`)** consumes Docket tasks from Redis and executes browser automation
-   (Chrome + browser-use via CDP).
+   (Chrome + browser-use via CDP). The worker process also runs the streaming + health ASGI server
+   on the worker ingress port (default `5009`; see “Live streaming” below).
 4. **Management API (`gsd-prod-mgmt`)** reads session ownership records + task run state from Redis
    and exposes REST endpoints for the dashboard.
 5. **Redis** is Azure Cache for Redis (TLS, `rediss://…:6380/0`).
@@ -145,26 +153,29 @@ Mgmt sessions payload includes:
 - `session_id`
 - `status` (`create`, `active`, `terminated`) derived from the Docket runs hash state
 - `created_at`, `last_activity_at`
-- `stream_url` (currently usually `null` in prod unless `GSD_STREAMING_PUBLIC_HOST` is set)
+- `stream_url` (derived from `GSD_STREAMING_PUBLIC_HOST`/`GSD_STREAMING_PUBLIC_SCHEME`; in prod
+  IaC it is set to the worker FQDN, so `stream_url` should typically be a non-null base URL like
+  `https://<prefix>-worker.<aca-env-domain>`)
 
 ## Artifacts (screenshots)
 
-### Current persistence path (Azure Blob-backed)
+### Storage backend (what the code does)
 
-Production uses **Azure Blob Storage** via the native SDK (Managed Identity), and supports inline
-and/or presigned delivery in tool responses.
+Screenshots always get an **index record in Redis** (per-identity session ZSET + per-artifact meta
+key). The image bytes are stored in one of three backends, selected in this order:
 
-Implementation:
+- **Azure Blob (preferred)** when `GSD_AZURE_STORAGE_ACCOUNT` is set.
+- **S3-compatible** when a full S3 config is present (`GSD_S3_*`).
+- **Redis fallback** otherwise (stores raw bytes under a Redis key with a TTL).
 
-- `gsd-browser/src/gsd_browser/optionb/screenshot_artifacts.py`
-- `gsd-browser/src/gsd_browser/optionb/artifact_index.py`
-- `gsd-browser/src/gsd_browser/optionb/azure_blob_client.py`
-- retrieval support in MCP tool: `gsd-browser/src/gsd_browser/mcp_server.py` (`get_screenshots`)
-- retrieval support in Mgmt API: `gsd-browser/src/gsd_browser/management_api/app.py`
+In prod IaC (`infra/modules/aca-app-worker.bicep`), both Azure and S3 env vars are set, but the
+code will choose **Azure Blob** because `GSD_AZURE_STORAGE_ACCOUNT` is present.
 
-Validated in Azure:
+Implementation pointers:
 
-- In-container artifact smoke (`python -m gsd_browser.optionb.smoke_artifacts --delivery-mode both --cleanup`) succeeded.
+- persistence + backend selection: `gsd-browser/src/gsd_browser/optionb/screenshot_artifacts.py`
+- Redis index format + cleanup runner: `gsd-browser/src/gsd_browser/optionb/artifact_index.py`
+- Azure client (Managed Identity or connection string): `gsd-browser/src/gsd_browser/optionb/azure_blob_client.py`
 
 ### Mgmt API endpoint (for dashboard)
 
@@ -177,6 +188,42 @@ Notes:
   (and also includes `page_url` + `url_expires_at`).
 - This endpoint is intentionally capped (`last_n` max 20) to avoid huge payloads.
 
+### MCP tool delivery behavior (`get_screenshots`)
+
+The MCP tool supports three delivery modes controlled by `GSD_ARTIFACT_DELIVERY_MODE`:
+
+- `inline` (default): returns images inline (base64) in the MCP response.
+- `presigned`: returns presigned URLs only (no inline images).
+- `both`: returns inline images and presigned URLs.
+
+In HTTP/Option B (prod), `get_screenshots` prefers distributed artifacts via the Redis index and
+can retrieve bytes from Azure/S3 for inline mode and issue SAS/presigned URLs for URL mode.
+
+### Retention + cleanup (what the code does today)
+
+Retention is driven by:
+
+- `GSD_RETENTION_SECONDS_PROD` / `GSD_RETENTION_SECONDS_DEV` (defaults: 7 days prod, 1 day dev).
+
+What’s enforced automatically:
+
+- Redis **index keys** (artifact meta + session ZSET membership) expire at `created_at + retention`.
+- Redis **blob fallback** keys also get an expiry at `created_at + retention`.
+
+Best-effort deletion:
+
+- The worker runs a periodic cleanup loop (distributed lock) that scans artifact meta keys and
+  attempts to delete the underlying blob for expired artifacts and for orphaned “pending” uploads.
+- In the current worker entrypoint, the cleanup runner is wired to a **S3 delete function** (it
+  requires `GSD_S3_*` to be set). If artifacts are stored via the native Azure SDK, blob deletion
+  depends on whether the S3 configuration points at the same backing store (S3-compatible) or on
+  an external lifecycle policy.
+
+If a hard retention guarantee is required for Azure Blob bytes, we need an explicit decision:
+
+- implement Azure deletion in the cleanup runner (call `AzureBlobClient.delete()`), and/or
+- enforce retention via Azure Storage lifecycle management on the container.
+
 ### CLI scripts for prod
 
 Scripts live under `gsd-browser/scripts/`:
@@ -186,7 +233,7 @@ Scripts live under `gsd-browser/scripts/`:
 - `prod_job_wait.sh`
 - `prod_get_screenshots.sh <session_id> [last_n] [agent_step|stream_sample]`
 
-## Live streaming (status: not hardened / mostly off)
+## Live streaming (deployed; needs hardening)
 
 There are **two different streaming UIs** in the repo:
 
@@ -197,11 +244,23 @@ There are **two different streaming UIs** in the repo:
 
 Current production state:
 
-- The worker Container App exposes port `5009`, but the worker process runs a lightweight
-  **health server** on that port (not the full streaming server).
-- `stream_url` is typically unset in Management API output unless `GSD_STREAMING_PUBLIC_HOST` is set.
-- Result: the React dashboard can show sessions + artifacts, but “View Live” is not currently a
-  real-time video stream in prod.
+- The worker process **attempts to start the full streaming server** (FastAPI + Socket.IO +
+  legacy static dashboard) on the worker ingress port (default `5009` via `PORT`/`GSD_WORKER_HEALTH_PORT`).
+- If the streaming server fails to start, the worker falls back to a minimal HTTP server that
+  responds `ok` (so the container stays live even if streaming is broken).
+- In prod IaC, both the Management API and MCP API are configured to advertise the worker as the
+  streaming base URL via `GSD_STREAMING_PUBLIC_HOST`/`GSD_STREAMING_PUBLIC_SCHEME`.
+- In prod IaC, streaming auth mode is `jwt` (`GSD_STREAMING_AUTH_MODE=jwt`), so:
+  - `/healthz` is public and returns JSON including `streaming_mode`.
+  - the legacy static dashboard (`/` and `/dashboard`) requires a JWT (Authorization header or
+    `?token=...` query param).
+  - Socket.IO namespaces `/stream` and `/ctrl` require Socket.IO `auth: { token: <jwt> }`.
+
+Practical check from outside the cluster:
+
+- `curl -sS "https://<worker-fqdn>/healthz"` should return JSON with `status: ok` and
+  `streaming_mode` when the streaming ASGI app is running; plain `ok` suggests the fallback health
+  server is running instead.
 
 ## Operational runbooks
 
@@ -240,23 +299,24 @@ npx -y @azure/static-web-apps-cli deploy ./dist --env production
 1. **Secrets leaked in old logs**: an older worker revision printed the full Redis URL including
    password. This is now redacted, but the secret should still be rotated.
 2. **Queue/worker observability**: add metrics + alerts for backlog age and worker failures.
-3. **Mgmt API “Origin required” behavior**: curl without an `Origin` header can return
-   `{"error":"origin_not_allowed","origin":""}`. Options:
-   - set `GSD_HTTP_ALLOW_NULL_ORIGIN=1` for mgmt, or
-   - loosen the hardening policy for server-to-server, or
-   - always include an Origin header in tooling/scripts.
-4. **Live streaming not production-ready**: currently no reliable externally reachable Socket.IO
-   streaming service; worker port 5009 is a health endpoint.
+3. **HTTP hardening gotchas**: API + Mgmt apply an Origin/Host allowlist (ADR-0014). In prod IaC
+   we set `GSD_HTTP_ALLOW_NULL_ORIGIN=true` to keep CLI/scripts workable; if you see
+   `origin_not_allowed`, check those env vars first.
+4. **Streaming is deployed but not “finished”**: the worker runs the streaming server on port 5009,
+   but we still need operational hardening (alerts, auth/UX polish, and clarity on whether this
+   should stay co-located with the worker or move to a dedicated app).
 5. **Manual deploy flow**: dashboard requires build-time env vars; backend + frontend releases are
    not pinned/rolled out together via CI/CD.
 
 ## Suggested hardening roadmap (next)
 
 1. **Rotate Redis access key** and update the `docket-url` secret on all Container Apps.
-2. Replace Redis screenshot blobs with **Azure Blob Storage** uploads (SDK + managed identity or SAS).
+2. **Make retention real for blob bytes**: decide between Azure lifecycle policy vs implementing
+   Azure deletes in the cleanup runner (and validate that “S3-compatible” delete config actually
+   deletes the same objects we upload via the Azure SDK).
 3. Decide on live streaming architecture:
-   - dedicated `gsd-prod-stream` Container App running `gsd-browser serve-streaming`, or
-   - run streaming server inside the worker process (but then health/ingress needs careful design).
+   - keep streaming co-located in the worker (current code + IaC), or
+   - split out a dedicated `gsd-prod-stream` Container App (ops isolation, independent scaling).
 4. Add CI/CD:
    - backend: build/push ACR image with immutable tag
    - dashboard: build with publishable key + mgmt base URL and deploy SWA
