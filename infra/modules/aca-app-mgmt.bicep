@@ -46,6 +46,12 @@ param allowedOrigins string = ''
 @description('ACA environment domain (e.g. yellowplant-...eastus.azurecontainerapps.io)')
 param acaEnvironmentDomain string
 
+@description('Storage account name (for Azure Blob artifacts)')
+param storageAccountName string
+
+@description('Azure Blob container name for artifacts')
+param azureBlobContainer string = 'gsd-artifacts'
+
 // Reference ACR as existing to call listCredentials() directly
 resource acr 'Microsoft.ContainerRegistry/registries@2023-11-01-preview' existing = {
   name: acrName
@@ -59,6 +65,9 @@ resource redis 'Microsoft.Cache/redis@2023-08-01' existing = {
 resource mgmtApp 'Microsoft.App/containerApps@2024-03-01' = {
   name: '${prefix}-mgmt'
   location: location
+  identity: {
+    type: 'SystemAssigned'
+  }
   properties: {
     managedEnvironmentId: environmentId
     workloadProfileName: 'Consumption'
@@ -112,6 +121,10 @@ resource mgmtApp 'Microsoft.App/containerApps@2024-03-01' = {
             { name: 'GSD_DEPLOYMENT_ENV', value: 'prod' }
             { name: 'FASTMCP_DOCKET_URL', secretRef: 'docket-url' }
             { name: 'FASTMCP_DOCKET_NAME', value: 'gsd' }
+            // Azure Blob Storage (artifact screenshot retrieval via signed URLs)
+            { name: 'GSD_AZURE_STORAGE_ACCOUNT', value: storageAccountName }
+            { name: 'GSD_AZURE_BLOB_CONTAINER', value: azureBlobContainer }
+            { name: 'GSD_PRESIGNED_URL_TTL_S', value: '900' }
             // Streaming base URL advertised to the dashboard (ADR-0024)
             { name: 'GSD_STREAMING_PUBLIC_HOST', value: '${prefix}-worker.${acaEnvironmentDomain}' }
             { name: 'GSD_STREAMING_PUBLIC_SCHEME', value: 'https' }
@@ -166,3 +179,4 @@ resource mgmtApp 'Microsoft.App/containerApps@2024-03-01' = {
 
 output fqdn string = mgmtApp.properties.configuration.ingress.fqdn
 output appId string = mgmtApp.id
+output principalId string = mgmtApp.identity.principalId

@@ -1,4 +1,4 @@
-# Current State (prod) — 2026-02-05
+# Current State (prod) — 2026-02-06
 
 This file captures the **current deployed state** of the GSD Browser system in Azure, including
 the ad-hoc patches applied to reach a functional end-to-end workflow. The goal is to give a
@@ -165,6 +165,17 @@ Implementation:
 Validated in Azure:
 
 - In-container artifact smoke (`python -m gsd_browser.optionb.smoke_artifacts --delivery-mode both --cleanup`) succeeded.
+
+### Presigned URLs (Azure SAS via Managed Identity)
+
+`gsd_browser.optionb.azure_blob_client.AzureBlobClient.generate_sas_url()` generates **User Delegation SAS** tokens via `BlobServiceClient.get_user_delegation_key()` (Managed Identity / AAD token).
+
+RBAC requirement: the calling Container App’s system-assigned identity must have **Storage Blob Data Contributor** on the storage account (this role includes `generateUserDelegationKey`).
+
+As of **2026-02-06** (checked via Azure CLI):
+
+- `gsd-prod-api` and `gsd-prod-worker` both have **Storage Blob Data Contributor** on storage account `gsdprodstore`.
+- `gsd-prod-mgmt` currently has **no managed identity** (`identity.type == None`), and does not receive `GSD_AZURE_STORAGE_ACCOUNT` / `GSD_AZURE_BLOB_CONTAINER` env vars via IaC, so `/api/v1/sessions/{id}/screenshots` cannot reliably return signed Azure Blob URLs until mgmt is updated/redeployed.
 
 ### Mgmt API endpoint (for dashboard)
 

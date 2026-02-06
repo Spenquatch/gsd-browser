@@ -52,6 +52,8 @@ Azure was selected as the primary cloud provider. Three compute options were eva
 - **Container**: `gsd-artifacts` for screenshots, recordings, and task artifacts
 - **Authentication**: Managed identity (preferred) or connection string (fallback)
 - **Connection**: Native `azure-storage-blob` SDK via `GSD_AZURE_STORAGE_ACCOUNT`
+- **Presigned URLs**: User Delegation SAS (UDK) via Managed Identity (`BlobServiceClient.get_user_delegation_key`)
+- **RBAC requirement**: Assign **Storage Blob Data Contributor** on the storage account to the system-assigned identities that need to read/write blobs and/or mint SAS URLs (API, Worker, Mgmt). This role includes `Microsoft.Storage/storageAccounts/blobServices/generateUserDelegationKey/action`.
 
 **Note**: Azure Blob Storage is not S3-compatible at the HTTP API level. We use the native SDK adapter implemented in Phase 2 (`gsd_browser.optionb.azure_blob_client`).
 
@@ -119,6 +121,7 @@ Use Bicep templates (Azure-native IaC) for:
 - ACA environment and container app
 - Redis Cache with private endpoint
 - Blob Storage account with private endpoint
+- Storage RBAC role assignments for Container App identities (see `infra/modules/storage-rbac.bicep`)
 - Static Web Apps resource
 
 Terraform is an alternative for teams with existing Terraform workflows.
