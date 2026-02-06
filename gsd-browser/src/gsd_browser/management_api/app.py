@@ -20,6 +20,7 @@ from starlette.routing import Route
 
 from .. import __version__
 from ..optionb.api_keys import ApiKeyRegistry, load_api_key_registry_from_env
+from ..optionb.artifact_delivery import presigned_url_ttl_s_from_env
 from ..optionb.http_hardening import (
     LocalHttpHardeningMiddleware,
     load_local_http_hardening_config_from_env,
@@ -897,6 +898,7 @@ async def _list_session_screenshots(request: Request) -> Response:
             screenshot_type = "agent_step"
 
         include_data = _truthy(params.get("include_data") or "false")
+        presign_ttl_s = presigned_url_ttl_s_from_env()
 
         docket = cast(Docket, request.app.state.docket)
         with _docket_scope(docket):
@@ -952,7 +954,7 @@ async def _list_session_screenshots(request: Request) -> Response:
                             artifact_url, artifact_url_expires_at = (
                                 azure_client.generate_sas_url(
                                     blob_name=str(record.s3_key),
-                                    ttl_s=900,
+                                    ttl_s=int(presign_ttl_s),
                                 )
                             )
                         except Exception:  # noqa: BLE001
@@ -966,7 +968,7 @@ async def _list_session_screenshots(request: Request) -> Response:
                                 s3 = get_s3_client()
                                 artifact_url, artifact_url_expires_at = s3.presign_get(
                                     key=str(record.s3_key),
-                                    ttl_s=900,
+                                    ttl_s=int(presign_ttl_s),
                                 )
                         except Exception:  # noqa: BLE001
                             artifact_url = None

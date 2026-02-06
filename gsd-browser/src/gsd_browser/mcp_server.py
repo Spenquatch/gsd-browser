@@ -2683,16 +2683,7 @@ async def get_screenshots(
     def _delivery_mode() -> str:
         raw = str(os.environ.get("GSD_ARTIFACT_DELIVERY_MODE", "inline")).strip().lower()
         return raw if raw in {"inline", "presigned", "both"} else "inline"
-
-    def _presign_ttl_s() -> int:
-        raw = str(os.environ.get("GSD_PRESIGNED_URL_TTL_S", "")).strip()
-        if not raw:
-            return 900
-        try:
-            value = int(raw)
-        except ValueError:
-            return 900
-        return value
+    from .optionb.artifact_delivery import presigned_url_ttl_s_from_env
 
     delivery_mode = _delivery_mode()
     include_presigned = delivery_mode in {"presigned", "both"}
@@ -2774,7 +2765,7 @@ async def get_screenshots(
                             zset_key, "+inf", min_score, start=0, num=candidate_limit
                         )
 
-                ttl_s = _presign_ttl_s()
+                ttl_s = presigned_url_ttl_s_from_env()
                 for raw in candidates:
                     artifact_id = raw.decode("utf-8") if isinstance(raw, bytes) else str(raw)
                     try:
