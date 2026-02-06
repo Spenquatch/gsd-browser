@@ -41,7 +41,7 @@ Notes on this snapshot:
 
 Resource Group: `gsd-prod-rg` (East US)
 
-Current prod image tag (CI deploy): `sha-b4ae6d68e936` (GitHub Actions run `21729149468`, deployed 2026-02-05)
+Current prod image tag (CI deploy): `sha-dd3e52ec0a64` (GitHub Actions run `21766264656`, deployed 2026-02-06; built via `backend-build.yml` run `21766199096`)
 
 Last manual smoke run image tag (Phase 3): `phase3-streaming-1770320691`
 
@@ -49,9 +49,9 @@ Last manual smoke run image tag (Phase 3): `phase3-streaming-1770320691`
 
 | Component | Name | FQDN | Latest Ready Revision | Image |
 |---|---|---|---|---|
-| MCP API | `gsd-prod-api` | `https://gsd-prod-api.yellowplant-7a34cb33.eastus.azurecontainerapps.io` | `gsd-prod-api--0000020` | `gsdprodacr.azurecr.io/gsd-browser:sha-b4ae6d68e936` |
-| Worker | `gsd-prod-worker` | `https://gsd-prod-worker.yellowplant-7a34cb33.eastus.azurecontainerapps.io` | `gsd-prod-worker--0000015` | `gsdprodacr.azurecr.io/gsd-browser:sha-b4ae6d68e936` |
-| Mgmt API | `gsd-prod-mgmt` | `https://gsd-prod-mgmt.yellowplant-7a34cb33.eastus.azurecontainerapps.io` | `gsd-prod-mgmt--0000016` | `gsdprodacr.azurecr.io/gsd-browser:sha-b4ae6d68e936` |
+| MCP API | `gsd-prod-api` | `https://gsd-prod-api.yellowplant-7a34cb33.eastus.azurecontainerapps.io` | `gsd-prod-api--0000021` | `gsdprodacr.azurecr.io/gsd-browser:sha-dd3e52ec0a64` |
+| Worker | `gsd-prod-worker` | `https://gsd-prod-worker.yellowplant-7a34cb33.eastus.azurecontainerapps.io` | `gsd-prod-worker--0000016` | `gsdprodacr.azurecr.io/gsd-browser:sha-dd3e52ec0a64` |
+| Mgmt API | `gsd-prod-mgmt` | `https://gsd-prod-mgmt.yellowplant-7a34cb33.eastus.azurecontainerapps.io` | `gsd-prod-mgmt--0000017` | `gsdprodacr.azurecr.io/gsd-browser:sha-dd3e52ec0a64` |
 
 ### Smoke checks (passed)
 
