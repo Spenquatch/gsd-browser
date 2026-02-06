@@ -159,6 +159,8 @@ module mgmtApp 'modules/aca-app-mgmt.bicep' = {
     redisName: redis.outputs.redisName
     redisHost: redis.outputs.redisHost
     redisPort: redis.outputs.redisPort
+    storageAccountName: storage.outputs.storageAccountName
+    azureBlobContainer: 'gsd-artifacts'
     jwtJwksUrl: jwtJwksUrl
     jwtIssuer: jwtIssuer
     jwtAudience: jwtAudience
@@ -215,6 +217,16 @@ module apiStorageRbac 'modules/storage-rbac.bicep' = {
   params: {
     storageAccountName: storage.outputs.storageAccountName
     principalId: apiApp.outputs.principalId
+  }
+}
+
+// Grant mgmt app Storage Blob Data Contributor role so it can generate SAS URLs for dashboard artifacts.
+module mgmtStorageRbac 'modules/storage-rbac.bicep' = {
+  name: 'mgmt-storage-rbac'
+  scope: rg
+  params: {
+    storageAccountName: storage.outputs.storageAccountName
+    principalId: mgmtApp.outputs.principalId
   }
 }
 

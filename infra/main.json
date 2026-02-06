@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.40.2.10011",
-      "templateHash": "14610896369163698856"
+      "templateHash": "12928387905433902712"
     }
   },
   "parameters": {
@@ -876,6 +876,9 @@
           "environmentId": {
             "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, parameters('resourceGroupName')), 'Microsoft.Resources/deployments', 'aca-environment'), '2025-04-01').outputs.environmentId.value]"
           },
+          "acaEnvironmentDomain": {
+            "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, parameters('resourceGroupName')), 'Microsoft.Resources/deployments', 'aca-environment'), '2025-04-01').outputs.defaultDomain.value]"
+          },
           "acrName": {
             "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, parameters('resourceGroupName')), 'Microsoft.Resources/deployments', 'acr'), '2025-04-01').outputs.acrName.value]"
           },
@@ -897,6 +900,12 @@
           "anthropicApiKey": {
             "value": "[parameters('anthropicApiKey')]"
           },
+          "storageAccountName": {
+            "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, parameters('resourceGroupName')), 'Microsoft.Resources/deployments', 'storage'), '2025-04-01').outputs.storageAccountName.value]"
+          },
+          "azureBlobContainer": {
+            "value": "gsd-artifacts"
+          },
           "jwtJwksUrl": {
             "value": "[parameters('jwtJwksUrl')]"
           },
@@ -917,7 +926,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.40.2.10011",
-              "templateHash": "12974957261485296420"
+              "templateHash": "16119771118401387212"
             }
           },
           "parameters": {
@@ -1006,6 +1015,25 @@
               "metadata": {
                 "description": "Allowed origins for CORS (comma-separated URLs)"
               }
+            },
+            "acaEnvironmentDomain": {
+              "type": "string",
+              "metadata": {
+                "description": "ACA environment domain (e.g. yellowplant-...eastus.azurecontainerapps.io)"
+              }
+            },
+            "storageAccountName": {
+              "type": "string",
+              "metadata": {
+                "description": "Storage account name (for Azure Blob artifacts)"
+              }
+            },
+            "azureBlobContainer": {
+              "type": "string",
+              "defaultValue": "gsd-artifacts",
+              "metadata": {
+                "description": "Azure Blob container name for artifacts"
+              }
             }
           },
           "resources": [
@@ -1014,6 +1042,9 @@
               "apiVersion": "2024-03-01",
               "name": "[format('{0}-api', parameters('prefix'))]",
               "location": "[parameters('location')]",
+              "identity": {
+                "type": "SystemAssigned"
+              },
               "properties": {
                 "managedEnvironmentId": "[parameters('environmentId')]",
                 "workloadProfileName": "Consumption",
@@ -1104,6 +1135,30 @@
                           "value": "0"
                         },
                         {
+                          "name": "GSD_AZURE_STORAGE_ACCOUNT",
+                          "value": "[parameters('storageAccountName')]"
+                        },
+                        {
+                          "name": "GSD_AZURE_BLOB_CONTAINER",
+                          "value": "[parameters('azureBlobContainer')]"
+                        },
+                        {
+                          "name": "GSD_ARTIFACT_DELIVERY_MODE",
+                          "value": "both"
+                        },
+                        {
+                          "name": "GSD_PRESIGNED_URL_TTL_S",
+                          "value": "900"
+                        },
+                        {
+                          "name": "GSD_STREAMING_PUBLIC_HOST",
+                          "value": "[format('{0}-worker.{1}', parameters('prefix'), parameters('acaEnvironmentDomain'))]"
+                        },
+                        {
+                          "name": "GSD_STREAMING_PUBLIC_SCHEME",
+                          "value": "https"
+                        },
+                        {
                           "name": "GSD_JWT_JWKS_URL",
                           "value": "[parameters('jwtJwksUrl')]"
                         },
@@ -1192,6 +1247,10 @@
             "appId": {
               "type": "string",
               "value": "[resourceId('Microsoft.App/containerApps', format('{0}-api', parameters('prefix')))]"
+            },
+            "principalId": {
+              "type": "string",
+              "value": "[reference(resourceId('Microsoft.App/containerApps', format('{0}-api', parameters('prefix'))), '2024-03-01', 'full').identity.principalId]"
             }
           }
         }
@@ -1200,7 +1259,8 @@
         "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, parameters('resourceGroupName')), 'Microsoft.Resources/deployments', 'aca-environment')]",
         "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, parameters('resourceGroupName')), 'Microsoft.Resources/deployments', 'acr')]",
         "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, parameters('resourceGroupName')), 'Microsoft.Resources/deployments', 'redis')]",
-        "[subscriptionResourceId('Microsoft.Resources/resourceGroups', parameters('resourceGroupName'))]"
+        "[subscriptionResourceId('Microsoft.Resources/resourceGroups', parameters('resourceGroupName'))]",
+        "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, parameters('resourceGroupName')), 'Microsoft.Resources/deployments', 'storage')]"
       ]
     },
     {
@@ -1223,6 +1283,9 @@
           "environmentId": {
             "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, parameters('resourceGroupName')), 'Microsoft.Resources/deployments', 'aca-environment'), '2025-04-01').outputs.environmentId.value]"
           },
+          "acaEnvironmentDomain": {
+            "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, parameters('resourceGroupName')), 'Microsoft.Resources/deployments', 'aca-environment'), '2025-04-01').outputs.defaultDomain.value]"
+          },
           "acrName": {
             "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, parameters('resourceGroupName')), 'Microsoft.Resources/deployments', 'acr'), '2025-04-01').outputs.acrName.value]"
           },
@@ -1240,6 +1303,12 @@
           },
           "redisPort": {
             "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, parameters('resourceGroupName')), 'Microsoft.Resources/deployments', 'redis'), '2025-04-01').outputs.redisPort.value]"
+          },
+          "storageAccountName": {
+            "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, parameters('resourceGroupName')), 'Microsoft.Resources/deployments', 'storage'), '2025-04-01').outputs.storageAccountName.value]"
+          },
+          "azureBlobContainer": {
+            "value": "gsd-artifacts"
           },
           "jwtJwksUrl": {
             "value": "[parameters('jwtJwksUrl')]"
@@ -1261,7 +1330,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.40.2.10011",
-              "templateHash": "17371003652803298454"
+              "templateHash": "4050231433252630550"
             }
           },
           "parameters": {
@@ -1344,6 +1413,25 @@
               "metadata": {
                 "description": "Allowed origins for CORS (comma-separated URLs)"
               }
+            },
+            "acaEnvironmentDomain": {
+              "type": "string",
+              "metadata": {
+                "description": "ACA environment domain (e.g. yellowplant-...eastus.azurecontainerapps.io)"
+              }
+            },
+            "storageAccountName": {
+              "type": "string",
+              "metadata": {
+                "description": "Storage account name (for Azure Blob artifacts)"
+              }
+            },
+            "azureBlobContainer": {
+              "type": "string",
+              "defaultValue": "gsd-artifacts",
+              "metadata": {
+                "description": "Azure Blob container name for artifacts"
+              }
             }
           },
           "resources": [
@@ -1352,6 +1440,9 @@
               "apiVersion": "2024-03-01",
               "name": "[format('{0}-mgmt', parameters('prefix'))]",
               "location": "[parameters('location')]",
+              "identity": {
+                "type": "SystemAssigned"
+              },
               "properties": {
                 "managedEnvironmentId": "[parameters('environmentId')]",
                 "workloadProfileName": "Consumption",
@@ -1430,6 +1521,26 @@
                           "value": "gsd"
                         },
                         {
+                          "name": "GSD_AZURE_STORAGE_ACCOUNT",
+                          "value": "[parameters('storageAccountName')]"
+                        },
+                        {
+                          "name": "GSD_AZURE_BLOB_CONTAINER",
+                          "value": "[parameters('azureBlobContainer')]"
+                        },
+                        {
+                          "name": "GSD_PRESIGNED_URL_TTL_S",
+                          "value": "900"
+                        },
+                        {
+                          "name": "GSD_STREAMING_PUBLIC_HOST",
+                          "value": "[format('{0}-worker.{1}', parameters('prefix'), parameters('acaEnvironmentDomain'))]"
+                        },
+                        {
+                          "name": "GSD_STREAMING_PUBLIC_SCHEME",
+                          "value": "https"
+                        },
+                        {
                           "name": "GSD_JWT_JWKS_URL",
                           "value": "[parameters('jwtJwksUrl')]"
                         },
@@ -1506,6 +1617,10 @@
             "appId": {
               "type": "string",
               "value": "[resourceId('Microsoft.App/containerApps', format('{0}-mgmt', parameters('prefix')))]"
+            },
+            "principalId": {
+              "type": "string",
+              "value": "[reference(resourceId('Microsoft.App/containerApps', format('{0}-mgmt', parameters('prefix'))), '2024-03-01', 'full').identity.principalId]"
             }
           }
         }
@@ -1514,7 +1629,8 @@
         "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, parameters('resourceGroupName')), 'Microsoft.Resources/deployments', 'aca-environment')]",
         "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, parameters('resourceGroupName')), 'Microsoft.Resources/deployments', 'acr')]",
         "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, parameters('resourceGroupName')), 'Microsoft.Resources/deployments', 'redis')]",
-        "[subscriptionResourceId('Microsoft.Resources/resourceGroups', parameters('resourceGroupName'))]"
+        "[subscriptionResourceId('Microsoft.Resources/resourceGroups', parameters('resourceGroupName'))]",
+        "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, parameters('resourceGroupName')), 'Microsoft.Resources/deployments', 'storage')]"
       ]
     },
     {
@@ -1537,6 +1653,9 @@
           "environmentId": {
             "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, parameters('resourceGroupName')), 'Microsoft.Resources/deployments', 'aca-environment'), '2025-04-01').outputs.environmentId.value]"
           },
+          "acaEnvironmentDomain": {
+            "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, parameters('resourceGroupName')), 'Microsoft.Resources/deployments', 'aca-environment'), '2025-04-01').outputs.defaultDomain.value]"
+          },
           "acrName": {
             "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, parameters('resourceGroupName')), 'Microsoft.Resources/deployments', 'acr'), '2025-04-01').outputs.acrName.value]"
           },
@@ -1558,6 +1677,18 @@
           "anthropicApiKey": {
             "value": "[parameters('anthropicApiKey')]"
           },
+          "jwtJwksUrl": {
+            "value": "[parameters('jwtJwksUrl')]"
+          },
+          "jwtIssuer": {
+            "value": "[parameters('jwtIssuer')]"
+          },
+          "jwtAudience": {
+            "value": "[parameters('jwtAudience')]"
+          },
+          "allowedOrigins": {
+            "value": "[parameters('allowedOrigins')]"
+          },
           "storageAccountName": {
             "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, parameters('resourceGroupName')), 'Microsoft.Resources/deployments', 'storage'), '2025-04-01').outputs.storageAccountName.value]"
           },
@@ -1575,7 +1706,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.40.2.10011",
-              "templateHash": "1837794633859277134"
+              "templateHash": "17558588330818506616"
             }
           },
           "parameters": {
@@ -1656,6 +1787,37 @@
               "type": "string",
               "metadata": {
                 "description": "S3 bucket name"
+              }
+            },
+            "acaEnvironmentDomain": {
+              "type": "string",
+              "metadata": {
+                "description": "ACA environment domain (e.g. yellowplant-...eastus.azurecontainerapps.io)"
+              }
+            },
+            "jwtJwksUrl": {
+              "type": "string",
+              "metadata": {
+                "description": "Clerk JWKS URL"
+              }
+            },
+            "jwtIssuer": {
+              "type": "string",
+              "metadata": {
+                "description": "Clerk JWT issuer"
+              }
+            },
+            "jwtAudience": {
+              "type": "string",
+              "metadata": {
+                "description": "Clerk JWT audience"
+              }
+            },
+            "allowedOrigins": {
+              "type": "string",
+              "defaultValue": "",
+              "metadata": {
+                "description": "Allowed origins for streaming (comma-separated URLs)"
               }
             }
           },
@@ -1742,6 +1904,50 @@
                         {
                           "name": "FASTMCP_DOCKET_CONCURRENCY",
                           "value": "4"
+                        },
+                        {
+                          "name": "GSD_WORKER_DIAGNOSTICS_INTERVAL_S",
+                          "value": "60"
+                        },
+                        {
+                          "name": "GSD_STREAMING_BIND_HOST",
+                          "value": "0.0.0.0"
+                        },
+                        {
+                          "name": "GSD_STREAMING_AUTH_MODE",
+                          "value": "jwt"
+                        },
+                        {
+                          "name": "GSD_STREAMING_PUBLIC_HOST",
+                          "value": "[format('{0}-worker.{1}', parameters('prefix'), parameters('acaEnvironmentDomain'))]"
+                        },
+                        {
+                          "name": "GSD_STREAMING_PUBLIC_SCHEME",
+                          "value": "https"
+                        },
+                        {
+                          "name": "STREAMING_ALLOWED_ORIGINS",
+                          "value": "[if(empty(parameters('allowedOrigins')), '*', parameters('allowedOrigins'))]"
+                        },
+                        {
+                          "name": "GSD_JWT_JWKS_URL",
+                          "value": "[parameters('jwtJwksUrl')]"
+                        },
+                        {
+                          "name": "GSD_JWT_ISSUER",
+                          "value": "[parameters('jwtIssuer')]"
+                        },
+                        {
+                          "name": "GSD_JWT_AUDIENCE",
+                          "value": "[parameters('jwtAudience')]"
+                        },
+                        {
+                          "name": "GSD_JWT_TENANT_ID_CLAIM",
+                          "value": "tenant_id"
+                        },
+                        {
+                          "name": "GSD_JWT_SUBJECT_ID_CLAIM",
+                          "value": "sub"
                         },
                         {
                           "name": "GSD_AZURE_STORAGE_ACCOUNT",
@@ -1917,6 +2123,152 @@
     {
       "type": "Microsoft.Resources/deployments",
       "apiVersion": "2025-04-01",
+      "name": "api-storage-rbac",
+      "resourceGroup": "[parameters('resourceGroupName')]",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "storageAccountName": {
+            "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, parameters('resourceGroupName')), 'Microsoft.Resources/deployments', 'storage'), '2025-04-01').outputs.storageAccountName.value]"
+          },
+          "principalId": {
+            "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, parameters('resourceGroupName')), 'Microsoft.Resources/deployments', 'aca-app-api'), '2025-04-01').outputs.principalId.value]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.40.2.10011",
+              "templateHash": "1565845108785070103"
+            }
+          },
+          "parameters": {
+            "storageAccountName": {
+              "type": "string",
+              "metadata": {
+                "description": "Storage account name"
+              }
+            },
+            "principalId": {
+              "type": "string",
+              "metadata": {
+                "description": "Principal ID to grant access to"
+              }
+            },
+            "principalType": {
+              "type": "string",
+              "defaultValue": "ServicePrincipal",
+              "metadata": {
+                "description": "Principal type (ServicePrincipal for managed identity)"
+              }
+            }
+          },
+          "variables": {
+            "storageBlobDataContributorRoleId": "ba92f5b4-2d11-453d-a403-e96b0029c9fe"
+          },
+          "resources": [
+            {
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2022-04-01",
+              "scope": "[resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName'))]",
+              "name": "[guid(resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName')), parameters('principalId'), variables('storageBlobDataContributorRoleId'))]",
+              "properties": {
+                "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('storageBlobDataContributorRoleId'))]",
+                "principalId": "[parameters('principalId')]",
+                "principalType": "[parameters('principalType')]"
+              }
+            }
+          ]
+        }
+      },
+      "dependsOn": [
+        "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, parameters('resourceGroupName')), 'Microsoft.Resources/deployments', 'aca-app-api')]",
+        "[subscriptionResourceId('Microsoft.Resources/resourceGroups', parameters('resourceGroupName'))]",
+        "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, parameters('resourceGroupName')), 'Microsoft.Resources/deployments', 'storage')]"
+      ]
+    },
+    {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "mgmt-storage-rbac",
+      "resourceGroup": "[parameters('resourceGroupName')]",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "storageAccountName": {
+            "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, parameters('resourceGroupName')), 'Microsoft.Resources/deployments', 'storage'), '2025-04-01').outputs.storageAccountName.value]"
+          },
+          "principalId": {
+            "value": "[reference(extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, parameters('resourceGroupName')), 'Microsoft.Resources/deployments', 'aca-app-mgmt'), '2025-04-01').outputs.principalId.value]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.40.2.10011",
+              "templateHash": "1565845108785070103"
+            }
+          },
+          "parameters": {
+            "storageAccountName": {
+              "type": "string",
+              "metadata": {
+                "description": "Storage account name"
+              }
+            },
+            "principalId": {
+              "type": "string",
+              "metadata": {
+                "description": "Principal ID to grant access to"
+              }
+            },
+            "principalType": {
+              "type": "string",
+              "defaultValue": "ServicePrincipal",
+              "metadata": {
+                "description": "Principal type (ServicePrincipal for managed identity)"
+              }
+            }
+          },
+          "variables": {
+            "storageBlobDataContributorRoleId": "ba92f5b4-2d11-453d-a403-e96b0029c9fe"
+          },
+          "resources": [
+            {
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2022-04-01",
+              "scope": "[resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName'))]",
+              "name": "[guid(resourceId('Microsoft.Storage/storageAccounts', parameters('storageAccountName')), parameters('principalId'), variables('storageBlobDataContributorRoleId'))]",
+              "properties": {
+                "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('storageBlobDataContributorRoleId'))]",
+                "principalId": "[parameters('principalId')]",
+                "principalType": "[parameters('principalType')]"
+              }
+            }
+          ]
+        }
+      },
+      "dependsOn": [
+        "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, parameters('resourceGroupName')), 'Microsoft.Resources/deployments', 'aca-app-mgmt')]",
+        "[subscriptionResourceId('Microsoft.Resources/resourceGroups', parameters('resourceGroupName'))]",
+        "[extensionResourceId(format('/subscriptions/{0}/resourceGroups/{1}', subscription().subscriptionId, parameters('resourceGroupName')), 'Microsoft.Resources/deployments', 'storage')]"
+      ]
+    },
+    {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
       "name": "static-web-app",
       "resourceGroup": "[parameters('resourceGroupName')]",
       "properties": {
@@ -2029,7 +2381,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.40.2.10011",
-              "templateHash": "4569450330599299070"
+              "templateHash": "7683159617446168636"
             }
           },
           "parameters": {
@@ -2180,6 +2532,74 @@
                   "allOf": [
                     {
                       "query": "            ContainerAppSystemLogs_CL\n            | where Reason_s == \"BackOff\" or Reason_s == \"CrashLoopBackOff\"\n            | summarize RestartCount = count() by ContainerAppName_s, bin(TimeGenerated, 5m)\n            | where RestartCount > 3\n          ",
+                      "timeAggregation": "Count",
+                      "operator": "GreaterThan",
+                      "threshold": 0
+                    }
+                  ]
+                },
+                "actions": {
+                  "actionGroups": [
+                    "[resourceId('Microsoft.Insights/actionGroups', format('{0}-alerts-ag', parameters('prefix')))]"
+                  ]
+                }
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Insights/actionGroups', format('{0}-alerts-ag', parameters('prefix')))]"
+              ]
+            },
+            {
+              "type": "Microsoft.Insights/scheduledQueryRules",
+              "apiVersion": "2023-03-15-preview",
+              "name": "[format('{0}-queue-backlog', parameters('prefix'))]",
+              "location": "[resourceGroup().location]",
+              "properties": {
+                "description": "Queue backlog detected (oldest age > 5m). See docs/ops/RUNBOOK-queue-backlog.md",
+                "severity": 2,
+                "enabled": true,
+                "scopes": [
+                  "[parameters('logAnalyticsWorkspaceId')]"
+                ],
+                "evaluationFrequency": "PT5M",
+                "windowSize": "PT15M",
+                "criteria": {
+                  "allOf": [
+                    {
+                      "query": "            ContainerAppConsoleLogs_CL\n            | where ContainerAppName_s == \"${prefix}-worker\"\n            | where Log_s has \"worker.docket.depth\"\n            | extend payload = parse_json(Log_s)\n            | extend stream_oldest = todouble(payload.docket_stream_oldest_age_s)\n            | extend queue_overdue = todouble(payload.docket_queue_oldest_overdue_s)\n            | where stream_oldest > 300 or queue_overdue > 300\n            | summarize Count = count()\n          ",
+                      "timeAggregation": "Count",
+                      "operator": "GreaterThan",
+                      "threshold": 0
+                    }
+                  ]
+                },
+                "actions": {
+                  "actionGroups": [
+                    "[resourceId('Microsoft.Insights/actionGroups', format('{0}-alerts-ag', parameters('prefix')))]"
+                  ]
+                }
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Insights/actionGroups', format('{0}-alerts-ag', parameters('prefix')))]"
+              ]
+            },
+            {
+              "type": "Microsoft.Insights/scheduledQueryRules",
+              "apiVersion": "2023-03-15-preview",
+              "name": "[format('{0}-worker-failures', parameters('prefix'))]",
+              "location": "[resourceGroup().location]",
+              "properties": {
+                "description": "Worker failure signals detected. See docs/ops/RUNBOOK-worker-failures.md",
+                "severity": 2,
+                "enabled": true,
+                "scopes": [
+                  "[parameters('logAnalyticsWorkspaceId')]"
+                ],
+                "evaluationFrequency": "PT5M",
+                "windowSize": "PT15M",
+                "criteria": {
+                  "allOf": [
+                    {
+                      "query": "            ContainerAppConsoleLogs_CL\n            | where ContainerAppName_s == \"${prefix}-worker\"\n            | where Log_s has \"Docket worker stopped unexpectedly\"\n              or Log_s has \"did not enter polling loop\"\n              or Log_s has \"worker.docket.depth_failed\"\n            | summarize Count = count()\n          ",
                       "timeAggregation": "Count",
                       "operator": "GreaterThan",
                       "threshold": 0
