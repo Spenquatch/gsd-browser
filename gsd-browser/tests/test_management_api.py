@@ -307,6 +307,184 @@ def test_management_sessions_list_is_identity_scoped(
     assert session["last_activity_at"] >= session["created_at"]
 
 
+def test_management_sessions_list_defaults_to_limit_50_and_sets_total_count_header(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path_factory: pytest.TempPathFactory,
+) -> None:
+    _clear_management_env(monkeypatch)
+    _configure_memory_docket(monkeypatch, label="management-sessions-limit-default")
+
+    api_keys_file = _write_api_keys_file(
+        tmp_path_factory,
+        [
+            {
+                "key": "key-a",
+                "tenant_id": "tenant-a",
+                "subject_id": "subject-a",
+                "scopes": ["gsd:browser:read"],
+            }
+        ],
+    )
+    monkeypatch.setenv("GSD_API_KEYS_FILE", api_keys_file)
+
+    app = build_management_app()
+    headers = {"Host": "localhost", "Origin": "http://localhost", "X-API-Key": "key-a"}
+    with TestClient(app) as client:
+        from gsd_browser.optionb import task_ownership
+        from gsd_browser.optionb.identity import Identity
+
+        docket = client.app.state.docket
+        store = task_ownership.TaskOwnershipStore(docket_getter=lambda: docket)
+
+        base_ms = 2_000_000_000_000
+        identity = Identity(tenant_id="tenant-a", subject_id="subject-a", transport="http")
+
+        async def seed() -> None:
+            for i in range(60):
+                await store.write(
+                    task_ownership.build_record(
+                        task_id=f"task-{i:02d}",
+                        tool_name="web_eval_agent",
+                        identity=identity,
+                        session_id=f"sess-{i:02d}",
+                        ttl_ms=60_000,
+                        created_at_ms=base_ms + (i * 1000),
+                    )
+                )
+
+        assert client.portal is not None
+        client.portal.call(seed)
+        resp = client.get("/api/v1/sessions", headers=headers)
+
+    assert resp.status_code == 200
+    assert resp.headers.get("X-Total-Count") == "60"
+    payload = resp.json()
+    assert isinstance(payload, list)
+    assert len(payload) == 50
+    assert [s["session_id"] for s in payload[:3]] == ["sess-59", "sess-58", "sess-57"]
+
+
+def test_management_sessions_list_limit_offset_works_indexed(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path_factory: pytest.TempPathFactory,
+) -> None:
+    _clear_management_env(monkeypatch)
+    _configure_memory_docket(monkeypatch, label="management-sessions-limit-offset-indexed")
+
+    api_keys_file = _write_api_keys_file(
+        tmp_path_factory,
+        [
+            {
+                "key": "key-a",
+                "tenant_id": "tenant-a",
+                "subject_id": "subject-a",
+                "scopes": ["gsd:browser:read"],
+            }
+        ],
+    )
+    monkeypatch.setenv("GSD_API_KEYS_FILE", api_keys_file)
+
+    app = build_management_app()
+    headers = {"Host": "localhost", "Origin": "http://localhost", "X-API-Key": "key-a"}
+    with TestClient(app) as client:
+        from gsd_browser.optionb import task_ownership
+        from gsd_browser.optionb.identity import Identity
+
+        docket = client.app.state.docket
+        store = task_ownership.TaskOwnershipStore(docket_getter=lambda: docket)
+
+        base_ms = 2_000_000_000_000
+        identity = Identity(tenant_id="tenant-a", subject_id="subject-a", transport="http")
+
+        async def seed() -> None:
+            for i in range(20):
+                await store.write(
+                    task_ownership.build_record(
+                        task_id=f"task-{i:02d}",
+                        tool_name="web_eval_agent",
+                        identity=identity,
+                        session_id=f"sess-{i:02d}",
+                        ttl_ms=60_000,
+                        created_at_ms=base_ms + (i * 1000),
+                    )
+                )
+
+        assert client.portal is not None
+        client.portal.call(seed)
+        resp = client.get("/api/v1/sessions?limit=5&offset=3", headers=headers)
+
+    assert resp.status_code == 200
+    assert resp.headers.get("X-Total-Count") == "20"
+    payload = resp.json()
+    assert isinstance(payload, list)
+    assert [s["session_id"] for s in payload] == [
+        "sess-16",
+        "sess-15",
+        "sess-14",
+        "sess-13",
+        "sess-12",
+    ]
+
+
+def test_management_sessions_list_scan_fallback_paginates_and_sets_total_count(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path_factory: pytest.TempPathFactory,
+) -> None:
+    _clear_management_env(monkeypatch)
+    _configure_memory_docket(monkeypatch, label="management-sessions-scan-fallback")
+
+    api_keys_file = _write_api_keys_file(
+        tmp_path_factory,
+        [
+            {
+                "key": "key-a",
+                "tenant_id": "tenant-a",
+                "subject_id": "subject-a",
+                "scopes": ["gsd:browser:read"],
+            }
+        ],
+    )
+    monkeypatch.setenv("GSD_API_KEYS_FILE", api_keys_file)
+
+    app = build_management_app()
+    headers = {"Host": "localhost", "Origin": "http://localhost", "X-API-Key": "key-a"}
+    with TestClient(app) as client:
+        from gsd_browser.optionb import task_ownership
+        from gsd_browser.optionb.identity import Identity
+
+        docket = client.app.state.docket
+        store = task_ownership.TaskOwnershipStore(docket_getter=lambda: docket)
+        identity = Identity(tenant_id="tenant-a", subject_id="subject-a", transport="http")
+
+        base_ms = 2_000_000_000_000
+        session_index_key = "gsd:v1:tenants:tenant-a:subjects:subject-a:sessions:z"
+
+        async def seed() -> None:
+            for i in range(6):
+                await store.write(
+                    task_ownership.build_record(
+                        task_id=f"task-{i:02d}",
+                        tool_name="web_eval_agent",
+                        identity=identity,
+                        session_id=f"sess-{i:02d}",
+                        ttl_ms=60_000,
+                        created_at_ms=base_ms + (i * 1000),
+                    )
+                )
+            async with docket.redis() as redis:
+                await redis.delete(session_index_key)
+
+        assert client.portal is not None
+        client.portal.call(seed)
+        resp = client.get("/api/v1/sessions?limit=2&offset=1", headers=headers)
+
+    assert resp.status_code == 200
+    assert resp.headers.get("X-Total-Count") == "6"
+    payload = resp.json()
+    assert isinstance(payload, list)
+    assert [s["session_id"] for s in payload] == ["sess-04", "sess-03"]
+
+
 def test_management_admin_tasks_list_requires_admin_mode_and_scope(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path_factory: pytest.TempPathFactory,
