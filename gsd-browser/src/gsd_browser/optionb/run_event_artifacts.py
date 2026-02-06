@@ -6,8 +6,10 @@ import time
 import uuid
 from typing import Any
 
+from . import azure_blob_client as azure_blob_mod
 from . import s3_client as s3_client_mod
 from .artifact_index import ArtifactWriter, build_record, get_artifact_index_store
+from .azure_blob_client import has_azure_blob_config
 from .identity import Identity
 from .request_context import get_current_identity
 from .s3_client import has_complete_s3_config
@@ -51,9 +53,6 @@ async def persist_run_event_chunk(
     events: list[dict[str, Any]],
     identity: Identity | None = None,
 ) -> None:
-    if not has_complete_s3_config():
-        return
-
     identity_value = identity or get_current_identity()
     if identity_value is None:
         return
@@ -63,6 +62,11 @@ async def persist_run_event_chunk(
         return
 
     if not events:
+        return
+
+    use_azure = has_azure_blob_config()
+    use_s3 = (not use_azure) and has_complete_s3_config()
+    if not use_azure and not use_s3:
         return
 
     store = get_artifact_index_store()
@@ -94,30 +98,56 @@ async def persist_run_event_chunk(
     size_bytes = len(body)
 
     try:
-        s3 = s3_client_mod.get_s3_client()
         s3_key = build_run_events_s3_key(
             identity=identity_value,
             session_id=session_id_value,
             timestamp_ms=created_at_ms,
             chunk_id=artifact_id,
         )
-        record = build_record(
-            artifact_id=artifact_id,
-            artifact_kind="run_event_chunk",
-            identity=identity_value,
-            session_id=session_id_value,
-            created_at_ms=created_at_ms,
-            content_type=content_type,
-            size_bytes=size_bytes,
-            s3_bucket=s3.bucket,
-            s3_key=s3_key,
-            has_error=chunk_has_error,
-        )
+
+        if use_azure:
+            azure_client = azure_blob_mod.get_azure_blob_client()
+            record = build_record(
+                artifact_id=artifact_id,
+                artifact_kind="run_event_chunk",
+                identity=identity_value,
+                session_id=session_id_value,
+                created_at_ms=created_at_ms,
+                content_type=content_type,
+                size_bytes=size_bytes,
+                s3_bucket=azure_client.container_name,
+                s3_key=s3_key,
+                has_error=chunk_has_error,
+                artifact_backend="azure",
+            )
+            upload = lambda: azure_client.put_bytes(  # noqa: E731
+                blob_name=s3_key,
+                body=body,
+                content_type=content_type,
+            )
+        else:
+            s3 = s3_client_mod.get_s3_client()
+            record = build_record(
+                artifact_id=artifact_id,
+                artifact_kind="run_event_chunk",
+                identity=identity_value,
+                session_id=session_id_value,
+                created_at_ms=created_at_ms,
+                content_type=content_type,
+                size_bytes=size_bytes,
+                s3_bucket=s3.bucket,
+                s3_key=s3_key,
+                has_error=chunk_has_error,
+                artifact_backend="s3",
+            )
+            upload = lambda: s3.put_bytes(  # noqa: E731
+                key=s3_key,
+                body=body,
+                content_type=content_type,
+            )
+
         writer = ArtifactWriter(index=store)
-        await writer.write(
-            record,
-            upload=lambda: s3.put_bytes(key=s3_key, body=body, content_type=content_type),
-        )
+        await writer.write(record, upload=upload)
     except Exception:  # noqa: BLE001
         logger.exception(
             "Failed to persist run-events chunk",
@@ -153,4 +183,3 @@ async def persist_run_events_from_store(
     if not isinstance(events, list):
         return
     await persist_run_event_chunk(session_id=session_id, events=events, identity=identity)
-

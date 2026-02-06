@@ -17,7 +17,8 @@ export function InputCapture({ canvasRef, onInput, sessionId, onRawInput }: Inpu
   const handleClick = useCallback(
     (e: React.MouseEvent) => {
       e.preventDefault();
-      onInput("click", e.clientX, e.clientY, { button: e.button });
+      const button = e.button === 1 ? "middle" : e.button === 2 ? "right" : "left";
+      onInput("click", e.clientX, e.clientY, { button });
     },
     [onInput],
   );
@@ -33,8 +34,8 @@ export function InputCapture({ canvasRef, onInput, sessionId, onRawInput }: Inpu
     (e: React.WheelEvent) => {
       e.preventDefault();
       onInput("wheel", e.clientX, e.clientY, {
-        deltaX: e.deltaX,
-        deltaY: e.deltaY,
+        delta_x: e.deltaX,
+        delta_y: e.deltaY,
       });
     },
     [onInput],

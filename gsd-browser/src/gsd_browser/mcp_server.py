@@ -2385,15 +2385,22 @@ async def get_run_events(
     events: list[dict[str, Any]] = []
 
     try:
-        from .optionb.s3_client import has_complete_s3_config
-
-        s3_available = has_complete_s3_config()
+        from .optionb.azure_blob_client import has_azure_blob_config
     except ImportError:
-        s3_available = False
+        has_azure_blob_config = None  # type: ignore[assignment]
 
-    if s3_available:
+    try:
+        from .optionb.s3_client import has_complete_s3_config
+    except ImportError:
+        has_complete_s3_config = None  # type: ignore[assignment]
+
+    azure_available = bool(has_azure_blob_config() if callable(has_azure_blob_config) else False)
+    s3_available = bool(has_complete_s3_config() if callable(has_complete_s3_config) else False)
+
+    if azure_available or s3_available:
         try:
             from .optionb.artifact_index import get_artifact_index_store
+            from .optionb.azure_blob_client import get_azure_blob_client
             from .optionb.identity import STDIO_IDENTITY
             from .optionb.request_context import get_current_identity
             from .optionb.s3_client import get_s3_client
@@ -2403,7 +2410,8 @@ async def get_run_events(
             docket = store.docket_getter()
             if docket is not None:
                 used_distributed = True
-                s3 = get_s3_client()
+                s3 = get_s3_client() if s3_available else None
+                azure = get_azure_blob_client() if azure_available else None
                 zset_key = (
                     f"gsd:v1:tenants:{identity.tenant_id}:subjects:{identity.subject_id}"
                     f":sessions:{session_id}:run_events:z"
@@ -2438,7 +2446,20 @@ async def get_run_events(
                         continue
 
                     try:
-                        body = s3.get_bytes(key=record.s3_key)
+                        backend = record.get_effective_backend()
+                    except Exception:  # noqa: BLE001
+                        continue
+
+                    body: bytes = b""
+                    try:
+                        if backend == "azure":
+                            if azure is None:
+                                continue
+                            body = azure.get_bytes(blob_name=record.s3_key)
+                        else:
+                            if s3 is None:
+                                continue
+                            body = s3.get_bytes(key=record.s3_key)
                     except Exception:  # noqa: BLE001
                         continue
                     if not body:

@@ -22,6 +22,10 @@ export function LiveSessionPage() {
     includeData: true,
     pollMs: session?.status === "active" ? 5000 : 0,
   });
+  const holderSid = control.controlState?.holder_sid ?? null;
+  const isHeld = holderSid != null;
+  const isHeldByMe = Boolean(holderSid && control.socketId && holderSid === control.socketId);
+  const isPaused = control.controlState?.paused ?? false;
 
   if (!sessionId) {
     return (
@@ -66,6 +70,9 @@ export function LiveSessionPage() {
         <ControlPanel
           sessionId={sessionId}
           controlState={control.controlState}
+          isHeld={isHeld}
+          isHeldByMe={isHeldByMe}
+          lastError={control.lastError}
           onTakeControl={control.takeControl}
           onReleaseControl={control.releaseControl}
           onPause={control.pause}
@@ -81,7 +88,7 @@ export function LiveSessionPage() {
               sessionId={sessionId}
               frame={stream.frame}
               connected={stream.connected}
-              controlActive={control.controlState?.holder_sid != null}
+              controlActive={isHeldByMe && isPaused}
               onInput={control.sendInput}
             />
             <Hud stats={stream.stats} />
@@ -122,7 +129,7 @@ export function LiveSessionPage() {
               const src =
                 shot.data_base64 && shot.mime_type
                   ? `data:${shot.mime_type};base64,${shot.data_base64}`
-                  : null;
+                  : shot.url;
               return (
                 <a
                   key={shot.artifact_id}

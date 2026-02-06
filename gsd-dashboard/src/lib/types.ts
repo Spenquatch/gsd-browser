@@ -37,9 +37,9 @@ export interface InputEvent {
   session_id: string;
   x?: number;
   y?: number;
-  button?: number;
-  deltaX?: number;
-  deltaY?: number;
+  button?: "left" | "middle" | "right";
+  delta_x?: number;
+  delta_y?: number;
   key?: string;
   text?: string;
 }

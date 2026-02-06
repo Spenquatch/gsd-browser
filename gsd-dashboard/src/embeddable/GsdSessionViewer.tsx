@@ -26,6 +26,10 @@ export function GsdSessionViewer({
 }: GsdSessionViewerProps) {
   const stream = useStreamSocket({ sessionId, streamUrl, token });
   const control = useControlSocket({ sessionId, streamUrl, token });
+  const holderSid = control.controlState?.holder_sid ?? null;
+  const isHeld = holderSid != null;
+  const isHeldByMe = Boolean(holderSid && control.socketId && holderSid === control.socketId);
+  const isPaused = control.controlState?.paused ?? false;
 
   return (
     <div className="flex h-full flex-col bg-gray-900">
@@ -44,6 +48,9 @@ export function GsdSessionViewer({
         <ControlPanel
           sessionId={sessionId}
           controlState={control.controlState}
+          isHeld={isHeld}
+          isHeldByMe={isHeldByMe}
+          lastError={control.lastError}
           onTakeControl={control.takeControl}
           onReleaseControl={control.releaseControl}
           onPause={control.pause}
@@ -57,7 +64,7 @@ export function GsdSessionViewer({
           sessionId={sessionId}
           frame={stream.frame}
           connected={stream.connected}
-          controlActive={control.controlState?.holder_sid != null}
+          controlActive={isHeldByMe && isPaused}
           onInput={control.sendInput}
         />
         <Hud stats={stream.stats} />

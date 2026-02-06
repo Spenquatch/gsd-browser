@@ -23,4 +23,4 @@ release process + documentation drift + observability. Phases 1–3 are treated 
 
 ## Follow-ups (product UX)
 
-- [ ] Dashboard screenshot thumbnails: mgmt `/api/v1/sessions/{id}/screenshots` currently only returns `data_base64` for legacy Redis-backed artifacts. For Azure Blob-backed artifacts, add signed URLs and update the dashboard to render them.
+- [x] Dashboard screenshot thumbnails: mgmt `/api/v1/sessions/{id}/screenshots` returns signed `url` values for Azure/S3-backed artifacts and the dashboard renders them (fallback when `data_base64` is missing). Deploy to prod to pick up the fix.

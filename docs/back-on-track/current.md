@@ -173,6 +173,8 @@ Validated in Azure:
 Notes:
 
 - `include_data=true` only returns `data_base64` for legacy Redis-backed screenshots.
+- For Azure Blob- and S3-backed screenshots, the endpoint returns a short-lived signed URL in `url`
+  (and also includes `page_url` + `url_expires_at`).
 - This endpoint is intentionally capped (`last_n` max 20) to avoid huge payloads.
 
 ### CLI scripts for prod

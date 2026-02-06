@@ -8,6 +8,10 @@ export interface SessionScreenshot {
   type: string;
   step: number | null;
   url: string | null;
+  /** Optional; navigation target (page URL) for the screenshot capture */
+  page_url?: string | null;
+  /** Optional; expiry timestamp (epoch seconds) for signed artifact URLs */
+  url_expires_at?: number | null;
   has_error: boolean;
   mime_type: string;
   size_bytes: number;

@@ -937,6 +937,41 @@ async def _list_session_screenshots(request: Request) -> Response:
                     ):
                         continue
 
+                    artifact_url: str | None = None
+                    artifact_url_expires_at: float | None = None
+                    try:
+                        backend = record.get_effective_backend()
+                    except Exception:  # noqa: BLE001
+                        backend = None
+
+                    if backend == "azure":
+                        try:
+                            from ..optionb.azure_blob_client import get_azure_blob_client
+
+                            azure_client = get_azure_blob_client()
+                            artifact_url, artifact_url_expires_at = (
+                                azure_client.generate_sas_url(
+                                    blob_name=str(record.s3_key),
+                                    ttl_s=900,
+                                )
+                            )
+                        except Exception:  # noqa: BLE001
+                            artifact_url = None
+                            artifact_url_expires_at = None
+                    elif backend == "s3":
+                        try:
+                            from ..optionb.s3_client import get_s3_client, has_complete_s3_config
+
+                            if has_complete_s3_config():
+                                s3 = get_s3_client()
+                                artifact_url, artifact_url_expires_at = s3.presign_get(
+                                    key=str(record.s3_key),
+                                    ttl_s=900,
+                                )
+                        except Exception:  # noqa: BLE001
+                            artifact_url = None
+                            artifact_url_expires_at = None
+
                     data_base64: str | None = None
                     if include_data and str(record.s3_bucket).strip().lower() == "redis":
                         try:
@@ -952,7 +987,11 @@ async def _list_session_screenshots(request: Request) -> Response:
                             "timestamp": float(record.created_at_ms) / 1000.0,
                             "type": record.screenshot_type,
                             "step": record.step,
-                            "url": record.page_url,
+                            # Back-compat: `url` now prefers a signed artifact URL (Azure/S3).
+                            # Keep `page_url` for dashboards that want the navigation target.
+                            "url": artifact_url or record.page_url,
+                            "url_expires_at": artifact_url_expires_at,
+                            "page_url": record.page_url,
                             "has_error": bool(record.has_error),
                             "mime_type": record.content_type,
                             "size_bytes": int(record.size_bytes),
