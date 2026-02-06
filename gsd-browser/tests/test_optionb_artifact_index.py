@@ -315,3 +315,123 @@ def test_cleanup_lock_idempotency_and_retention(monkeypatch: pytest.MonkeyPatch)
             )
 
     asyncio.run(run())
+
+
+def test_cleanup_deletion_routing_by_backend_and_not_found_tolerated(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _configure_memory_docket(monkeypatch, label="artifact-cleanup-routing")
+    monkeypatch.setenv("GSD_DEPLOYMENT_ENV", "dev")
+    monkeypatch.setenv("GSD_RETENTION_SECONDS_DEV", "1")
+    monkeypatch.setenv("GSD_CLEANUP_INTERVAL_S", "60")
+
+    server = GsdFastMCP("artifact-test", tasks=True)
+
+    deleted_s3: list[tuple[str, str]] = []
+    deleted_azure: list[str] = []
+    deleted_redis: list[str] = []
+
+    def delete_s3(bucket: str, key: str) -> None:
+        deleted_s3.append((bucket, key))
+
+    def delete_azure(blob_name: str) -> None:
+        deleted_azure.append(blob_name)
+        raise FileNotFoundError("already deleted")
+
+    async def delete_redis(key: str) -> None:
+        deleted_redis.append(key)
+
+    async def run() -> None:
+        async with Client(server):
+            docket = server.docket
+            assert docket is not None
+            store = _store_for_docket(docket)
+            identity = Identity(tenant_id="t", subject_id="s", transport="stdio")
+
+            now_ms = int(time.time() * 1000)
+            runner = CleanupRunner(
+                index=store,
+                delete_s3=delete_s3,
+                delete_azure=delete_azure,
+                delete_redis=delete_redis,
+                now_ms=lambda: now_ms,
+            )
+
+            # Azure
+            azure_record = build_record(
+                artifact_id=str(uuid.uuid4()),
+                artifact_kind="screenshot",
+                identity=identity,
+                session_id=str(uuid.uuid4()),
+                created_at_ms=now_ms - 2_000,
+                content_type="image/png",
+                size_bytes=1,
+                s3_bucket="c",
+                s3_key="tenants/t/subjects/s/sessions/x/screenshots/azure.png",
+                artifact_backend="azure",
+            ).model_copy(update={"state": "ready"})
+            await store.write_meta(azure_record, expires_at_ms=now_ms + 60_000)
+
+            # S3
+            s3_record = build_record(
+                artifact_id=str(uuid.uuid4()),
+                artifact_kind="screenshot",
+                identity=identity,
+                session_id=str(uuid.uuid4()),
+                created_at_ms=now_ms - 2_000,
+                content_type="image/png",
+                size_bytes=1,
+                s3_bucket="b",
+                s3_key="tenants/t/subjects/s/sessions/x/screenshots/s3.png",
+                artifact_backend="s3",
+            ).model_copy(update={"state": "ready"})
+            await store.write_meta(s3_record, expires_at_ms=now_ms + 60_000)
+
+            # Redis
+            redis_record = build_record(
+                artifact_id=str(uuid.uuid4()),
+                artifact_kind="screenshot",
+                identity=identity,
+                session_id=str(uuid.uuid4()),
+                created_at_ms=now_ms - 2_000,
+                content_type="image/png",
+                size_bytes=1,
+                s3_bucket="redis",
+                s3_key=f"gsd:v1:artifacts:{uuid.uuid4()}:blob",
+                artifact_backend="redis",
+            ).model_copy(update={"state": "ready"})
+            await store.write_meta(redis_record, expires_at_ms=now_ms + 60_000)
+
+            # Legacy (no artifact_backend): infer S3.
+            legacy_record = build_record(
+                artifact_id=str(uuid.uuid4()),
+                artifact_kind="screenshot",
+                identity=identity,
+                session_id=str(uuid.uuid4()),
+                created_at_ms=now_ms - 2_000,
+                content_type="image/png",
+                size_bytes=1,
+                s3_bucket="legacy-bucket",
+                s3_key="tenants/t/subjects/s/sessions/x/screenshots/legacy.png",
+                artifact_backend=None,
+            ).model_copy(update={"state": "ready"})
+            await store.write_meta(legacy_record, expires_at_ms=now_ms + 60_000)
+
+            ran = await runner.run_once()
+            assert ran is True
+
+            assert await store.get_meta(azure_record.artifact_id) is None
+            assert await store.get_meta(s3_record.artifact_id) is None
+            assert await store.get_meta(redis_record.artifact_id) is None
+            assert await store.get_meta(legacy_record.artifact_id) is None
+
+            assert deleted_azure == [str(azure_record.s3_key)]
+            assert str(redis_record.s3_key) in deleted_redis
+            assert sorted(deleted_s3) == sorted(
+                [
+                    (str(s3_record.s3_bucket), str(s3_record.s3_key)),
+                    (str(legacy_record.s3_bucket), str(legacy_record.s3_key)),
+                ]
+            )
+
+    asyncio.run(run())

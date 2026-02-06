@@ -474,9 +474,23 @@ def worker(
                     )
                 s3.delete(key=str(key))
 
+            def delete_azure(blob_name: str) -> None:
+                from .optionb.azure_blob_client import get_azure_blob_client, has_azure_blob_config
+
+                if not has_azure_blob_config():
+                    raise RuntimeError("Azure Blob config is required for artifact cleanup")
+                azure = get_azure_blob_client()
+                azure.delete(blob_name=str(blob_name))
+
+            async def delete_redis(key: str) -> None:
+                async with docket.redis() as client:
+                    await client.delete(str(key))
+
             cleanup_runner = CleanupRunner(
                 index=ArtifactIndexStore(docket_getter=lambda: docket),
                 delete_s3=delete_s3,
+                delete_azure=delete_azure,
+                delete_redis=delete_redis,
             )
             maintenance_task = asyncio.create_task(
                 run_cleanup_maintenance_loop(cleanup_runner),

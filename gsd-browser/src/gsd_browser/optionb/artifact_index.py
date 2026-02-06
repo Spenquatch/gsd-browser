@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import inspect
 import json
 import logging
 import os
@@ -304,6 +305,8 @@ class ArtifactWriter:
 class CleanupRunner:
     index: ArtifactIndexStore
     delete_s3: Callable[[str, str], None]
+    delete_azure: Callable[[str], object] | None = None
+    delete_redis: Callable[[str], object] | None = None
     now_ms: Callable[[], int] = _now_ms
 
     async def run_once(self) -> bool:
@@ -359,7 +362,7 @@ class CleanupRunner:
             if record.state == "pending":
                 if age_ms < _PENDING_ORPHAN_THRESHOLD_MS:
                     continue
-                if not self._delete_blob(record):
+                if not await self._delete_blob(record):
                     continue
                 await self.index.delete_meta(record.artifact_id)
                 await self.index.remove_from_session_zset(
@@ -372,7 +375,7 @@ class CleanupRunner:
                 continue
 
             if record.state == "ready" and age_ms >= retention_ms:
-                if not self._delete_blob(record):
+                if not await self._delete_blob(record):
                     continue
                 await self.index.delete_meta(record.artifact_id)
                 await self.index.remove_from_session_zset(
@@ -383,11 +386,46 @@ class CleanupRunner:
                     kind=record.artifact_kind,
                 )
 
-    def _delete_blob(self, record: ArtifactIndexRecord) -> bool:
+    async def _delete_blob(self, record: ArtifactIndexRecord) -> bool:
+        backend = str(record.get_effective_backend() or "").strip().lower()
+        extra = {
+            "artifact_id": record.artifact_id,
+            "artifact_backend": record.artifact_backend,
+            "effective_backend": backend,
+            "s3_bucket": record.s3_bucket,
+            "s3_key": record.s3_key,
+        }
+
         try:
-            self.delete_s3(record.s3_bucket, record.s3_key)
-        except Exception:  # noqa: BLE001
+            if backend == "s3":
+                result = self.delete_s3(record.s3_bucket, record.s3_key)
+            elif backend == "azure":
+                if self.delete_azure is None:
+                    logger.error("maintenance.cleanup.azure_not_configured", extra=extra)
+                    return False
+                result = self.delete_azure(str(record.s3_key))
+            elif backend == "redis":
+                if self.delete_redis is None:
+                    logger.error("maintenance.cleanup.redis_not_configured", extra=extra)
+                    return False
+                result = self.delete_redis(str(record.s3_key))
+            else:
+                logger.error("maintenance.cleanup.unknown_backend", extra=extra)
+                return False
+
+            if inspect.isawaitable(result):
+                await result
+        except FileNotFoundError:
+            # Treat "not found" as success so the index doesn't retain dead references.
+            logger.debug("maintenance.cleanup.blob_not_found", extra=extra)
+            return True
+        except Exception as exc:  # noqa: BLE001
+            logger.exception(
+                "maintenance.cleanup.delete_failed",
+                extra={**extra, "error": str(exc)},
+            )
             return False
+
         return True
 
     async def _cleanup_zsets_without_meta(self) -> None:
