@@ -687,7 +687,6 @@ async def _sessions_payload_indexed(
         raise RuntimeError("Failed to list session state") from exc
 
     # Compute final status
-    out: list[dict[str, Any]] = []
     for agg in by_session.values():
         states = cast(set[str], agg.pop("_task_states"))
         if "running" in states:
@@ -696,9 +695,13 @@ async def _sessions_payload_indexed(
             agg["status"] = "create"
         else:
             agg["status"] = "terminated"
-        out.append(agg)
 
-    # Sessions are already ordered by creation time from the index (newest first)
+    # Preserve the index order (newest first) rather than dict insertion order.
+    out: list[dict[str, Any]] = []
+    for sid in session_ids:
+        agg = by_session.get(sid)
+        if agg is not None:
+            out.append(agg)
     return out, total
 
 
@@ -817,15 +820,82 @@ async def _sessions_payload(
     return await _sessions_payload_scan(docket=docket, identity=identity, session_id=session_id)
 
 
+def _parse_limit_offset(params: Mapping[str, str]) -> tuple[int, int]:
+    limit_raw = params.get("limit") or "50"
+    offset_raw = params.get("offset") or "0"
+    try:
+        limit = int(limit_raw)
+    except (TypeError, ValueError) as exc:
+        raise OpsTasksServiceError(
+            code="invalid_limit",
+            message="Invalid limit",
+            details={"limit": limit_raw},
+        ) from exc
+    try:
+        offset = int(offset_raw)
+    except (TypeError, ValueError) as exc:
+        raise OpsTasksServiceError(
+            code="invalid_offset",
+            message="Invalid offset",
+            details={"offset": offset_raw},
+        ) from exc
+
+    if limit < 0:
+        raise OpsTasksServiceError(
+            code="invalid_limit",
+            message="Invalid limit",
+            details={"limit": limit_raw, "hint": "limit must be >= 0"},
+        )
+    if offset < 0:
+        raise OpsTasksServiceError(
+            code="invalid_offset",
+            message="Invalid offset",
+            details={"offset": offset_raw, "hint": "offset must be >= 0"},
+        )
+
+    limit = min(limit, 200)
+    return limit, offset
+
+
+async def _list_sessions_payload(
+    *,
+    docket: Docket,
+    identity: Identity,
+    limit: int,
+    offset: int,
+) -> tuple[list[dict[str, Any]], int]:
+    store = get_task_ownership_store()
+
+    has_index = await store.has_session_index(identity)
+    if has_index:
+        return await _sessions_payload_indexed(
+            docket=docket, identity=identity, limit=limit, offset=offset
+        )
+
+    logger.debug(
+        "sessions_index_missing_using_scan",
+        extra={"tenant_id": identity.tenant_id, "subject_id": identity.subject_id},
+    )
+    sessions = await _sessions_payload_scan(docket=docket, identity=identity)
+    total = len(sessions)
+    return sessions[offset : offset + limit], total
+
+
 async def _list_sessions(request: Request) -> Response:
     identity, scopes = _require_identity_and_scopes(request)
     try:
         _require_ops_scopes(scopes, required=("gsd:browser:read", "gsd:admin"))
 
+        limit, offset = _parse_limit_offset(request.query_params)
         docket = cast(Docket, request.app.state.docket)
         with _docket_scope(docket):
-            sessions = await _sessions_payload(docket=docket, identity=identity)
-        return JSONResponse(sessions)
+            sessions, total = await _list_sessions_payload(
+                docket=docket,
+                identity=identity,
+                limit=limit,
+                offset=offset,
+            )
+        return JSONResponse(sessions, headers={"X-Total-Count": str(total)})
     except OpsTasksServiceError as exc:
         status_code = 403 if exc.code == "forbidden" else 400
         return _error_response(
