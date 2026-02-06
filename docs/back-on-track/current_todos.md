@@ -309,16 +309,16 @@ which can silently hide sessions once indexes exist.
 ## “Airtight” verification checklist (run before calling it done)
 
 ### Local (repo)
-- [ ] `make py-lint`
-- [ ] `make py-test`
-- [ ] `make py-smoke`
+- [x] `make py-lint`
+- [x] `make py-test`
+- [x] `make py-smoke`
 - [ ] `make fe-lint` (if dashboard changes were made)
 
 ### IaC (no-secret outputs)
 - [ ] `./infra/scripts/deploy.sh --what-if` succeeds
-- [ ] Root deployment outputs contain **no secrets**:
+- [x] Root deployment outputs contain **no secrets**:
   - Validate by searching outputs for `key|secret|password|token` and by manual review
-- [ ] Confirm nested module outputs contain **no secrets** (enforced by CI guard)
+- [x] Confirm nested module outputs contain **no secrets** (enforced by CI guard)
 
 ### Prod/staging runtime
 - [ ] Dashboard:
