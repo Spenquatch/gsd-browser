@@ -13,6 +13,7 @@ def _clear_management_env(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("GSD_JWT_AUDIENCE", raising=False)
     monkeypatch.delenv("GSD_HTTP_ALLOWED_ORIGINS", raising=False)
     monkeypatch.delenv("GSD_HTTP_ALLOW_NULL_ORIGIN", raising=False)
+    monkeypatch.delenv("GSD_PRESIGNED_URL_TTL_S", raising=False)
 
 
 def test_management_healthz_returns_200(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -610,3 +611,92 @@ def test_management_tasks_list_invalid_cursor_returns_pinned_error_envelope(
             "details": {"hint": "Do not reuse cursors across filters."},
         }
     }
+
+
+def test_management_screenshots_presign_ttl_respects_env(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path_factory: pytest.TempPathFactory,
+) -> None:
+    import time
+    import uuid
+
+    _clear_management_env(monkeypatch)
+    _configure_memory_docket(monkeypatch, label="management-screenshots-ttl")
+
+    api_keys_file = _write_api_keys_file(
+        tmp_path_factory,
+        [
+            {
+                "key": "key-a",
+                "tenant_id": "tenant-a",
+                "subject_id": "subject-a",
+                "scopes": ["gsd:browser:read"],
+            }
+        ],
+    )
+    monkeypatch.setenv("GSD_API_KEYS_FILE", api_keys_file)
+    monkeypatch.setenv("GSD_PRESIGNED_URL_TTL_S", "999999")
+
+    from gsd_browser.optionb import s3_client as s3_client_mod
+
+    captured_ttls: list[int] = []
+
+    class _FakeS3:
+        def presign_get(self, *, key: str, ttl_s: int) -> tuple[str, float]:
+            captured_ttls.append(int(ttl_s))
+            return f"https://example.test/{key}?ttl={int(ttl_s)}", float(time.time() + int(ttl_s))
+
+    monkeypatch.setattr(s3_client_mod, "has_complete_s3_config", lambda: True)
+    monkeypatch.setattr(s3_client_mod, "get_s3_client", lambda: _FakeS3())
+
+    app = build_management_app()
+    headers = {"Host": "localhost", "Origin": "http://localhost", "X-API-Key": "key-a"}
+    with TestClient(app) as client:
+        from gsd_browser.optionb.artifact_index import (
+            ArtifactIndexStore,
+            ArtifactWriter,
+            build_record,
+        )
+        from gsd_browser.optionb.identity import Identity
+
+        docket = client.app.state.docket
+
+        session_id = str(uuid.uuid4())
+        artifact_id = str(uuid.uuid4())
+        created_at_ms = int(time.time() * 1000)
+
+        store = ArtifactIndexStore(docket_getter=lambda: docket)
+        writer = ArtifactWriter(index=store)
+
+        record = build_record(
+            artifact_id=artifact_id,
+            artifact_kind="screenshot",
+            identity=Identity(tenant_id="tenant-a", subject_id="subject-a", transport="http"),
+            session_id=session_id,
+            created_at_ms=created_at_ms,
+            content_type="image/png",
+            size_bytes=5,
+            s3_bucket="bucket",
+            s3_key=f"tenants/t/subjects/s/sessions/{session_id}/screenshots/{artifact_id}.png",
+            screenshot_type="agent_step",
+            page_url="https://page.example",
+            artifact_backend="s3",
+        )
+
+        async def seed() -> None:
+            await writer.write(record, upload=lambda: None)
+
+        assert client.portal is not None
+        client.portal.call(seed)
+        resp = client.get(
+            f"/api/v1/sessions/{session_id}/screenshots?last_n=1",
+            headers=headers,
+        )
+
+    assert resp.status_code == 200
+    payload = resp.json()
+    assert payload["session_id"] == session_id
+    assert payload["screenshots"]
+    assert captured_ttls, "expected presign_get to be called"
+    assert captured_ttls[-1] == 3600
+    assert "ttl=3600" in str(payload["screenshots"][0]["url"] or "")
