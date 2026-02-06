@@ -2,6 +2,7 @@
 set -euo pipefail
 
 GSD_MCP_URL="${GSD_MCP_URL:-https://gsd-prod-api.yellowplant-7a34cb33.eastus.azurecontainerapps.io/mcp}"
+GSD_ORIGIN="${GSD_ORIGIN:-https://browse.buildconnectors.com}"
 
 if [[ -z "${GSD_TOKEN:-}" ]]; then
   echo "Missing GSD_TOKEN. Export it first:" >&2
@@ -46,6 +47,7 @@ out="$(curl -sN --max-time 60 -X POST "$GSD_MCP_URL" \
   -H "Content-Type: application/json" \
   -H "Accept: application/json, text/event-stream" \
   -H "Authorization: Bearer $GSD_TOKEN" \
+  -H "Origin: $GSD_ORIGIN" \
   -d "$payload")"
 
 tmp_sse="$(mktemp)"

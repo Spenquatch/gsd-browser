@@ -30,3 +30,9 @@ For local HTTP deployments, `gsd` should:
 
 See `docs/adr/ADR-0014-local-http-security-hardening-model.md` for the canonical decisions.
 
+## Why prod scripts send `Origin`
+
+Production management endpoints enforce an `Origin` allowlist as a defense-in-depth control against
+browser-mediated requests (CSRF-style cross-origin calls). The `gsd-browser/scripts/prod_*.sh`
+scripts always include an explicit `Origin` header (override via `GSD_ORIGIN`) so operator tooling
+matches the dashboard origin policy and avoids `origin_not_allowed` failures.

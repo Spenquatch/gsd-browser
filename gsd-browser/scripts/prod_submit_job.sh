@@ -2,6 +2,7 @@
 set -euo pipefail
 
 GSD_MCP_URL="${GSD_MCP_URL:-https://gsd-prod-api.yellowplant-7a34cb33.eastus.azurecontainerapps.io/mcp}"
+GSD_ORIGIN="${GSD_ORIGIN:-https://browse.buildconnectors.com}"
 GSD_OUTPUT="${GSD_OUTPUT:-sse}"
 
 if [[ "${1:-}" == "--json" ]]; then
@@ -46,6 +47,7 @@ out="$(curl -sN --max-time 30 -X POST "$GSD_MCP_URL" \
   -H "Content-Type: application/json" \
   -H "Accept: application/json, text/event-stream" \
   -H "Authorization: Bearer $GSD_TOKEN" \
+  -H "Origin: $GSD_ORIGIN" \
   -d "$payload")"
 
 if [[ "$GSD_OUTPUT" == "json" ]]; then
