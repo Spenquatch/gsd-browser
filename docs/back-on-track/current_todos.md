@@ -141,18 +141,18 @@ Useful Azure CLI discovery commands (examples):
 
 ### 1.1 IaC “no secret outputs” regression guard
 
-- [ ] Add a deterministic guard that fails CI if any `infra/modules/*.bicep` declares secret-ish outputs:
+- [x] Add a deterministic guard that fails CI if any `infra/modules/*.bicep` declares secret-ish outputs:
   - Pattern examples: `output .*key`, `output .*secret`, `output .*password`, `output .*token`
   - Ensure the guard does **not** flag benign outputs like `accessKeyId` when it is not a secret.
-- [ ] Add “how to run locally” instructions in `infra/README.md` (or `docs/ops/CI-CD.md`) for the guard.
+- [x] Add “how to run locally” instructions in `infra/README.md` (or `docs/ops/CI-CD.md`) for the guard.
   - Suggested implementation: a small shell script under `infra/scripts/` and a CI step in
     `.github/workflows/deploy-prod.yml` (or a lint workflow).
 
 ### 1.4 Origin hardening defense-in-depth (tooling/scripts)
 
-- [ ] Update `gsd-browser/scripts/prod_*.sh` scripts to always send an `Origin:` header
+- [x] Update `gsd-browser/scripts/prod_*.sh` scripts to always send an `Origin:` header
   (even though mgmt now allows null origin) to reduce policy surprises.
-- [ ] Add a short note in `docs/SECURITY.md` explaining why scripts include `Origin`.
+- [x] Add a short note in `docs/SECURITY.md` explaining why scripts include `Origin`.
 
 ### 1.5 Artifact retention guardrails (while Redis fallback exists)
 
@@ -179,41 +179,41 @@ Before implementing cleanup changes, decide and document:
 
 Artifact cleanup currently routes all deletions through “S3 delete” only and will leak Azure blobs.
 
-- [ ] Update cleanup to delete by backend type:
+- [x] Update cleanup to delete by backend type:
   - `artifact_backend == "azure"`: delete blob via `AzureBlobClient.delete(blob_name=...)`
   - `artifact_backend == "s3"`: delete via S3 client (current behavior)
   - `artifact_backend == "redis"`: delete Redis blob key (best-effort), or document TTL-only strategy
-- [ ] Make cleanup tolerant:
+- [x] Make cleanup tolerant:
   - “Not found” should not fail the whole cleanup loop.
   - Backend misconfig should surface via structured logs and metrics (if possible).
-- [ ] Add tests for cleanup deletion routing:
+- [x] Add tests for cleanup deletion routing:
   - Ensure a record with `artifact_backend="azure"` triggers Azure delete.
   - Ensure legacy records (no `artifact_backend`) still infer correctly.
   - Ensure “not found” deletes do not fail cleanup.
 
 #### 2.1.B Presign TTL configuration parity
 
-- [ ] Mgmt endpoint `/api/v1/sessions/{id}/screenshots` should respect `GSD_PRESIGNED_URL_TTL_S`
+- [x] Mgmt endpoint `/api/v1/sessions/{id}/screenshots` should respect `GSD_PRESIGNED_URL_TTL_S`
   (and/or a query param) instead of hard-coding 900 seconds.
-- [ ] Add tests for TTL parsing and bounds (mirror MCP tool behavior).
+- [x] Add tests for TTL parsing and bounds (mirror MCP tool behavior).
 
 #### 2.1.C Azure SAS “user delegation” feasibility + fallback
 
 Azure presigning via Managed Identity often requires user delegation key permissions.
 
-- [ ] Validate in prod (or staging) whether the assigned managed identities can call
+- [x] Validate in prod (or staging) whether the assigned managed identities can call
   `get_user_delegation_key` successfully.
-- [ ] If not viable, pick and implement one fallback (document decision):
+- [x] If not viable, pick and implement one fallback (document decision):
   - Option 1: Assign additional role (likely “Storage Blob Data Delegator”) to API identity.
   - Option 2: Use connection-string signing for presign only (`GSD_AZURE_STORAGE_CONNECTION_STRING`).
   - Option 3: Add an authenticated “artifact proxy” endpoint on mgmt/api to stream bytes to the dashboard.
-- [ ] Update `docs/adr/ADR-0025-azure-reference-deployment.md` “Implementation Notes” to reflect the chosen
+- [x] Update `docs/adr/ADR-0025-azure-reference-deployment.md` “Implementation Notes” to reflect the chosen
   SAS signing approach and operational implications (rotation vs RBAC).
   - Also update `docs/back-on-track/current.md` with the *actual* chosen approach and how to verify it.
 
 #### 2.1.D Tests requested by plan
 
-- [ ] Add `gsd-browser/tests/test_azure_blob_client.py` with mocks for:
+- [x] Add `gsd-browser/tests/test_azure_blob_client.py` with mocks for:
   - upload (`put_bytes`)
   - download (`get_bytes`)
   - SAS generation (`generate_sas_url`) success + failure modes
@@ -225,13 +225,13 @@ Azure presigning via Managed Identity often requires user delegation key permiss
 Right now, indexed lookup defaults to `limit=50` but the endpoint offers no way to request more,
 which can silently hide sessions once indexes exist.
 
-- [ ] Implement `limit` and `offset` query params on `/api/v1/sessions`
+- [x] Implement `limit` and `offset` query params on `/api/v1/sessions`
   - Default `limit=50`, max `200`
-- [ ] Maintain backward compatibility:
+- [x] Maintain backward compatibility:
   - Keep response as an array
   - Add `X-Total-Count` response header (recommended by the plan)
   - Do not change response shape without coordinating dashboard/client updates.
-- [ ] Add tests covering:
+- [x] Add tests covering:
   - default limit behavior
   - `limit/offset` correctness
   - header presence/values when index exists
@@ -264,7 +264,7 @@ which can silently hide sessions once indexes exist.
 
 ### 3.3 Control-plane JWT + authorization (verify prod parity)
 
-- [ ] Ensure docs reflect that the worker runs **combined streaming + health** on port 5009 when enabled:
+- [x] Ensure docs reflect that the worker runs **combined streaming + health** on port 5009 when enabled:
   - Update `docs/back-on-track/current.md` (it is currently stale on this point).
 - [ ] Add/confirm acceptance criteria (documented + repeatable):
   - valid JWT connects to `/stream` and `/ctrl`
@@ -334,7 +334,7 @@ which can silently hide sessions once indexes exist.
 
 ## Documentation updates (to keep operators from getting misled)
 
-- [ ] Update `docs/back-on-track/current.md` to reflect current reality (streaming/worker behavior, artifact
+- [x] Update `docs/back-on-track/current.md` to reflect current reality (streaming/worker behavior, artifact
   backend behavior, cleanup strategy, and any operational decisions made above).
 - [ ] When this TODO list reaches “done”, add a short “Plan completed” note at the top of
   `docs/recent_plan.md` (or create a `docs/back-on-track/COMPLETED.md`) with:
