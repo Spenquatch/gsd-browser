@@ -136,7 +136,7 @@ Useful Azure CLI discovery commands (examples):
 
 ### 1.3 Secret-handling docs wiring
 
-- [ ] Ensure `docs/SECURITY.md` is referenced from `CLAUDE.md` (and/or other contributor docs) so the
+- [x] Ensure `docs/SECURITY.md` is referenced from `CLAUDE.md` (and/or other contributor docs) so the
   guidance is discoverable during development.
 
 ### 1.1 IaC “no secret outputs” regression guard
@@ -239,7 +239,7 @@ which can silently hide sessions once indexes exist.
 
 #### 2.2.B Document the data model
 
-- [ ] Create `gsd-browser/docs/DATA_MODEL.md` containing:
+- [x] Create `gsd-browser/docs/DATA_MODEL.md` containing:
   - Key formats for ownership records and indexes:
     - `gsd:v1:tasks:{task_id}:owner`
     - `gsd:v1:tenants:{t}:subjects:{s}:sessions:z`
@@ -250,7 +250,7 @@ which can silently hide sessions once indexes exist.
 
 #### 2.2.C Make session status aggregation explicit
 
-- [ ] Document how session `status` is derived from task states (queued/running/completed/failed/cancelled)
+- [x] Document how session `status` is derived from task states (queued/running/completed/failed/cancelled)
   in `gsd-browser/docs/DATA_MODEL.md` (or a small comment block in the code near `_sessions_payload_*`).
 
 #### 2.2.D (Optional) Performance/load validation
@@ -277,10 +277,10 @@ which can silently hide sessions once indexes exist.
 
 ### 4.1 CI/CD tightening
 
-- [ ] Decide fate of legacy `.github/workflows/azure-deploy.yml`:
+- [x] Decide fate of legacy `.github/workflows/azure-deploy.yml`:
   - Keep (and document why), or
   - Remove/rename to reduce confusion
-- [ ] Add a minimal “required checks” list in `docs/ops/CI-CD.md`:
+- [x] Add a minimal "required checks" list in `docs/ops/CI-CD.md`:
   - `make py-lint`, `make py-test`, `make fe-lint` (if feasible in CI), etc.
 
 ### 4.2 Documentation drift final sweep (keep plan promises)
@@ -300,7 +300,7 @@ which can silently hide sessions once indexes exist.
 
 ### 4.3.5 Redis XAUTOCLAIM compat visibility (informational)
 
-- [ ] Add a non-paging informational alert/query for the `redis.xautoclaim_unsupported` signal so it’s
+- [x] Add a non-paging informational alert/query for the `redis.xautoclaim_unsupported` signal so it's
   easy to confirm the compat path is (or is not) in use.
   - Document the exact Log Analytics query in `docs/ops/RUNBOOK-worker-failures.md` or a dedicated note.
 

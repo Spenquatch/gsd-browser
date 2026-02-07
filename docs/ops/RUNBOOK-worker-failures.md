@@ -52,6 +52,29 @@ Actions:
 - Look for browser startup errors in logs.
 - Verify container image includes Chrome and permissions are correct.
 
+### 4) XAUTOCLAIM compat path visibility
+
+The worker patches `redis-py` to fall back to `XPENDING` + `XCLAIM` when the Redis server does not
+support `XAUTOCLAIM` (Redis < 6.2). When the fallback activates, the worker logs
+`redis.xautoclaim_unsupported` once per process lifetime.
+
+Use this Log Analytics (KQL) query to check whether the compat path is active:
+
+```kql
+ContainerAppConsoleLogs_CL
+| where ContainerAppName_s == "gsd-prod-worker"
+| where Log_s has "redis.xautoclaim_unsupported"
+| project TimeGenerated, Log_s
+| order by TimeGenerated desc
+| take 20
+```
+
+- **Rows returned**: the compat path is in use; Redis server is < 6.2.
+- **No rows**: either the worker hasn't restarted recently, or Redis supports `XAUTOCLAIM` natively.
+
+This is informational and should not page. If the compat path is active, redelivery still works but
+may be slightly less efficient. Upgrading Redis to 6.2+ removes the need for the patch.
+
 ## Mitigations
 
 ### Roll back revision

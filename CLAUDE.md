@@ -302,6 +302,7 @@ make docker-run
 
 ## Additional Resources
 
+- `docs/SECURITY.md` - Local HTTP security model and secret-handling guidance
 - `gsd-browser/docs/SETUP.md` - Installation instructions
 - `gsd-browser/docs/TROUBLESHOOTING.md` - Diagnostic workflows
 - `gsd-browser/docs/UPDATING.md` - Configuration updates

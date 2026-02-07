@@ -54,6 +54,26 @@ Dashboard build-time Vite env:
 
 See `docs/ops/ROLLBACK.md`.
 
+## Required checks (pre-merge)
+
+The following checks must pass before merging to `main`:
+
+- `make py-lint` — Ruff lint on `gsd-browser/`
+- `make py-test` — pytest suite for `gsd-browser/`
+- `python3 infra/scripts/guard_no_secret_outputs.py` — no secret-ish outputs in Bicep modules (automated via `infra-guard.yml` on PRs touching `infra/modules/`)
+
+Recommended (not yet enforced in CI):
+
+- `make fe-lint` — ESLint on `gsd-dashboard/` (run manually if dashboard changes were made)
+- `make py-smoke` — end-to-end smoke test (requires running services)
+
+### Legacy workflow
+
+`.github/workflows/azure-deploy.yml` is kept as a **deprecated, manual-only** fallback. It is gated
+behind `workflow_dispatch` and its description directs users to `deploy-prod.yml`. It remains in the
+repo in case a combined build+deploy+dashboard workflow is needed for emergency recovery, but normal
+releases should use the split workflows (`backend-build.yml` → `deploy-prod.yml` → `dashboard-build.yml`).
+
 ## Infra guards (Bicep)
 
 This repo includes a deterministic CI guard that fails PRs if any `infra/modules/*.bicep` declares
