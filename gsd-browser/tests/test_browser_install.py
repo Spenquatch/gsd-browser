@@ -27,6 +27,7 @@ def test_detect_local_browser_uses_pinned_path(
 def test_detect_local_browser_uses_browser_use_detector(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    monkeypatch.delenv("GSD_BROWSER_EXECUTABLE_PATH", raising=False)
     exe = tmp_path / "bin" / "chrome"
     _touch_executable(exe)
 
