@@ -1,0 +1,4 @@
+interface:
+  display_name: "Azure Deploy (gsd-browser)"
+  short_description: "Deploy gsd-browser on Azure"
+  default_prompt: "Use $az-gsd-browser-deploy to build/push an ACR image and redeploy gsd-prod-api, then verify MCP + health."
