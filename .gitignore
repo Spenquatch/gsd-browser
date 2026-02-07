@@ -7,3 +7,4 @@ review_bundles/
 
 # Dashboard build output (Vite)
 gsd-dashboard/dist/
+.runs
