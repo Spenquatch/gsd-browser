@@ -156,8 +156,8 @@ Useful Azure CLI discovery commands (examples):
 
 ### 1.5 Artifact retention guardrails (while Redis fallback exists)
 
-- [ ] Re-evaluate `GSD_RETENTION_SECONDS_PROD` default and document the chosen value/rationale.
-- [ ] Add an explicit operator note in `docs/ops/RUNBOOK-redis-memory.md` about retention tuning as the
+- [x] Re-evaluate `GSD_RETENTION_SECONDS_PROD` default and document the chosen value/rationale.
+- [x] Add an explicit operator note in `docs/ops/RUNBOOK-redis-memory.md` about retention tuning as the
   first lever before manual cleanup/scaling.
 
 ---
@@ -285,10 +285,10 @@ which can silently hide sessions once indexes exist.
 
 ### 4.2 Documentation drift final sweep (keep plan promises)
 
-- [ ] Confirm ADR/doc references are correct and consistent:
+- [x] Confirm ADR/doc references are correct and consistent:
   - `rg -n "GSD_JWT_JWKS_URI" docs gsd-browser/docs` should be empty
-  - `rg -n "GSD_REDIS_URL" docs gsd-browser/docs` should be empty or explicitly marked “deprecated”
-- [ ] Ensure `docs/recent_plan.md` stays in-repo and is the referenced plan for future agents.
+  - `rg -n "GSD_REDIS_URL" docs gsd-browser/docs` should be empty or explicitly marked "deprecated"
+- [x] Ensure `docs/recent_plan.md` stays in-repo and is the referenced plan for future agents.
 
 ### 4.3 Alerts “real receivers” + runbook linkage
 
@@ -315,7 +315,7 @@ which can silently hide sessions once indexes exist.
 - [ ] `make fe-lint` (if dashboard changes were made)
 
 ### IaC (no-secret outputs)
-- [ ] `./infra/scripts/deploy.sh --what-if` succeeds
+- [x] `./infra/scripts/deploy.sh --what-if` succeeds
 - [x] Root deployment outputs contain **no secrets**:
   - Validate by searching outputs for `key|secret|password|token` and by manual review
 - [x] Confirm nested module outputs contain **no secrets** (enforced by CI guard)
