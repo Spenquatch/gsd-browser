@@ -1,4 +1,4 @@
-# Current State (prod) — 2026-02-06 (truth pass)
+# Current State (prod) — 2026-02-07 (truth pass + deploy)
 
 This file captures the **current deployed state** of the GSD Browser system in Azure, including
 the ad-hoc patches applied to reach a functional end-to-end workflow. The goal is to give a
@@ -11,6 +11,10 @@ Notes on this snapshot:
   this doc (2026-02-05).
 - Behavior statements in the focus areas below were cross-checked against **in-repo code + infra**
   on 2026-02-06 (this truth pass).
+- Local UI troubleshooting/testing against `https://browse.buildconnectors.com` should use the saved
+  browser state profile `gsd-ui-audit`:
+  - `GSD_BROWSER_STATE_ID=gsd-ui-audit` (preferred)
+  - State file: `~/.gsd/browser_state/states/gsd-ui-audit.json`
 
 ## What is working (today)
 
@@ -41,7 +45,7 @@ Notes on this snapshot:
 
 Resource Group: `gsd-prod-rg` (East US)
 
-Current prod image tag (CI deploy): `sha-dd3e52ec0a64` (GitHub Actions run `21766264656`, deployed 2026-02-06; built via `backend-build.yml` run `21766199096`)
+Current prod image tag (CI deploy): `sha-6320c6846f7a` (built via `backend-build.yml` run `21771831195`; deployed via `deploy-prod.yml` run `21771874350` on 2026-02-07)
 
 Last manual smoke run image tag (Phase 3): `phase3-streaming-1770320691`
 
@@ -49,9 +53,9 @@ Last manual smoke run image tag (Phase 3): `phase3-streaming-1770320691`
 
 | Component | Name | FQDN | Latest Ready Revision | Image |
 |---|---|---|---|---|
-| MCP API | `gsd-prod-api` | `https://gsd-prod-api.yellowplant-7a34cb33.eastus.azurecontainerapps.io` | `gsd-prod-api--0000021` | `gsdprodacr.azurecr.io/gsd-browser:sha-dd3e52ec0a64` |
-| Worker | `gsd-prod-worker` | `https://gsd-prod-worker.yellowplant-7a34cb33.eastus.azurecontainerapps.io` | `gsd-prod-worker--0000016` | `gsdprodacr.azurecr.io/gsd-browser:sha-dd3e52ec0a64` |
-| Mgmt API | `gsd-prod-mgmt` | `https://gsd-prod-mgmt.yellowplant-7a34cb33.eastus.azurecontainerapps.io` | `gsd-prod-mgmt--0000017` | `gsdprodacr.azurecr.io/gsd-browser:sha-dd3e52ec0a64` |
+| MCP API | `gsd-prod-api` | `https://gsd-prod-api.yellowplant-7a34cb33.eastus.azurecontainerapps.io` | `gsd-prod-api--0000022` | `gsdprodacr.azurecr.io/gsd-browser:sha-6320c6846f7a` |
+| Worker | `gsd-prod-worker` | `https://gsd-prod-worker.yellowplant-7a34cb33.eastus.azurecontainerapps.io` | `gsd-prod-worker--0000017` | `gsdprodacr.azurecr.io/gsd-browser:sha-6320c6846f7a` |
+| Mgmt API | `gsd-prod-mgmt` | `https://gsd-prod-mgmt.yellowplant-7a34cb33.eastus.azurecontainerapps.io` | `gsd-prod-mgmt--0000018` | `gsdprodacr.azurecr.io/gsd-browser:sha-6320c6846f7a` |
 
 ### Smoke checks (passed)
 
