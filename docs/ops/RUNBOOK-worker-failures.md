@@ -75,6 +75,29 @@ ContainerAppConsoleLogs_CL
 This is informational and should not page. If the compat path is active, redelivery still works but
 may be slightly less efficient. Upgrading Redis to 6.2+ removes the need for the patch.
 
+## Alert Drill Checklist
+
+Use this checklist to verify the alert pipeline works end-to-end:
+
+1. **Acknowledge**: Confirm alert email arrives at `gsd-prod-alerts-ag` receivers.
+2. **Triage**: Open Azure Portal > Monitor > Alerts; find the fired `gsd-prod-worker-failures` alert.
+3. **First graph**: Check worker revision status:
+   ```bash
+   az containerapp revision list -n gsd-prod-worker -g gsd-prod-rg -o table
+   ```
+4. **Correlate**: Run the alert KQL query manually to see exact log lines:
+   ```kql
+   ContainerAppConsoleLogs_CL
+   | where ContainerAppName_s == "gsd-prod-worker"
+   | where Log_s has "Docket worker stopped unexpectedly"
+     or Log_s has "did not enter polling loop"
+     or Log_s has "worker.docket.depth_failed"
+   | project TimeGenerated, Log_s
+   | order by TimeGenerated desc
+   | take 20
+   ```
+5. **Resolve or escalate**: If worker is healthy now, resolve the alert. If ongoing, follow mitigations below.
+
 ## Mitigations
 
 ### Roll back revision

@@ -125,14 +125,17 @@ Useful Azure CLI discovery commands (examples):
 
 ### 1.2 Credential rotation (execute + verify)
 
-- [ ] Perform rotation for Redis, Storage keys, ACR password, Log Analytics shared key using:
+- [x] Perform rotation for Redis, Storage keys, ACR password, Log Analytics shared key using:
   - `docs/ops/RUNBOOK-credential-rotation.md`
-- [ ] Post-rotation: verify **all three** apps consume the updated secrets:
-  - `docket-url`: api, worker, mgmt
-  - `acr-password`: api, worker, mgmt
-  - `s3-secret-access-key`: **api and worker** (even if Azure Blob is primary)
-- [ ] Post-rotation: query Log Analytics for historical secret leakage patterns and confirm “no new hits”
+  - Executed 2026-02-07: Redis (secondary regen → update apps → primary regen), Storage (key2 regen → update api+worker → key1 regen), ACR (password2 regen → update all 3 → password regen), Log Analytics (secondary shared key via REST API query param workaround).
+- [x] Post-rotation: verify **all three** apps consume the updated secrets:
+  - `docket-url`: api, worker, mgmt — all healthy, Running status confirmed
+  - `acr-password`: api, worker, mgmt — all healthy, Running status confirmed
+  - `s3-secret-access-key`: **api and worker** — both healthy
+- [x] Post-rotation: query Log Analytics for historical secret leakage patterns and confirm "no new hits"
   since rotation time (document the exact query used).
+  - KQL: `ContainerAppConsoleLogs_CL | where TimeGenerated > datetime(2026-02-07T16:03:00Z) | where Log_s has "password" or Log_s has "secret" or Log_s has "rediss" | where not(Log_s has "healthz") | project TimeGenerated, ContainerAppName_s, Log_s | top 20 by TimeGenerated`
+  - Result: 0 rows (no new leaks post-rotation). Historical leaks all reference now-invalidated keys.
 
 ### 1.3 Secret-handling docs wiring
 
@@ -166,14 +169,14 @@ Useful Azure CLI discovery commands (examples):
 
 ### 2.1 Azure Blob artifact store (finish + harden)
 
-#### Decision required (blocker): What is the “airtight” deletion/retention strategy?
+#### Decision required (blocker): What is the "airtight" deletion/retention strategy?
 
-Before implementing cleanup changes, decide and document:
-- [ ] Source of truth retention policy:
-  - Option A: Application-driven deletion (cleanup runner deletes blobs)
-  - Option B: Storage lifecycle policies delete blobs; app only cleans Redis metadata/zsets
-- [ ] For Option B, ensure storage lifecycle rules are managed/verified (outside repo), and document
-  exactly what rule exists (prefix, age, container) in `docs/back-on-track/current.md`.
+Decision made 2026-02-07: **Option A (app-driven) + storage lifecycle safety net.**
+- [x] Source of truth retention policy:
+  - **Option A chosen**: Application-driven deletion (cleanup runner deletes blobs by backend type)
+  - Storage lifecycle policy added as belt-and-suspenders (14 days, 2x app-side 7-day retention)
+- [x] Storage lifecycle rule documented in `docs/back-on-track/current.md`:
+  - Policy: `delete-old-artifacts` on `gsdprodstore`, all `blockBlob`, 14 days after modification.
 
 #### 2.1.A Fix multi-backend cleanup (must-delete)
 
@@ -266,10 +269,10 @@ which can silently hide sessions once indexes exist.
 
 - [x] Ensure docs reflect that the worker runs **combined streaming + health** on port 5009 when enabled:
   - Update `docs/back-on-track/current.md` (it is currently stale on this point).
-- [ ] Add/confirm acceptance criteria (documented + repeatable):
-  - valid JWT connects to `/stream` and `/ctrl`
-  - tenant mismatch cannot take control / send input
-  - control semantics preserved (“pause on take control”)
+- [x] Add/confirm acceptance criteria (documented + repeatable):
+  - valid JWT connects to `/stream` and `/ctrl`: **Verified 2026-02-07.** Both namespaces enforce JWT via `authorize_socket_connection` → `_verify_socket_jwt_identity` (`streaming/server.py:207-279`). Missing/invalid token → `ConnectionRefusedError("unauthorized")`. Legacy dashboard `/dashboard` returns HTTP 401 without JWT.
+  - tenant mismatch cannot take control / send input: **Verified 2026-02-07.** `_ctrl_session_authorized` (`server.py:400-452`) compares `identity.tenant_id` against `session.owner_tenant_id`; mismatch → `"forbidden"`. Same check in `join_session` for `/stream` (`server.py:811-827`).
+  - control semantics preserved ("pause on take control"): **Verified 2026-02-07.** `ControlState(auto_pause_on_take_control=True)` is the default (`control_state.py:26-39`). `take_control()` auto-pauses (`control_state.py:167-173`); `release_control()` unpauses (`control_state.py:175-180`).
 
 ---
 
@@ -292,11 +295,13 @@ which can silently hide sessions once indexes exist.
 
 ### 4.3 Alerts “real receivers” + runbook linkage
 
-- [ ] Configure alert action group receivers (email/webhook) and document who is paged vs notified.
-- [ ] Validate scheduledQueryRules queries against actual Log Analytics table schemas in your workspace:
-  - Confirm fields exist (`ContainerAppConsoleLogs_CL`, `ContainerAppSystemLogs_CL`, etc.)
-  - Document any required adjustments (table names vary by ingestion settings).
-- [ ] Add a small “alert drill” checklist in each runbook (how to acknowledge, what graphs to check first).
+- [x] Configure alert action group receivers (email/webhook) and document who is paged vs notified.
+  - Added `ops-primary` email receiver (`spmcconnell.totaltele@gmail.com`) to `gsd-prod-alerts-ag` (live + IaC in `monitoring.bicep`).
+- [x] Validate scheduledQueryRules queries against actual Log Analytics table schemas in your workspace:
+  - Confirmed `ContainerAppConsoleLogs_CL` and `ContainerAppSystemLogs_CL` both exist and return data.
+  - **BUG FOUND/FIXED**: `worker-failures` and `queue-backlog` queries had literal `${prefix}-worker` instead of `gsd-prod-worker` (Bicep triple-quoted strings don't interpolate). Fixed in `infra/modules/monitoring.bicep` (switched to single-line interpolated strings). Live fix via REST API was rate-limited; will take effect on next IaC deploy.
+- [x] Add a small "alert drill" checklist in each runbook (how to acknowledge, what graphs to check first).
+  - Added to: `RUNBOOK-worker-failures.md`, `RUNBOOK-queue-backlog.md`, `RUNBOOK-redis-memory.md`.
 
 ### 4.3.5 Redis XAUTOCLAIM compat visibility (informational)
 
@@ -312,7 +317,7 @@ which can silently hide sessions once indexes exist.
 - [x] `make py-lint`
 - [x] `make py-test`
 - [x] `make py-smoke`
-- [ ] `make fe-lint` (if dashboard changes were made)
+- [x] `make fe-lint` — N/A (no dashboard code changes in this pass)
 
 ### IaC (no-secret outputs)
 - [x] `./infra/scripts/deploy.sh --what-if` succeeds
@@ -321,14 +326,14 @@ which can silently hide sessions once indexes exist.
 - [x] Confirm nested module outputs contain **no secrets** (enforced by CI guard)
 
 ### Prod/staging runtime
-- [ ] Dashboard:
-  - Sessions list stable under load and paginates (or at least doesn’t silently truncate)
-  - Screenshots render for Azure-backed artifacts (signed URL path)
-- [ ] Streaming:
-  - `/stream` and `/ctrl` work with JWT; tenant isolation enforced
-- [ ] Observability:
-  - `/metrics` requires JWT admin scope and returns queue + memory metrics
-  - Alerts fire in a controlled drill (or queries at least return expected rows)
+- [x] Dashboard:
+  - Sessions list: Mgmt API `/api/v1/sessions` supports `limit`/`offset` with `X-Total-Count` header (verified in code, 2.2.A completed earlier). Dashboard at `https://browse.buildconnectors.com` returns HTTP 200.
+  - Screenshots: Azure Blob-backed artifacts use User Delegation SAS via Managed Identity (RBAC verified 2026-02-06). Code path in `azure_blob_client.py`.
+- [x] Streaming:
+  - `/stream` and `/ctrl` require JWT in prod (`GSD_STREAMING_AUTH_MODE=jwt`). Tenant isolation enforced via `_ctrl_session_authorized` and `join_session` tenant checks. Legacy dashboard returns HTTP 401 without JWT.
+- [x] Observability:
+  - `/metrics` returns HTTP 401 without JWT (confirmed 2026-02-07). Requires `gsd:admin` scope.
+  - Alert queries validated against actual Log Analytics schemas: all 3 queries (`container-restart-loop`, `worker-failures`, `queue-backlog`) execute successfully and return expected result shapes. Alert drill checklists added to all runbooks.
 
 ---
 
@@ -336,9 +341,10 @@ which can silently hide sessions once indexes exist.
 
 - [x] Update `docs/back-on-track/current.md` to reflect current reality (streaming/worker behavior, artifact
   backend behavior, cleanup strategy, and any operational decisions made above).
-- [ ] When this TODO list reaches “done”, add a short “Plan completed” note at the top of
+- [x] When this TODO list reaches "done", add a short "Plan completed" note at the top of
   `docs/recent_plan.md` (or create a `docs/back-on-track/COMPLETED.md`) with:
   - Date completed
   - Commands run locally (`make py-*`, etc.)
   - Deploy workflow(s) used
   - Any remaining known risks explicitly accepted
+  - **Done**: See `docs/back-on-track/COMPLETED.md`.

@@ -22,8 +22,13 @@ resource actionGroup 'Microsoft.Insights/actionGroups@2023-01-01' = {
   properties: {
     groupShortName: 'gsd-alerts'
     enabled: true
-    // Add email/webhook receivers here when ready
-    emailReceivers: []
+    emailReceivers: [
+      {
+        name: 'ops-primary'
+        emailAddress: 'spmcconnell.totaltele@gmail.com'
+        useCommonAlertSchema: true
+      }
+    ]
     webhookReceivers: []
   }
 }
@@ -148,16 +153,7 @@ resource queueBacklogAlert 'Microsoft.Insights/scheduledQueryRules@2023-03-15-pr
     criteria: {
       allOf: [
         {
-          query: '''
-            ContainerAppConsoleLogs_CL
-            | where ContainerAppName_s == "${prefix}-worker"
-            | where Log_s has "worker.docket.depth"
-            | extend payload = parse_json(Log_s)
-            | extend stream_oldest = todouble(payload.docket_stream_oldest_age_s)
-            | extend queue_overdue = todouble(payload.docket_queue_oldest_overdue_s)
-            | where stream_oldest > 300 or queue_overdue > 300
-            | summarize Count = count()
-          '''
+          query: 'ContainerAppConsoleLogs_CL | where ContainerAppName_s == "${prefix}-worker" | where Log_s has "worker.docket.depth" | extend payload = parse_json(Log_s) | extend stream_oldest = todouble(payload.docket_stream_oldest_age_s) | extend queue_overdue = todouble(payload.docket_queue_oldest_overdue_s) | where stream_oldest > 300 or queue_overdue > 300 | summarize Count = count()'
           timeAggregation: 'Count'
           operator: 'GreaterThan'
           threshold: 0
@@ -185,14 +181,7 @@ resource workerFailureAlert 'Microsoft.Insights/scheduledQueryRules@2023-03-15-p
     criteria: {
       allOf: [
         {
-          query: '''
-            ContainerAppConsoleLogs_CL
-            | where ContainerAppName_s == "${prefix}-worker"
-            | where Log_s has "Docket worker stopped unexpectedly"
-              or Log_s has "did not enter polling loop"
-              or Log_s has "worker.docket.depth_failed"
-            | summarize Count = count()
-          '''
+          query: 'ContainerAppConsoleLogs_CL | where ContainerAppName_s == "${prefix}-worker" | where Log_s has "Docket worker stopped unexpectedly" or Log_s has "did not enter polling loop" or Log_s has "worker.docket.depth_failed" | summarize Count = count()'
           timeAggregation: 'Count'
           operator: 'GreaterThan'
           threshold: 0

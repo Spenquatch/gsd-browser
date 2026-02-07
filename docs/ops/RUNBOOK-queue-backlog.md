@@ -65,6 +65,33 @@ Actions:
 - Inspect job result/error (via MCP tooling or mgmt job endpoints).
 - Consider reducing max concurrency temporarily to stabilize.
 
+## Alert Drill Checklist
+
+Use this checklist to verify the alert pipeline works end-to-end:
+
+1. **Acknowledge**: Confirm alert email arrives at `gsd-prod-alerts-ag` receivers.
+2. **Triage**: Open Azure Portal > Monitor > Alerts; find the fired `gsd-prod-queue-backlog` alert.
+3. **First graph**: Check Azure Monitor metrics for Redis or run:
+   ```bash
+   curl -fsS -H "Authorization: Bearer $GSD_TOKEN" \
+     -H "Origin: https://browse.buildconnectors.com" \
+     "https://gsd-prod-mgmt.yellowplant-7a34cb33.eastus.azurecontainerapps.io/metrics" | python3 -m json.tool
+   ```
+4. **Correlate**: Run the alert KQL query manually:
+   ```kql
+   ContainerAppConsoleLogs_CL
+   | where ContainerAppName_s == "gsd-prod-worker"
+   | where Log_s has "worker.docket.depth"
+   | extend payload = parse_json(Log_s)
+   | extend stream_oldest = todouble(payload.docket_stream_oldest_age_s)
+   | extend queue_overdue = todouble(payload.docket_queue_oldest_overdue_s)
+   | where stream_oldest > 300 or queue_overdue > 300
+   | project TimeGenerated, stream_oldest, queue_overdue
+   | order by TimeGenerated desc
+   | take 20
+   ```
+5. **Resolve or escalate**: If backlog is draining, resolve the alert. If growing, follow mitigations below.
+
 ## Mitigations
 
 ### Scale worker replicas

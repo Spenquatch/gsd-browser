@@ -102,6 +102,27 @@ The Docket task queue uses Redis streams which can grow unbounded.
 2. Check for stuck consumers in pending list
 3. Trim old entries: `XTRIM gsd:queue MAXLEN ~ 10000`
 
+## Alert Drill Checklist
+
+Use this checklist to verify the alert pipeline works end-to-end:
+
+1. **Acknowledge**: Confirm alert email arrives at `gsd-prod-alerts-ag` receivers.
+2. **Triage**: Open Azure Portal > Monitor > Alerts; find the fired `gsd-prod-redis-high-memory` alert.
+3. **First graph**: Azure Portal > Redis > Overview > Memory Usage graph.
+   ```bash
+   SUB_ID=$(az account show --query id -o tsv)
+   az monitor metrics list \
+     --resource "/subscriptions/${SUB_ID}/resourceGroups/gsd-prod-rg/providers/Microsoft.Cache/Redis/gsd-prod-redis" \
+     --metric "usedmemorypercentage" \
+     --interval PT1H \
+     --output table
+   ```
+4. **Correlate**: Check if artifact blobs are falling back to Redis:
+   ```bash
+   az containerapp logs show -n gsd-prod-worker -g gsd-prod-rg --tail 200 2>&1 | grep -i "redis.*fallback\|blob.*fail"
+   ```
+5. **Resolve or escalate**: If memory is stable/decreasing, resolve. If growing, follow cleanup procedures below.
+
 ## Manual Cleanup Procedures
 
 ### Clean Stale Artifact Blobs

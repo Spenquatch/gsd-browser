@@ -214,30 +214,35 @@ The MCP tool supports three delivery modes controlled by `GSD_ARTIFACT_DELIVERY_
 In HTTP/Option B (prod), `get_screenshots` prefers distributed artifacts via the Redis index and
 can retrieve bytes from Azure/S3 for inline mode and issue SAS/presigned URLs for URL mode.
 
-### Retention + cleanup (what the code does today)
+### Retention + cleanup
+
+**Decision (2026-02-07): Option A (app-driven deletion) + storage lifecycle safety net.**
 
 Retention is driven by:
 
 - `GSD_RETENTION_SECONDS_PROD` / `GSD_RETENTION_SECONDS_DEV` (defaults: 7 days prod, 1 day dev).
 
-What’s enforced automatically:
+What's enforced automatically:
 
 - Redis **index keys** (artifact meta + session ZSET membership) expire at `created_at + retention`.
 - Redis **blob fallback** keys also get an expiry at `created_at + retention`.
 
-Best-effort deletion:
+App-driven deletion (primary):
 
 - The worker runs a periodic cleanup loop (distributed lock) that scans artifact meta keys and
-  attempts to delete the underlying blob for expired artifacts and for orphaned “pending” uploads.
-- In the current worker entrypoint, the cleanup runner is wired to a **S3 delete function** (it
-  requires `GSD_S3_*` to be set). If artifacts are stored via the native Azure SDK, blob deletion
-  depends on whether the S3 configuration points at the same backing store (S3-compatible) or on
-  an external lifecycle policy.
+  deletes the underlying blob for expired artifacts and orphaned "pending" uploads.
+- Cleanup routes deletions by `artifact_backend`: Azure Blob → `AzureBlobClient.delete()`,
+  S3 → S3 client delete, Redis → best-effort key delete. "Not found" errors are tolerated.
+- Code: `gsd-browser/src/gsd_browser/optionb/artifact_index.py` (`_cleanup_meta_keys`).
 
-If a hard retention guarantee is required for Azure Blob bytes, we need an explicit decision:
+Storage lifecycle safety net (belt-and-suspenders):
 
-- implement Azure deletion in the cleanup runner (call `AzureBlobClient.delete()`), and/or
-- enforce retention via Azure Storage lifecycle management on the container.
+- Azure Storage lifecycle management policy `delete-old-artifacts` on `gsdprodstore`:
+  - Scope: all `blockBlob` objects in all containers.
+  - Rule: delete blobs older than **14 days** after last modification.
+  - This ensures blob cleanup even if the app-side cleanup runner is down or misconfigured.
+- The 14-day lifecycle window is intentionally 2x the app-side 7-day retention to give the app
+  cleanup runner priority and avoid race conditions.
 
 ### CLI scripts for prod
 
@@ -311,13 +316,15 @@ npx -y @azure/static-web-apps-cli deploy ./dist --env production
 
 ## Known issues / weak spots (to harden)
 
-1. **Secrets leaked in old logs**: an older worker revision printed the full Redis URL including
-   password. This is now redacted, but the secret should still be rotated.
+1. ~~**Secrets leaked in old logs**~~: **Resolved 2026-02-07.** All credentials (Redis, Storage,
+   ACR, Log Analytics secondary) have been rotated. Old leaked keys are now invalidated. The
+   worker's explicit logging path uses `_redact_url_password()`; Rich traceback locals can still
+   leak during transient failures (accepted risk — keys rotate quarterly).
 2. **Queue/worker observability**: add metrics + alerts for backlog age and worker failures.
 3. **HTTP hardening gotchas**: API + Mgmt apply an Origin/Host allowlist (ADR-0014). In prod IaC
    we set `GSD_HTTP_ALLOW_NULL_ORIGIN=true` to keep CLI/scripts workable; if you see
    `origin_not_allowed`, check those env vars first.
-4. **Streaming is deployed but not “finished”**: the worker runs the streaming server on port 5009,
+4. **Streaming is deployed but not "finished"**: the worker runs the streaming server on port 5009,
    but we still need operational hardening (alerts, auth/UX polish, and clarity on whether this
    should stay co-located with the worker or move to a dedicated app).
 5. **Manual deploy flow**: dashboard requires build-time env vars; backend + frontend releases are
@@ -325,10 +332,11 @@ npx -y @azure/static-web-apps-cli deploy ./dist --env production
 
 ## Suggested hardening roadmap (next)
 
-1. **Rotate Redis access key** and update the `docket-url` secret on all Container Apps.
-2. **Make retention real for blob bytes**: decide between Azure lifecycle policy vs implementing
-   Azure deletes in the cleanup runner (and validate that “S3-compatible” delete config actually
-   deletes the same objects we upload via the Azure SDK).
+1. ~~**Rotate Redis access key**~~: **Done 2026-02-07.** All credentials rotated (Redis, Storage,
+   ACR, Log Analytics secondary). Next rotation: quarterly.
+2. ~~**Make retention real for blob bytes**~~: **Done 2026-02-07.** App-side cleanup routes
+   deletes by backend type. Storage lifecycle policy (`delete-old-artifacts`, 14 days) is active
+   as a safety net on `gsdprodstore`.
 3. Decide on live streaming architecture:
    - keep streaming co-located in the worker (current code + IaC), or
    - split out a dedicated `gsd-prod-stream` Container App (ops isolation, independent scaling).
