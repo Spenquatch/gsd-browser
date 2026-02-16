@@ -71,7 +71,11 @@ def get_browser_use_llm(
     if provider == "openai":
         if ChatOpenAI is None:
             raise RuntimeError("browser-use is not importable (ChatOpenAI missing)")
-        return ChatOpenAI(model=settings.model, api_key=settings.openai_api_key)
+        return ChatOpenAI(
+            model=settings.model,
+            api_key=settings.openai_api_key,
+            base_url=settings.openai_base_url or None,
+        )
     if provider == "ollama":
         if ChatOllama is None:
             raise RuntimeError("browser-use is not importable (ChatOllama missing)")

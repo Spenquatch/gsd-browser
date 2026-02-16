@@ -1800,7 +1800,11 @@ async def web_eval_agent(
 
         timed_out = False
         if result is None:
-            if steps >= effective_max_steps:
+            if (
+                steps is not None
+                and effective_max_steps is not None
+                and steps >= effective_max_steps
+            ):
                 timed_out = True
             elif any("timeout" in warning.lower() for warning in warnings):
                 timed_out = True

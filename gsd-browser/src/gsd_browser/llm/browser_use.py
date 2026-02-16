@@ -58,7 +58,7 @@ def validate_llm_settings(settings: Settings) -> None:
             raise ValueError(
                 "Missing OPENAI_API_KEY (required when GSD_LLM_PROVIDER=openai)."
             )
-        if model_lower.startswith(("claude-", "bu-", "browser-use/")):
+        if model_lower.startswith(("claude-", "bu-")):
             raise ValueError(
                 "GSD_MODEL looks incompatible with GSD_LLM_PROVIDER=openai. "
                 "Set an OpenAI model (recommended: gpt-4o-mini) or switch providers."
@@ -82,7 +82,9 @@ def validate_llm_settings(settings: Settings) -> None:
                 "for browser-use actions. Set GSD_MODEL to a modern model "
                 "(recommended: gpt-4o-mini) or opt into unforced structured output by setting "
                 "GSD_OPENAI_DONT_FORCE_STRUCTURED_OUTPUT=true "
-                "(may increase AgentOutput validation failures)."
+                "(may increase AgentOutput validation failures). "
+                "If you're using a local OpenAI-compatible proxy (LiteLLM, etc.), also set "
+                "OPENAI_BASE_URL and consider setting GSD_OPENAI_DONT_FORCE_STRUCTURED_OUTPUT=true."
             )
         return
 
@@ -135,6 +137,7 @@ def _create_llm(
         return browser_use.ChatOpenAI(
             model=model,
             api_key=settings.openai_api_key,
+            base_url=settings.openai_base_url or None,
             add_schema_to_system_prompt=settings.openai_add_schema_to_system_prompt,
             dont_force_structured_output=settings.openai_dont_force_structured_output,
             **(timeout_kwargs or {}),

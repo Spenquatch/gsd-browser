@@ -46,6 +46,7 @@ class Settings(BaseModel):
 
     anthropic_api_key: str = Field("", alias="ANTHROPIC_API_KEY")
     openai_api_key: str = Field("", alias="OPENAI_API_KEY")
+    openai_base_url: str = Field("", alias="OPENAI_BASE_URL")
     browser_use_api_key: str = Field("", alias="BROWSER_USE_API_KEY")
     browser_use_llm_url: str = Field("", alias="BROWSER_USE_LLM_URL")
     ollama_host: str = Field("http://localhost:11434", alias="OLLAMA_HOST")
@@ -223,6 +224,8 @@ def load_settings(
             payload["ANTHROPIC_API_KEY"] = merged["ANTHROPIC_API_KEY"]
         if merged.get("OPENAI_API_KEY") is not None:
             payload["OPENAI_API_KEY"] = merged["OPENAI_API_KEY"]
+        if merged.get("OPENAI_BASE_URL") is not None:
+            payload["OPENAI_BASE_URL"] = merged["OPENAI_BASE_URL"]
         if merged.get("BROWSER_USE_API_KEY") is not None:
             payload["BROWSER_USE_API_KEY"] = merged["BROWSER_USE_API_KEY"]
         if merged.get("BROWSER_USE_LLM_URL") is not None:
