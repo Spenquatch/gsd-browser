@@ -134,6 +134,14 @@ def _create_llm(
         )
     if provider == "openai":
         timeout_kwargs = _provider_timeout_kwargs(browser_use.ChatOpenAI, timeout_s)
+        openai_kwargs: dict[str, object] = {}
+        if settings.openai_max_completion_tokens is not None:
+            openai_kwargs["max_completion_tokens"] = int(settings.openai_max_completion_tokens)
+        elif model.strip().lower().startswith("browser-use/"):
+            # The open-source browser-use models commonly run with 8k context windows behind
+            # OpenAI-compatible servers. browser-use's default (4096) can exceed the remaining
+            # context budget after the system prompt + page state, causing 400s.
+            openai_kwargs["max_completion_tokens"] = 512
         return browser_use.ChatOpenAI(
             model=model,
             api_key=settings.openai_api_key,
@@ -141,6 +149,7 @@ def _create_llm(
             add_schema_to_system_prompt=settings.openai_add_schema_to_system_prompt,
             dont_force_structured_output=settings.openai_dont_force_structured_output,
             **(timeout_kwargs or {}),
+            **openai_kwargs,
         )
     if provider == "ollama":
         timeout_kwargs = _provider_timeout_kwargs(browser_use.ChatOllama, timeout_s)

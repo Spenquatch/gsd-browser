@@ -43,6 +43,9 @@ class Settings(BaseModel):
     openai_dont_force_structured_output: bool = Field(
         False, alias="GSD_OPENAI_DONT_FORCE_STRUCTURED_OUTPUT"
     )
+    openai_max_completion_tokens: int | None = Field(
+        None, alias="GSD_OPENAI_MAX_COMPLETION_TOKENS"
+    )
 
     anthropic_api_key: str = Field("", alias="ANTHROPIC_API_KEY")
     openai_api_key: str = Field("", alias="OPENAI_API_KEY")
@@ -261,6 +264,10 @@ def load_settings(
         if merged.get("GSD_OPENAI_DONT_FORCE_STRUCTURED_OUTPUT") is not None:
             payload["GSD_OPENAI_DONT_FORCE_STRUCTURED_OUTPUT"] = merged[
                 "GSD_OPENAI_DONT_FORCE_STRUCTURED_OUTPUT"
+            ]
+        if merged.get("GSD_OPENAI_MAX_COMPLETION_TOKENS") is not None:
+            payload["GSD_OPENAI_MAX_COMPLETION_TOKENS"] = merged[
+                "GSD_OPENAI_MAX_COMPLETION_TOKENS"
             ]
         if merged.get("LOG_LEVEL") is not None:
             payload["LOG_LEVEL"] = merged["LOG_LEVEL"]

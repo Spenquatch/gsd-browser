@@ -278,6 +278,13 @@ Ensure-Pipx -PythonExe $pythonExe -PythonPrefix $pythonPrefix
 $pipxBin = Get-PipxBinDir -PythonExe $pythonExe -PythonPrefix $pythonPrefix
 Ensure-OnPathForSession -Dir $pipxBin
 
+# Stable per-user bin dir (used by Codex/Claude configs that set `command = "gsd"`).
+# pipx may choose different default bin locations across versions/platforms; keep a
+# consistent `~/.gsd/bin` shim directory so PATH-based MCP hosts can always find `gsd`.
+$stableBin = Join-Path $HOME ".gsd\bin"
+New-Item -ItemType Directory -Force -Path $stableBin | Out-Null
+Ensure-OnPathForSession -Dir $stableBin
+
 Write-Host "Installing gsd via pipx from $rootDir ..."
 try {
   Invoke-PipxInstallFromSource -PythonExe $pythonExe -SourceDir "$rootDir"
@@ -286,7 +293,7 @@ try {
   Write-Host "pipx install failed; retrying with an isolated pipx home under ~/.gsd (to avoid pyenv/pipx state conflicts)..."
 
   $isolatedHome = Join-Path $HOME ".gsd\pipx_home"
-  $isolatedBin = Join-Path $HOME ".gsd\bin"
+  $isolatedBin = $stableBin
   New-Item -ItemType Directory -Force -Path $isolatedHome | Out-Null
   New-Item -ItemType Directory -Force -Path $isolatedBin | Out-Null
 
@@ -336,6 +343,29 @@ Write-Host "Installation complete."
 $cli = Resolve-GsdCli
 if ($cli) {
   Invoke-BestEffort -Exe $cli.Exe -Args @("--version")
+}
+
+# Ensure `~/.gsd/bin/gsd.exe` exists even when pipx installs shims elsewhere (e.g. ~/.gsd/pipx_bin).
+# This avoids "program not found" failures in MCP hosts that only have ~/.gsd/bin on PATH.
+foreach ($name in @("gsd.exe", "gsd-browser.exe")) {
+  try {
+    $dst = Join-Path $stableBin $name
+    if (Test-Path -LiteralPath $dst) { continue }
+
+    $src = Join-Path $pipxBin $name
+    if (-not (Test-Path -LiteralPath $src)) {
+      $cmdName = $name.Substring(0, $name.Length - 4)
+      $cmd = Get-Command $cmdName -ErrorAction SilentlyContinue
+      if ($cmd -and $cmd.Source -and (Test-Path -LiteralPath $cmd.Source)) {
+        $src = $cmd.Source
+      }
+    }
+    if (Test-Path -LiteralPath $src) {
+      Copy-Item -Force -LiteralPath $src -Destination $dst
+    }
+  } catch {
+    # best-effort
+  }
 }
 
 # Ensure FASTMCP_DOCKET_URL is present in the stable config file for running from any directory.
