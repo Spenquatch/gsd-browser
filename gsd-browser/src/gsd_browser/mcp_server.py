@@ -8,6 +8,7 @@ import inspect
 import json
 import logging
 import os
+import re
 import time
 import traceback
 import uuid
@@ -15,7 +16,7 @@ from contextlib import contextmanager
 from contextvars import ContextVar
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 from urllib.parse import urlparse
 
 from mcp.server.fastmcp import Context, FastMCP
@@ -1292,7 +1293,7 @@ async def web_eval_agent(
                 logger.debug("Failed to record agent step event", exc_info=True)
 
         # Let browser-use handle model-specific timeouts (90s for Claude, 60s default)
-        llms = create_browser_use_llms(settings)
+        llms = create_browser_use_llms(settings, timeout_s=settings.llm_timeout_s)
         llm = llms.primary
         browser_executable_path = getattr(settings, "browser_executable_path", "") or None
         browser_session = BrowserSession(
@@ -2293,6 +2294,968 @@ async def web_task_agent_github(
     return _retag_web_eval_payload(
         response, tool_name="web_task_agent_github", version="gsd.web_task_agent_github.v1"
     )
+
+
+def _coerce_int(value: Any | None) -> int | None:
+    if value is None or value == "":
+        return None
+    try:
+        return int(value)
+    except Exception:
+        return None
+
+
+def _coerce_float(value: Any | None) -> float | None:
+    if value is None or value == "":
+        return None
+    try:
+        return float(value)
+    except Exception:
+        return None
+
+
+def _coerce_bool(value: Any | None, *, default: bool = False) -> bool:
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return value
+    text = str(value).strip().lower()
+    if text in {"1", "true", "yes", "y", "on"}:
+        return True
+    if text in {"0", "false", "no", "n", "off"}:
+        return False
+    return default
+
+
+def _coerce_video_size(value: Any | None) -> dict[str, int] | None:
+    if value is None:
+        return None
+    if isinstance(value, dict):
+        width = _coerce_int(value.get("width"))
+        height = _coerce_int(value.get("height"))
+        if width and height and width > 0 and height > 0:
+            return {"width": int(width), "height": int(height)}
+    return None
+
+
+def _mp4_snapshot(dir_path: str | None) -> dict[str, float]:
+    if not dir_path:
+        return {}
+    try:
+        root = Path(str(dir_path))
+        root.mkdir(parents=True, exist_ok=True)
+    except Exception:
+        return {}
+    items: dict[str, float] = {}
+    try:
+        for path in root.glob("*.mp4"):
+            try:
+                items[str(path)] = float(path.stat().st_mtime)
+            except OSError:
+                continue
+    except Exception:
+        return {}
+    return items
+
+
+def _mp4_diff_path(before: dict[str, float], after: dict[str, float]) -> str | None:
+    created = [p for p in after.keys() if p not in before]
+    if created:
+        created.sort(key=lambda p: after.get(p, 0.0), reverse=True)
+        return created[0]
+    if after:
+        candidates = sorted(after.keys(), key=lambda p: after.get(p, 0.0), reverse=True)
+        return candidates[0]
+    return None
+
+
+def _extract_json_string_assignment(script: str, *, var_name: str) -> dict[str, Any] | None:
+    # Looks for: VAR = r'''{...json...}''' or VAR = """..."""
+    text = str(script)
+    patterns = [
+        rf"{re.escape(var_name)}\s*=\s*r?'''(.*?)'''",
+        rf'{re.escape(var_name)}\s*=\s*r?"""(.*?)"""',
+    ]
+    for pat in patterns:
+        match = re.search(pat, text, flags=re.DOTALL)
+        if not match:
+            continue
+        raw = match.group(1).strip()
+        if not raw:
+            continue
+        try:
+            value = json.loads(raw)
+        except Exception:
+            continue
+        if isinstance(value, dict):
+            return value
+    return None
+
+
+async def _maybe_stop_browser_session(session: Any) -> None:
+    stop = getattr(session, "stop", None)
+    if not callable(stop):
+        return
+    try:
+        result = stop()
+        if inspect.isawaitable(result):
+            await result
+    except Exception:  # noqa: BLE001
+        return
+
+
+async def _maybe_await(value: Any) -> Any:
+    if inspect.isawaitable(value):
+        return await value
+    return value
+
+
+@mcp.tool(name="web_structured_flow")
+async def web_structured_flow(
+    record: dict[str, Any] | None = None,
+    replay: dict[str, Any] | None = None,
+    ctx: Context | None = None,
+) -> list[TextContent]:
+    """Record (LLM-assisted) and replay (LLM-free) structured browser flows.
+
+    - record: uses browser-use Agent (or CodeAgent when available) + configured LLM provider to
+      author a replayable Actor-API script
+    - replay: executes the stored script (and optionally falls back to a deterministic DSL runner)
+    """
+    _ = ctx
+    from .contracts.v1 import (
+        ExportedScriptV1,
+        RecordingInfoV1,
+        TemplateInfoV1,
+        WebStructuredFlowPayloadV1,
+    )
+    from .structured_flow_script import (
+        build_replay_script_from_events,
+        patch_exported_script,
+        run_python_script,
+        script_uses_llm_at_replay,
+    )
+    from .structured_flow_store import (
+        base_origin_for_url,
+        load_manifest,
+        normalize_template_id,
+        save_template_files,
+        template_recordings_dir,
+    )
+
+    tool_call_id = uuid.uuid4()
+    session_id = uuid.uuid4()
+    warnings: list[str] = []
+
+    if (record is None) == (replay is None):
+        payload = WebStructuredFlowPayloadV1(
+            version="gsd.web_structured_flow.v1",
+            mode="record" if record is not None else "replay",
+            session_id=session_id,
+            tool_call_id=tool_call_id,
+            status="failed",
+            summary="Provide exactly one of record or replay.",
+            url="",
+            final_url=None,
+            extracted=None,
+            template=None,
+            runner_used=None,
+            runner_fallback_used=False,
+            steps=[],
+            script_logs=[],
+            warnings=[],
+            recording=None,
+            exported_script=None,
+        )
+        text = json.dumps(payload.model_dump(mode="json"), ensure_ascii=False)
+        return [TextContent(type="text", text=text)]
+
+    settings = load_settings(strict=False)
+
+    def _patch_browser_use_cdp_wait_timeout() -> None:
+        """Patch browser-use's LocalBrowserWatchdog CDP wait timeout if configured.
+
+        browser-use 0.11.x hardcodes a 30s timeout in LocalBrowserWatchdog._wait_for_cdp_url().
+        Some environments need longer for first-run browser startup.
+
+        Configure via env var: GSD_STRUCTURED_FLOW_CDP_WAIT_TIMEOUT_S
+        """
+
+        raw = os.environ.get("GSD_STRUCTURED_FLOW_CDP_WAIT_TIMEOUT_S")
+        if not raw:
+            return
+        try:
+            timeout_s = float(str(raw).strip())
+        except Exception:
+            return
+        if not (timeout_s and timeout_s > 0):
+            return
+        try:
+            from browser_use.browser.watchdogs import (  # type: ignore[import-not-found]
+                local_browser_watchdog,
+            )
+        except Exception:
+            return
+        cls = getattr(local_browser_watchdog, "LocalBrowserWatchdog", None)
+        if cls is None:
+            return
+        orig = getattr(cls, "_wait_for_cdp_url", None)
+        if not callable(orig) or getattr(orig, "_gsd_patched", False):
+            return
+
+        async def _wrapped_wait_for_cdp_url(port: int, timeout: float = 30) -> str:
+            return await orig(port, timeout=float(timeout_s))
+
+        _wrapped_wait_for_cdp_url._gsd_patched = True  # type: ignore[attr-defined]
+        try:
+            cls._wait_for_cdp_url = staticmethod(_wrapped_wait_for_cdp_url)  # type: ignore[assignment]
+        except Exception:
+            return
+
+    try:
+        if record is not None:
+            raw_url = str(record.get("url") or "").strip()
+            task = str(record.get("task") or "").strip()
+            if not raw_url or not task:
+                raise ValueError("record.url and record.task are required")
+            url = _normalize_url(raw_url)
+
+            template_id_raw = record.get("template_id") or uuid.uuid4().hex
+            template_id = normalize_template_id(str(template_id_raw))
+            template_name = str(record.get("template_name") or "").strip() or None
+            state_id = record.get("state_id")
+            headless = _coerce_bool(record.get("headless_browser"), default=False)
+            enable_default_extensions = _coerce_bool(
+                record.get("enable_default_extensions"), default=True
+            )
+            budget_s = _coerce_float(record.get("budget_s"))
+            max_steps = _coerce_int(record.get("max_steps"))
+            step_timeout_s = _coerce_float(record.get("step_timeout_s"))
+            require_llm_free_replay = _coerce_bool(
+                record.get("require_llm_free_replay"), default=True
+            )
+            settle_ms = _coerce_int(record.get("settle_ms")) or 100
+            min_actions = _coerce_int(record.get("min_actions")) or 1
+            strategy = str(record.get("strategy") or "auto").strip().lower()
+            if strategy not in {"auto", "codeagent", "agent"}:
+                strategy = "auto"
+
+            record_llm_provider = str(record.get("llm_provider") or "").strip().lower() or None
+            record_model = str(record.get("model") or "").strip() or None
+
+            extract_fields: list[dict[str, Any]] | None = None
+            extract_timing = str(record.get("extract_timing") or "before_last_click").strip()
+            extract_after_action_index = _coerce_int(record.get("extract_after_action_index"))
+            extract_block = record.get("extract")
+            if isinstance(extract_block, dict):
+                extract_timing = str(extract_block.get("timing") or extract_timing).strip()
+                extract_after_action_index = _coerce_int(
+                    extract_block.get("after_action_index")
+                ) or extract_after_action_index
+                fields = extract_block.get("fields")
+                if isinstance(fields, list):
+                    extract_fields = [f for f in fields if isinstance(f, dict)]
+            fields_compat = record.get("extract_fields")
+            if extract_fields is None and isinstance(fields_compat, list):
+                extract_fields = [f for f in fields_compat if isinstance(f, dict)]
+
+            record_video_dir = (
+                str(record.get("record_video_dir")).strip()
+                if record.get("record_video_dir")
+                else str(template_recordings_dir(template_id))
+            )
+            record_video_size = _coerce_video_size(record.get("record_video_size"))
+            record_video_framerate = _coerce_int(record.get("record_video_framerate"))
+
+            before_mp4 = _mp4_snapshot(record_video_dir)
+
+            storage_state: str | None = None
+            if state_id is not None:
+                path = _browser_state_path_for_id(str(state_id))
+                if path.exists():
+                    storage_state = str(path)
+                else:
+                    warnings.append(f"state_id provided but file missing: {path}")
+
+            browser_executable_path = getattr(settings, "browser_executable_path", "") or None
+            browser_kwargs: dict[str, object] = {
+                "headless": headless,
+                "storage_state": storage_state,
+                "executable_path": browser_executable_path,
+                "record_video_dir": record_video_dir,
+                "enable_default_extensions": enable_default_extensions,
+                "args": ["--remote-allow-origins=*"],
+            }
+            if record_video_size is not None:
+                browser_kwargs["record_video_size"] = record_video_size
+            if record_video_framerate is not None and record_video_framerate > 0:
+                browser_kwargs["record_video_framerate"] = int(record_video_framerate)
+
+            authoring_preamble = (
+                "You are recording a browser automation template.\n"
+                "IMPORTANT: This is a two-phase workflow:\n"
+                "  - Phase A (now): you may use an LLM to decide actions.\n"
+                "  - Phase B (future replay): the exported Python script MUST run without any "
+                "LLM.\n"
+                "\n"
+                "Rules for replayability:\n"
+                "- Use Actor API selectors and explicit waits.\n"
+                "- Do NOT use *_by_prompt element finding.\n"
+                "- Do NOT call extract(...).\n"
+                "- Use page.evaluate with arrow-function JS when needed.\n"
+                "- Do NOT write or edit files; ONLY use browser actions.\n\n"
+                "Start URL:\n"
+                f"{url}\n\n"
+            )
+            if strategy in {"codeagent"}:
+                authoring_preamble += (
+                    "If you are writing Python code during recording (CodeAgent path), ensure the "
+                    "recorded code prints a single line:\n"
+                    "  GSD_STRUCTURED_FLOW_RESULT=<json>\n"
+                    'where json is {"final_url": "...", "extracted": {...}}.\n'
+                    "Also define a Python string variable:\n"
+                    "  GSD_FALLBACK_DSL_JSON = r'''{...json...}'''\n"
+                    "containing a deterministic CSS-selector DSL for fallback.\n"
+                )
+            full_task = authoring_preamble + "\nUSER TASK:\n" + task
+
+            patched_script: str | None = None
+            uses_llm = False
+            dsl_payload: dict[str, Any] | None = None
+
+            _patch_browser_use_cdp_wait_timeout()
+
+            # Strategy A: CodeAgent + session_to_python_script (requires ChatBrowserUse).
+            if strategy in {"auto", "codeagent"}:
+                try:
+                    import browser_use  # type: ignore[import-not-found]
+                    from browser_use.code_use import CodeAgent  # type: ignore[import-not-found]
+                    from browser_use.code_use.notebook_export import (  # type: ignore[import-not-found]
+                        session_to_python_script,
+                    )
+
+                    desired_model = str(getattr(settings, "model", "") or "").strip() or "bu-latest"
+                    if not (
+                        desired_model in {"bu-latest", "bu-1-0"}
+                        or desired_model.startswith("browser-use/")
+                        or desired_model.startswith("bu-")
+                    ):
+                        desired_model = "bu-latest"
+                    llm_timeout_s = getattr(settings, "llm_timeout_s", None)
+                    llm = browser_use.ChatBrowserUse(
+                        model=desired_model,
+                        api_key=settings.browser_use_api_key,
+                        base_url=(
+                            str(getattr(settings, "browser_use_llm_url", "") or "").strip()
+                            or None
+                        ),
+                        timeout=float(llm_timeout_s) if llm_timeout_s is not None else 120.0,
+                    )
+
+                    agent = CodeAgent(task=full_task, llm=llm, **browser_kwargs)
+                    if budget_s is not None and budget_s > 0:
+                        session = await asyncio.wait_for(
+                            agent.run(max_steps=max_steps),
+                            timeout=float(budget_s),
+                        )
+                    else:
+                        session = await agent.run(max_steps=max_steps)
+                    _ = session
+                    raw_script = session_to_python_script(agent)
+                    candidate = patch_exported_script(raw_script)
+                    if "GSD_STRUCTURED_FLOW_RESULT=" in candidate:
+                        patched_script = candidate
+                        dsl_payload = _extract_json_string_assignment(
+                            patched_script, var_name="GSD_FALLBACK_DSL_JSON"
+                        )
+                except Exception as exc:  # noqa: BLE001
+                    warnings.append(f"record_codeagent_failed: {type(exc).__name__}: {exc}")
+                    if strategy == "codeagent":
+                        raise
+
+            # Strategy B: Agent-based record + event capture → generate script locally
+            # (no CodeAgent required).
+            if patched_script is None and strategy in {"auto", "agent"}:
+                try:
+                    from browser_use import Agent, BrowserSession  # type: ignore[import-not-found]
+                except Exception as exc:  # noqa: BLE001
+                    raise RuntimeError(
+                        "browser-use is required for web_structured_flow(record=...). "
+                        "Install gsd-browser with browser-use enabled."
+                    ) from exc
+
+                # Use the configured provider (OpenAI/Anthropic/etc.) for Agent record.
+                from .llm.browser_use import create_browser_use_llms
+                from .llm.env import normalize_llm_provider
+
+                llm_timeout_s = getattr(settings, "llm_timeout_s", None)
+                settings_for_record = settings
+                if record_llm_provider or record_model:
+                    update: dict[str, object] = {}
+                    if record_llm_provider:
+                        update["llm_provider"] = normalize_llm_provider(record_llm_provider)
+                    if record_model:
+                        update["model"] = record_model
+                    settings_for_record = settings.model_copy(update=update)
+
+                try:
+                    llm = create_browser_use_llms(
+                        settings_for_record, timeout_s=llm_timeout_s
+                    ).primary
+                except Exception as exc:  # noqa: BLE001
+                    if record_llm_provider or record_model:
+                        raise
+                    # Practical default: if OPENAI_API_KEY is present but the configured
+                    # provider is unusable, fall back to OpenAI with a sane default model.
+                    if getattr(settings, "openai_api_key", ""):
+                        settings_for_record = settings.model_copy(
+                            update={"llm_provider": "openai", "model": "gpt-4o-mini"}
+                        )
+                        warnings.append(
+                            "record_llm_fallback: using openai/gpt-4o-mini "
+                            "(set GSD_LLM_PROVIDER/GSD_MODEL to override)"
+                        )
+                        llm = create_browser_use_llms(
+                            settings_for_record, timeout_s=llm_timeout_s
+                        ).primary
+                    else:
+                        raise exc
+
+                browser_session = BrowserSession(**browser_kwargs)
+
+                captured: list[dict[str, Any]] = []
+
+                def _selector_from_node(node: Any) -> str | None:
+                    if node is None:
+                        return None
+                    direct = getattr(node, "css_selector", None) or getattr(node, "selector", None)
+                    if isinstance(direct, str) and direct.strip():
+                        return direct.strip()
+                    attrs = getattr(node, "attributes", None)
+                    if not isinstance(attrs, dict):
+                        attrs = {}
+                    tag = str(getattr(node, "node_name", "") or "").lower() or None
+                    for key in ("data-testid", "data-qa", "data-test", "data-cy", "data_testid"):
+                        if key in attrs and str(attrs[key]).strip():
+                            val = str(attrs[key]).strip()
+                            return f'[{key}="{val}"]'
+                    if "id" in attrs and str(attrs["id"]).strip():
+                        return f"#{str(attrs['id']).strip()}"
+                    if tag and "name" in attrs and str(attrs["name"]).strip():
+                        val = str(attrs["name"]).strip()
+                        return f'{tag}[name="{val}"]'
+                    if tag and "aria-label" in attrs and str(attrs["aria-label"]).strip():
+                        val = str(attrs["aria-label"]).strip()
+                        return f'{tag}[aria-label="{val}"]'
+                    return None
+
+                event_bus = getattr(browser_session, "event_bus", None)
+                on = getattr(event_bus, "on", None) if event_bus is not None else None
+                if callable(on):
+                    try:
+                        from browser_use.browser.events import (  # type: ignore[import-not-found]
+                            ClickElementEvent,
+                            NavigateToUrlEvent,
+                            SendKeysEvent,
+                            TypeTextEvent,
+                        )
+                    except Exception:
+                        ClickElementEvent = None  # type: ignore[assignment]
+                        NavigateToUrlEvent = None  # type: ignore[assignment]
+                        SendKeysEvent = None  # type: ignore[assignment]
+                        TypeTextEvent = None  # type: ignore[assignment]
+
+                    async def _capture_event(evt: Any) -> None:
+                        name = type(evt).__name__
+                        item: dict[str, Any] = {"type": name}
+                        if name == "NavigateToUrlEvent":
+                            item["url"] = getattr(evt, "url", None)
+                        if name in {"ClickElementEvent", "TypeTextEvent"}:
+                            node = getattr(evt, "node", None)
+                            item["selector"] = _selector_from_node(node)
+                            item["xpath"] = (
+                                getattr(node, "xpath", None) if node is not None else None
+                            )
+                            if name == "TypeTextEvent":
+                                is_sensitive = bool(getattr(evt, "is_sensitive", False))
+                                if is_sensitive:
+                                    key_name = str(
+                                        getattr(evt, "sensitive_key_name", "") or ""
+                                    ).strip()
+                                    env_name = (
+                                        f"GSD_STRUCTURED_FLOW_SECRET_{key_name.upper()}"
+                                        if key_name
+                                        else "GSD_STRUCTURED_FLOW_SECRET"
+                                    )
+                                    item["text"] = None
+                                    item["text_env"] = env_name
+                                else:
+                                    item["text"] = getattr(evt, "text", None)
+                        if name == "SendKeysEvent":
+                            item["keys"] = getattr(evt, "keys", None)
+                        captured.append(item)
+
+                    for event_cls in (
+                        NavigateToUrlEvent,
+                        ClickElementEvent,
+                        TypeTextEvent,
+                        SendKeysEvent,
+                    ):
+                        if event_cls is None:
+                            continue
+                        try:
+                            on(event_cls, _capture_event)
+                        except Exception:
+                            continue
+
+                try:
+                    _patch_browser_use_cdp_wait_timeout()
+                    await _maybe_await(browser_session.start())
+
+                    use_vision_raw = str(
+                        record.get("use_vision")
+                        if record.get("use_vision") is not None
+                        else getattr(settings_for_record, "use_vision", "auto")
+                    ).strip().lower()
+                    use_vision: bool | str
+                    if use_vision_raw in {"true", "1", "yes", "y", "on"}:
+                        use_vision = True
+                    elif use_vision_raw in {"false", "0", "no", "n", "off"}:
+                        use_vision = False
+                    else:
+                        use_vision = "auto"
+
+                    agent_kwargs: dict[str, Any] = {
+                        "task": full_task,
+                        "llm": llm,
+                        "browser_session": browser_session,
+                        "use_vision": use_vision,
+                        "initial_actions": [
+                            {"navigate": {"url": url, "new_tab": False}},
+                        ],
+                    }
+                    try:
+                        from browser_use import Tools  # type: ignore[import-not-found]
+
+                        agent_kwargs["tools"] = Tools(
+                            exclude_actions=[
+                                "write_file",
+                                "read_file",
+                                "replace_file",
+                                "extract",
+                                "search",
+                                "find_text",
+                                "retry_with_browser_use_agent",
+                            ]
+                        )
+                        agent_kwargs["enable_planning"] = False
+                    except Exception:
+                        pass
+                    try:
+                        agent = Agent(**agent_kwargs)
+                    except TypeError:
+                        agent_kwargs.pop("initial_actions", None)
+                        try:
+                            agent = Agent(**agent_kwargs)
+                        except TypeError:
+                            if "tools" in agent_kwargs and "controller" not in agent_kwargs:
+                                agent_kwargs["controller"] = agent_kwargs.pop("tools")
+                                try:
+                                    agent = Agent(**agent_kwargs)
+                                except TypeError:
+                                    agent_kwargs.pop("controller", None)
+                                    agent_kwargs.pop("enable_planning", None)
+                                    agent_kwargs.pop("use_vision", None)
+                                    agent = Agent(**agent_kwargs)
+                            else:
+                                agent_kwargs.pop("enable_planning", None)
+                                agent_kwargs.pop("tools", None)
+                                agent_kwargs.pop("controller", None)
+                                agent_kwargs.pop("use_vision", None)
+                                agent = Agent(**agent_kwargs)
+                    if budget_s is not None and budget_s > 0:
+                        await asyncio.wait_for(
+                            agent.run(max_steps=max_steps),
+                            timeout=float(budget_s),
+                        )
+                    else:
+                        await agent.run(max_steps=max_steps)
+
+                    action_count = sum(
+                        1
+                        for evt in captured
+                        if evt.get("type")
+                        in {
+                            "ClickElementEvent",
+                            "TypeTextEvent",
+                            "SendKeysEvent",
+                        }
+                        and (
+                            evt.get("keys") is not None
+                            or evt.get("selector") is not None
+                            or evt.get("xpath") is not None
+                        )
+                    )
+                    if action_count < min_actions:
+                        raise RuntimeError(
+                            f"Captured too few actions ({action_count}); "
+                            f"expected at least {min_actions}."
+                        )
+
+                    default_step_timeout_ms = (
+                        int(float(step_timeout_s) * 1000.0)
+                        if step_timeout_s is not None and step_timeout_s > 0
+                        else 30_000
+                    )
+                    patched_script, dsl_payload = build_replay_script_from_events(
+                        events=captured,
+                        default_extract_fields=extract_fields,
+                        extract_timing=extract_timing,
+                        extract_after_action_index=extract_after_action_index,
+                        settle_ms=settle_ms,
+                        default_step_timeout_ms=default_step_timeout_ms,
+                    )
+                    uses_llm = False
+                finally:
+                    await _maybe_stop_browser_session(browser_session)
+
+            if patched_script is None:
+                raise RuntimeError("Record failed: no script generated.")
+
+            if "GSD_STRUCTURED_FLOW_RESULT=" not in patched_script:
+                raise RuntimeError(
+                    "Record run did not produce a replay result marker. "
+                    "Expected the exported script to print GSD_STRUCTURED_FLOW_RESULT=...."
+                )
+
+            uses_llm, reasons = script_uses_llm_at_replay(patched_script)
+            if uses_llm:
+                warnings.append("script_replay_llm_scan: " + "; ".join(reasons))
+                if require_llm_free_replay:
+                    raise RuntimeError(
+                        "Exported script appears to require LLM at replay time: "
+                        + "; ".join(reasons)
+                    )
+
+            if dsl_payload is None:
+                warnings.append("No GSD_FALLBACK_DSL_JSON found; DSL fallback unavailable.")
+
+            base_origin = base_origin_for_url(url)
+            manifest = save_template_files(
+                template_id=template_id,
+                template_name=template_name,
+                base_origin=base_origin,
+                recorded_example_url=url,
+                script_content=patched_script,
+                uses_llm_at_replay=uses_llm,
+                dsl_payload=dsl_payload,
+            )
+
+            after_mp4 = _mp4_snapshot(record_video_dir)
+            mp4_path = _mp4_diff_path(before_mp4, after_mp4)
+            recording = RecordingInfoV1(
+                enabled=True,
+                dir=record_video_dir,
+                path=mp4_path,
+                available=bool(mp4_path),
+                warning=(
+                    None
+                    if mp4_path
+                    else "No mp4 detected (missing deps or recording disabled)."
+                ),
+                size=record_video_size,
+                framerate=record_video_framerate,
+            )
+
+            template_info = TemplateInfoV1(
+                template_id=manifest.template_id,
+                template_name=manifest.template_name,
+                base_origin=manifest.base_origin,
+                created_at=manifest.created_at,
+                updated_at=manifest.updated_at,
+                script_path=manifest.script_path,
+                dsl_path=manifest.dsl_path,
+                manifest_path=manifest.manifest_path,
+                sha256=manifest.sha256,
+                uses_llm_at_replay=manifest.uses_llm_at_replay,
+            )
+
+            payload = WebStructuredFlowPayloadV1(
+                version="gsd.web_structured_flow.v1",
+                mode="record",
+                session_id=session_id,
+                tool_call_id=tool_call_id,
+                status="success",
+                summary="Recorded flow and exported replay script.",
+                url=url,
+                final_url=None,
+                extracted=None,
+                template=template_info,
+                runner_used=None,
+                runner_fallback_used=False,
+                steps=[],
+                script_logs=[],
+                warnings=warnings,
+                recording=recording,
+                exported_script=ExportedScriptV1(language="python", content=patched_script),
+            )
+            return [
+                TextContent(
+                    type="text",
+                    text=json.dumps(payload.model_dump(mode="json"), ensure_ascii=False),
+                )
+            ]
+
+        # replay
+        assert replay is not None
+        raw_url = str(replay.get("url") or "").strip()
+        template_id = normalize_template_id(str(replay.get("template_id") or "").strip())
+        if not raw_url or not template_id:
+            raise ValueError("replay.template_id and replay.url are required")
+        url = _normalize_url(raw_url)
+        runner = str(replay.get("runner") or "script_then_dsl").strip().lower()
+        if runner not in {"script", "dsl", "script_then_dsl"}:
+            runner = "script_then_dsl"
+
+        state_id = replay.get("state_id")
+        headless = _coerce_bool(replay.get("headless_browser"), default=True)
+        enable_default_extensions = _coerce_bool(
+            replay.get("enable_default_extensions"), default=True
+        )
+        budget_s = _coerce_float(replay.get("budget_s"))
+        step_timeout_s = _coerce_float(replay.get("step_timeout_s"))
+        settle_ms = int(replay.get("settle_ms") or 100)
+
+        record_video_dir = str(replay.get("record_video_dir") or "").strip() or None
+        record_video_size = _coerce_video_size(replay.get("record_video_size"))
+        record_video_framerate = _coerce_int(replay.get("record_video_framerate"))
+
+        manifest = load_manifest(template_id)
+        url_origin = base_origin_for_url(url)
+        if url_origin != manifest.base_origin:
+            raise ValueError(
+                f"URL origin mismatch: expected {manifest.base_origin}, got {url_origin}"
+            )
+
+        storage_state: str | None = None
+        if state_id is not None:
+            path = _browser_state_path_for_id(str(state_id))
+            if path.exists():
+                storage_state = str(path)
+            else:
+                warnings.append(f"state_id provided but file missing: {path}")
+
+        template_info = TemplateInfoV1(
+            template_id=manifest.template_id,
+            template_name=manifest.template_name,
+            base_origin=manifest.base_origin,
+            created_at=manifest.created_at,
+            updated_at=manifest.updated_at,
+            script_path=manifest.script_path,
+            dsl_path=manifest.dsl_path,
+            manifest_path=manifest.manifest_path,
+            sha256=manifest.sha256,
+            uses_llm_at_replay=manifest.uses_llm_at_replay,
+        )
+
+        script_logs: list[str] = []
+        final_url: str | None = None
+        extracted: dict[str, Any] | None = None
+        step_results: list[dict[str, Any]] = []
+        runner_used: Literal["script", "dsl"] | None = None
+        fallback_used = False
+
+        recording: RecordingInfoV1 | None = None
+        if record_video_dir:
+            before_mp4 = _mp4_snapshot(record_video_dir)
+        else:
+            before_mp4 = {}
+
+        def _finalize_recording() -> RecordingInfoV1 | None:
+            if not record_video_dir:
+                return None
+            after = _mp4_snapshot(record_video_dir)
+            mp4_path = _mp4_diff_path(before_mp4, after)
+            return RecordingInfoV1(
+                enabled=True,
+                dir=record_video_dir,
+                path=mp4_path,
+                available=bool(mp4_path),
+                warning=(
+                    None
+                    if mp4_path
+                    else "No mp4 detected (missing deps or recording disabled)."
+                ),
+                size=record_video_size,
+                framerate=record_video_framerate,
+            )
+
+        script_ok = False
+        script_result: dict[str, Any] | None = None
+        if runner in {"script", "script_then_dsl"}:
+            res = run_python_script(
+                script_path=Path(manifest.script_path),
+                target_url=url,
+                storage_state_path=storage_state,
+                headless=headless,
+                enable_default_extensions=enable_default_extensions,
+                record_video_dir=record_video_dir,
+                record_video_size=record_video_size,
+                record_video_framerate=record_video_framerate,
+                timeout_s=budget_s,
+            )
+            script_logs = res.logs
+            script_ok = res.ok and isinstance(res.result, dict)
+            script_result = res.result if isinstance(res.result, dict) else None
+            if script_ok and script_result is not None:
+                runner_used = "script"
+                final_url = (
+                    str(script_result.get("final_url"))
+                    if script_result.get("final_url")
+                    else None
+                )
+                extracted_val = script_result.get("extracted")
+                if isinstance(extracted_val, dict):
+                    extracted = extracted_val
+
+        if (not script_ok) and runner in {"dsl", "script_then_dsl"}:
+            dsl_path = manifest.dsl_path
+            if dsl_path:
+                try:
+                    dsl_payload = json.loads(Path(dsl_path).read_text(encoding="utf-8"))
+                except Exception as exc:  # noqa: BLE001
+                    warnings.append(f"Failed to load DSL: {type(exc).__name__}: {exc}")
+                    dsl_payload = None
+            else:
+                dsl_payload = None
+
+            if dsl_payload is None:
+                if runner == "dsl":
+                    raise RuntimeError("No DSL available for this template.")
+            else:
+                fallback_used = script_ok is False and runner == "script_then_dsl"
+                from .structured_flow import run_dsl_flow
+
+                try:
+                    from browser_use import (  # type: ignore[import-not-found]
+                        BrowserProfile,
+                        BrowserSession,
+                    )
+                except Exception as exc:  # noqa: BLE001
+                    raise RuntimeError(
+                        "browser-use is required for DSL replay. "
+                        "Install gsd-browser with browser-use."
+                    ) from exc
+
+                browser_executable_path = getattr(settings, "browser_executable_path", "") or None
+                browser_kwargs: dict[str, object] = {
+                    "headless": headless,
+                    "storage_state": storage_state,
+                    "executable_path": browser_executable_path,
+                    "enable_default_extensions": enable_default_extensions,
+                    "args": ["--remote-allow-origins=*"],
+                }
+                if record_video_dir:
+                    browser_kwargs["record_video_dir"] = record_video_dir
+                if record_video_size is not None:
+                    browser_kwargs["record_video_size"] = record_video_size
+                if record_video_framerate is not None and record_video_framerate > 0:
+                    browser_kwargs["record_video_framerate"] = int(record_video_framerate)
+
+                browser_session: Any | None = None
+                try:
+                    try:
+                        browser_session = BrowserSession(**browser_kwargs)
+                    except TypeError:
+                        profile = BrowserProfile(**browser_kwargs)
+                        browser_session = BrowserSession(browser_profile=profile)
+
+                    start = getattr(browser_session, "start", None)
+                    if callable(start):
+                        _patch_browser_use_cdp_wait_timeout()
+                        await _maybe_await(start())
+
+                    new_page = getattr(browser_session, "new_page", None)
+                    if not callable(new_page):
+                        raise RuntimeError("BrowserSession.new_page is unavailable")
+                    page = await _maybe_await(new_page(url))
+
+                    steps = dsl_payload.get("steps") if isinstance(dsl_payload, dict) else None
+                    if not isinstance(steps, list):
+                        raise RuntimeError("DSL must include steps: list")
+
+                    final_url, extracted_out, step_results = await run_dsl_flow(
+                        browser=browser_session,
+                        page=page,
+                        steps=steps,
+                        step_timeout_s=step_timeout_s,
+                        settle_ms=settle_ms,
+                    )
+                    extracted = extracted_out
+                    runner_used = "dsl"
+                finally:
+                    if browser_session is not None:
+                        await _maybe_stop_browser_session(browser_session)
+
+        recording = _finalize_recording()
+
+        status: Literal["success", "failed", "partial"]
+        if runner_used is not None and (final_url is not None or extracted is not None):
+            status = "success"
+            summary = "Replayed flow."
+        elif runner_used is not None:
+            status = "partial"
+            summary = "Ran replay but could not parse a structured result."
+        else:
+            status = "failed"
+            summary = "Replay failed."
+
+        payload = WebStructuredFlowPayloadV1(
+            version="gsd.web_structured_flow.v1",
+            mode="replay",
+            session_id=session_id,
+            tool_call_id=tool_call_id,
+            status=status,
+            summary=summary,
+            url=url,
+            final_url=final_url,
+            extracted=extracted,
+            template=template_info,
+            runner_used=runner_used,
+            runner_fallback_used=fallback_used,
+            steps=step_results,  # type: ignore[arg-type]
+            script_logs=script_logs,
+            warnings=warnings,
+            recording=recording,
+            exported_script=None,
+        )
+        text = json.dumps(payload.model_dump(mode="json"), ensure_ascii=False)
+        return [TextContent(type="text", text=text)]
+    except Exception as exc:  # noqa: BLE001
+        failed_url = ""
+        if record or replay:
+            failed_url = _normalize_url(str((record or replay or {}).get("url") or ""))
+        payload = WebStructuredFlowPayloadV1(
+            version="gsd.web_structured_flow.v1",
+            mode="record" if record is not None else "replay",
+            session_id=session_id,
+            tool_call_id=tool_call_id,
+            status="failed",
+            summary=_truncate(f"{type(exc).__name__}: {exc}", max_len=2048),
+            url=failed_url,
+            final_url=None,
+            extracted=None,
+            template=None,
+            runner_used=None,
+            runner_fallback_used=False,
+            steps=[],
+            script_logs=[],
+            warnings=warnings,
+            recording=None,
+            exported_script=None,
+        )
+        text = json.dumps(payload.model_dump(mode="json"), ensure_ascii=False)
+        return [TextContent(type="text", text=text)]
 
 
 @mcp.tool(name="get_run_events")

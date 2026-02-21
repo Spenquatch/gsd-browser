@@ -1,0 +1,484 @@
+{
+  "$defs": {
+    "ExportedScriptV1": {
+      "additionalProperties": true,
+      "properties": {
+        "content": {
+          "minLength": 1,
+          "title": "Content",
+          "type": "string"
+        },
+        "language": {
+          "const": "python",
+          "title": "Language",
+          "type": "string"
+        }
+      },
+      "required": [
+        "language",
+        "content"
+      ],
+      "title": "ExportedScriptV1",
+      "type": "object"
+    },
+    "RecordingInfoV1": {
+      "additionalProperties": true,
+      "properties": {
+        "available": {
+          "title": "Available",
+          "type": "boolean"
+        },
+        "dir": {
+          "anyOf": [
+            {
+              "maxLength": 2000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Dir"
+        },
+        "enabled": {
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "framerate": {
+          "anyOf": [
+            {
+              "maximum": 240,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Framerate"
+        },
+        "path": {
+          "anyOf": [
+            {
+              "maxLength": 2000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Path"
+        },
+        "size": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "type": "integer"
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Size"
+        },
+        "warning": {
+          "anyOf": [
+            {
+              "maxLength": 2000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Warning"
+        }
+      },
+      "required": [
+        "enabled",
+        "available"
+      ],
+      "title": "RecordingInfoV1",
+      "type": "object"
+    },
+    "StructuredFlowStepResultV1": {
+      "additionalProperties": true,
+      "properties": {
+        "error": {
+          "anyOf": [
+            {
+              "maxLength": 2000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Error"
+        },
+        "fields": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Fields"
+        },
+        "finished_at": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Finished At"
+        },
+        "id": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Id",
+          "type": "string"
+        },
+        "started_at": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Started At"
+        },
+        "status": {
+          "enum": [
+            "success",
+            "failed"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "type": {
+          "enum": [
+            "goto",
+            "click",
+            "fill",
+            "press",
+            "wait_selector",
+            "wait_text",
+            "eval_js",
+            "extract_fields"
+          ],
+          "title": "Type",
+          "type": "string"
+        },
+        "url_after": {
+          "anyOf": [
+            {
+              "maxLength": 2000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Url After"
+        },
+        "url_before": {
+          "anyOf": [
+            {
+              "maxLength": 2000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Url Before"
+        },
+        "value": {
+          "anyOf": [
+            {},
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Value"
+        }
+      },
+      "required": [
+        "id",
+        "type",
+        "status"
+      ],
+      "title": "StructuredFlowStepResultV1",
+      "type": "object"
+    },
+    "TemplateInfoV1": {
+      "additionalProperties": true,
+      "properties": {
+        "base_origin": {
+          "maxLength": 2000,
+          "minLength": 1,
+          "title": "Base Origin",
+          "type": "string"
+        },
+        "created_at": {
+          "title": "Created At",
+          "type": "number"
+        },
+        "dsl_path": {
+          "anyOf": [
+            {
+              "maxLength": 2000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Dsl Path"
+        },
+        "manifest_path": {
+          "maxLength": 2000,
+          "minLength": 1,
+          "title": "Manifest Path",
+          "type": "string"
+        },
+        "script_path": {
+          "maxLength": 2000,
+          "minLength": 1,
+          "title": "Script Path",
+          "type": "string"
+        },
+        "sha256": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Sha256",
+          "type": "string"
+        },
+        "template_id": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Template Id",
+          "type": "string"
+        },
+        "template_name": {
+          "anyOf": [
+            {
+              "maxLength": 500,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Template Name"
+        },
+        "updated_at": {
+          "title": "Updated At",
+          "type": "number"
+        },
+        "uses_llm_at_replay": {
+          "title": "Uses Llm At Replay",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "template_id",
+        "base_origin",
+        "created_at",
+        "updated_at",
+        "script_path",
+        "manifest_path",
+        "sha256",
+        "uses_llm_at_replay"
+      ],
+      "title": "TemplateInfoV1",
+      "type": "object"
+    }
+  },
+  "additionalProperties": true,
+  "properties": {
+    "exported_script": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ExportedScriptV1"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "extracted": {
+      "anyOf": [
+        {
+          "additionalProperties": true,
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Extracted"
+    },
+    "final_url": {
+      "anyOf": [
+        {
+          "maxLength": 2000,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Final Url"
+    },
+    "mode": {
+      "enum": [
+        "record",
+        "replay"
+      ],
+      "title": "Mode",
+      "type": "string"
+    },
+    "recording": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/RecordingInfoV1"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "runner_fallback_used": {
+      "default": false,
+      "title": "Runner Fallback Used",
+      "type": "boolean"
+    },
+    "runner_used": {
+      "anyOf": [
+        {
+          "enum": [
+            "script",
+            "dsl"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Runner Used"
+    },
+    "script_logs": {
+      "items": {
+        "type": "string"
+      },
+      "maxItems": 400,
+      "title": "Script Logs",
+      "type": "array"
+    },
+    "session_id": {
+      "format": "uuid",
+      "title": "Session Id",
+      "type": "string"
+    },
+    "status": {
+      "enum": [
+        "success",
+        "failed",
+        "partial"
+      ],
+      "title": "Status",
+      "type": "string"
+    },
+    "steps": {
+      "items": {
+        "$ref": "#/$defs/StructuredFlowStepResultV1"
+      },
+      "maxItems": 500,
+      "title": "Steps",
+      "type": "array"
+    },
+    "summary": {
+      "maxLength": 2048,
+      "title": "Summary",
+      "type": "string"
+    },
+    "template": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/TemplateInfoV1"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "tool_call_id": {
+      "format": "uuid",
+      "title": "Tool Call Id",
+      "type": "string"
+    },
+    "url": {
+      "maxLength": 2000,
+      "minLength": 1,
+      "title": "Url",
+      "type": "string"
+    },
+    "version": {
+      "const": "gsd.web_structured_flow.v1",
+      "title": "Version",
+      "type": "string"
+    },
+    "warnings": {
+      "items": {
+        "type": "string"
+      },
+      "maxItems": 50,
+      "title": "Warnings",
+      "type": "array"
+    }
+  },
+  "required": [
+    "version",
+    "mode",
+    "session_id",
+    "tool_call_id",
+    "status",
+    "summary",
+    "url"
+  ],
+  "title": "WebStructuredFlowPayloadV1",
+  "type": "object"
+}

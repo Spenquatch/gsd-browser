@@ -85,6 +85,94 @@ class WebTaskAgentGitHubPayloadV1(WebEvalAgentPayloadV1):
     tool: Literal["web_task_agent_github"]
 
 
+class StructuredFlowFieldSpecV1(ContractModel):
+    name: str = Field(min_length=1, max_length=200)
+    selector: str = Field(min_length=1, max_length=2000)
+    kind: Literal["inner_text", "text_content", "html", "attr", "value"]
+    attr: str | None = Field(default=None, max_length=200)
+    nth: int = Field(default=0, ge=0)
+    all: bool = False
+    required: bool = False
+
+    @model_validator(mode="after")
+    def _validate_attr_requirement(self) -> Self:
+        if self.kind == "attr" and not (self.attr and str(self.attr).strip()):
+            raise ValueError("attr is required when kind='attr'")
+        if self.kind != "attr" and self.attr is not None:
+            raise ValueError("attr must be null unless kind='attr'")
+        return self
+
+
+class StructuredFlowStepResultV1(ContractModel):
+    id: str = Field(min_length=1, max_length=200)
+    type: Literal[
+        "goto",
+        "click",
+        "fill",
+        "press",
+        "wait_selector",
+        "wait_text",
+        "eval_js",
+        "extract_fields",
+    ]
+    status: Literal["success", "failed"]
+    started_at: float | None = None
+    finished_at: float | None = None
+    url_before: str | None = Field(default=None, max_length=2000)
+    url_after: str | None = Field(default=None, max_length=2000)
+    value: Any | None = None
+    fields: dict[str, Any] | None = None
+    error: str | None = Field(default=None, max_length=2000)
+
+
+class RecordingInfoV1(ContractModel):
+    enabled: bool
+    dir: str | None = Field(default=None, max_length=2000)
+    path: str | None = Field(default=None, max_length=2000)
+    available: bool
+    warning: str | None = Field(default=None, max_length=2000)
+    size: dict[str, int] | None = None
+    framerate: int | None = Field(default=None, ge=1, le=240)
+
+
+class ExportedScriptV1(ContractModel):
+    language: Literal["python"]
+    content: str = Field(min_length=1)
+
+
+class TemplateInfoV1(ContractModel):
+    template_id: str = Field(min_length=1, max_length=200)
+    template_name: str | None = Field(default=None, max_length=500)
+    base_origin: str = Field(min_length=1, max_length=2000)
+    created_at: float
+    updated_at: float
+    script_path: str = Field(min_length=1, max_length=2000)
+    dsl_path: str | None = Field(default=None, max_length=2000)
+    manifest_path: str = Field(min_length=1, max_length=2000)
+    sha256: str = Field(min_length=1, max_length=128)
+    uses_llm_at_replay: bool
+
+
+class WebStructuredFlowPayloadV1(ContractModel):
+    version: Literal["gsd.web_structured_flow.v1"]
+    mode: Literal["record", "replay"]
+    session_id: UUID
+    tool_call_id: UUID
+    status: Literal["success", "failed", "partial"]
+    summary: str = Field(max_length=2048)
+    url: str = Field(min_length=1, max_length=2000)
+    final_url: str | None = Field(default=None, max_length=2000)
+    extracted: dict[str, Any] | None = None
+    template: TemplateInfoV1 | None = None
+    runner_used: Literal["script", "dsl"] | None = None
+    runner_fallback_used: bool = False
+    steps: list[StructuredFlowStepResultV1] = Field(default_factory=list, max_length=500)
+    script_logs: list[str] = Field(default_factory=list, max_length=400)
+    warnings: list[str] = Field(default_factory=list, max_length=50)
+    recording: RecordingInfoV1 | None = None
+    exported_script: ExportedScriptV1 | None = None
+
+
 class RunEventStatsCountsV1(ContractModel):
     agent: int
     console: int

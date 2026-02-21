@@ -19,6 +19,9 @@ venv/
 .env.*
 !.env.example
 
+# browser-use local artifacts
+browseruse_agent_data/
+
 # Tooling
 .poetry/
 

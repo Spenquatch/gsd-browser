@@ -7,6 +7,7 @@ from .v1 import (  # noqa: F401
     GetScreenshotsPayloadV1,
     SetupBrowserStatePayloadV1,
     WebEvalAgentPayloadV1,
+    WebStructuredFlowPayloadV1,
     WebTaskAgentGitHubPayloadV1,
     WebTaskAgentPayloadV1,
 )

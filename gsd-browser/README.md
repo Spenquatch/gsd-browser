@@ -92,8 +92,27 @@ Once configured as an MCP server, Claude can call:
 - `web_eval_agent(url, task, headless_browser=False)` – runs a short browser-use evaluation and records screenshots.
 - `web_task_agent(url, task, headless_browser=False)` – general-purpose web task runner (does not use saved auth state by default).
 - `web_task_agent_github(url, task, headless_browser=False)` – GitHub workflows using a dedicated `github` saved state.
+- `web_structured_flow(record=..., replay=...)` – record once with browser-use `Agent` (LLM; optionally `CodeAgent` when available), export a replayable Actor-API Python script, then replay later with no LLM (script-first, with optional DSL fallback).
 - `setup_browser_state(url=None, state_id=None)` – opens a non-headless browser so you can log in, then saves state to `~/.gsd/browser_state/state.json` (or `~/.gsd/browser_state/states/<state_id>.json`).
 - `get_screenshots(last_n=5, screenshot_type="agent_step", session_id="<session_uuid>", from_timestamp=None, has_error=None, include_images=True)` – retrieves recent screenshots (max `last_n=20`); set `include_images=False` for metadata-only.
+
+Example (record → replay):
+```python
+# record (LLM-assisted) and save a template under ~/.gsd/structured_flows/<template_id>/replay.py
+web_structured_flow(record={
+  "url": "https://example.com/start",
+  "task": "Click the JS tab, extract fields, click final button and return the final URL",
+  "template_id": "example_flow",
+  "require_llm_free_replay": True
+})
+
+# replay (no LLM): run the stored replay.py against a different URL on the same origin
+web_structured_flow(replay={
+  "template_id": "example_flow",
+  "url": "https://example.com/items/123",
+  "runner": "script_then_dsl"
+})
+```
 
 You can also capture browser state from the CLI:
 ```bash

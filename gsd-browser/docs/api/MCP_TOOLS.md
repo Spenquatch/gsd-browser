@@ -81,6 +81,57 @@ Same input shape and output schema as `web_eval_agent`, but with:
 - `version`: `"gsd.web_task_agent_github.v1"`
 - `tool`: `"web_task_agent_github"` (added by wrapper)
 
+### `web_structured_flow` (sync; record + replay)
+Record once (LLM-assisted via browser-use `Agent`, or `CodeAgent` when available) to export a replayable Actor-API Python script,
+then replay later with no LLM.
+
+**Input**
+- Exactly one of:
+  - `record` (object)
+    - `url` (string, required)
+    - `task` (string, required)
+    - `template_id` (string, optional; default generated)
+    - `template_name` (string, optional)
+    - `state_id` (string|null, optional)
+    - `headless_browser` (bool, optional; default false)
+    - `enable_default_extensions` (bool, optional; default true)
+    - `use_vision` (bool|string, optional; default `"auto"`)
+    - `budget_s` (number|null, optional)
+    - `max_steps` (int|null, optional)
+    - `step_timeout_s` (number|null, optional)
+    - `settle_ms` (int|null, optional; default 100)
+    - `min_actions` (int|null, optional; default 1)
+    - `strategy` (`"auto" | "agent" | "codeagent"`, optional; default `"auto"`)
+    - `llm_provider` (string|null, optional; overrides server default for recording)
+    - `model` (string|null, optional; overrides server default for recording)
+    - `extract` (object|null, optional)
+      - `timing` (`"before_last_click" | "after_all_actions"`, optional)
+      - `after_action_index` (int|null, optional)
+      - `fields` (list, optional): items match `StructuredFlowFieldSpecV1`
+    - `extract_fields` (list|null, optional; legacy alias for `extract.fields`)
+    - `extract_timing` (string|null, optional; legacy alias for `extract.timing`)
+    - `extract_after_action_index` (int|null, optional; legacy alias for `extract.after_action_index`)
+    - `record_video_dir` (string|null, optional)
+    - `record_video_size` ({width:int,height:int}|null, optional)
+    - `record_video_framerate` (int|null, optional)
+    - `require_llm_free_replay` (bool, optional; default true)
+  - `replay` (object)
+    - `template_id` (string, required)
+    - `url` (string, required; must match recorded origin)
+    - `runner` (`"script" | "dsl" | "script_then_dsl"`, optional; default `"script_then_dsl"`)
+    - `state_id` (string|null, optional)
+    - `headless_browser` (bool, optional; default true)
+    - `enable_default_extensions` (bool, optional; default true)
+    - `budget_s` (number|null, optional)
+    - `step_timeout_s` (number|null, optional)
+    - `settle_ms` (int|null, optional; default 100)
+    - `record_video_dir` (string|null, optional)
+    - `record_video_size` ({width:int,height:int}|null, optional)
+    - `record_video_framerate` (int|null, optional)
+
+**Output** (`TextContent[]`, exactly 1 item)
+- JSON payload schema `gsd.web_structured_flow.v1`
+
 ### `web_eval_agent_submit` (sync; compat job submit)
 Submit `web_eval_agent` work for clients that do not implement SEP-1686 tasks.
 
@@ -157,6 +208,13 @@ Non-enumerability:
     - `progress`: `{current:int, total:int, percentage:float} | null`
     - `error`: `{code:"NOT_READY", message:string, details:object|null} | null`
 
+### `job_result_compact` (sync; smaller job_result for orchestrators)
+This is identical to `job_result`, except that on the terminal success path the server MUST return a
+**compacted** version of the final tool payload suitable for logs and workflow engines.
+
+In particular, large fields (e.g. screenshots / DOM dumps / artifacts) may be omitted and replaced
+with small metadata (e.g. `artifacts_count`).
+
 ### `job_wait` (sync; wait-but-don’t-cancel convenience)
 **Input**
 - `job_id` (string, required)
@@ -174,6 +232,10 @@ Non-enumerability:
     - `progress_message`: string
     - `progress`: `{current:int, total:int, percentage:float} | null`
     - `error`: `{code:"TIMEOUT", message:string, details:{max_wait_s:int}}`
+
+### `job_wait_compact` (sync; smaller job_wait for orchestrators)
+This is identical to `job_wait`, except that on the terminal success path the server MUST return a
+**compacted** version of the final tool payload (same compaction rules as `job_result_compact`).
 
 ### `job_cancel` (sync; compat job cancel)
 **Input**

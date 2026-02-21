@@ -13,7 +13,7 @@ import logging
 import os
 from collections.abc import Awaitable, Callable
 from contextlib import contextmanager
-from typing import TYPE_CHECKING, TypeVar
+from typing import TYPE_CHECKING, Any, TypeVar
 
 from fastmcp import Context
 from fastmcp.dependencies import Depends, Progress
@@ -389,6 +389,22 @@ async def web_task_agent_github(
         return result
 
 
+@mcp.tool(name="web_structured_flow")
+async def web_structured_flow(
+    record: dict[str, Any] | None = None,
+    replay: dict[str, Any] | None = None,
+    ctx: Context | None = None,
+) -> list[TextContent]:
+    with _docket_scope(ctx):
+        result = await _call_with_identity(
+            sdk_server.web_structured_flow,
+            record=record,
+            replay=replay,
+            ctx=ctx,  # type: ignore[arg-type]
+        )
+    return result
+
+
 @mcp.tool(name="web_eval_agent_submit")
 async def web_eval_agent_submit(
     url: str,
@@ -524,6 +540,47 @@ async def job_wait(
     if hasattr(payload, "model_dump"):
         return _json_text(payload.model_dump(mode="json"))
     return _json_text(payload)
+
+
+@mcp.tool(name="job_result_compact")
+async def job_result_compact(
+    job_id: str,
+    ctx: Context | None = None,
+) -> list[TextContent]:
+    """Return a compact (log-friendly) job result payload."""
+
+    from .optionb.compat_jobs import compact_payload_for_transport
+    from .optionb.compat_jobs import job_result as compat_job_result
+
+    with _docket_scope(ctx):
+        payload = await _call_with_identity(compat_job_result, job_id=job_id)
+    return _json_text(compact_payload_for_transport(payload))
+
+
+@mcp.tool(name="job_wait_compact")
+async def job_wait_compact(
+    job_id: str,
+    max_wait_s: int = 300,
+    poll_interval_s: float = 2.0,
+    ctx: Context | None = None,
+) -> list[TextContent]:
+    """Wait for a job and return a compact (log-friendly) payload.
+
+    This avoids returning large artifacts (screenshots/DOM dumps) that can exceed
+    orchestrator HTTP response limits.
+    """
+
+    from .optionb.compat_jobs import compact_payload_for_transport
+    from .optionb.compat_jobs import job_wait as compat_job_wait
+
+    with _docket_scope(ctx):
+        payload = await _call_with_identity(
+            compat_job_wait,
+            job_id=job_id,
+            max_wait_s=max_wait_s,
+            poll_interval_s=poll_interval_s,
+        )
+    return _json_text(compact_payload_for_transport(payload))
 
 
 @mcp.tool(name="job_cancel")

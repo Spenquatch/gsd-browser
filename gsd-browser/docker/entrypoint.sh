@@ -1,8 +1,8 @@
-#!/usr/bin/env bash
+#!/bin/sh
 # Entrypoint for dockerized gsd
-set -euo pipefail
+set -eu
 
-COMMAND=${1:-serve}
+COMMAND="${1:-serve}"
 shift || true
 
 case "$COMMAND" in

@@ -27,6 +27,7 @@ def main() -> int:
         TasksAdminListPayloadV1,
         TasksListPayloadV1,
         WebEvalAgentPayloadV1,
+        WebStructuredFlowPayloadV1,
         WebTaskAgentGitHubPayloadV1,
         WebTaskAgentPayloadV1,
     )
@@ -37,6 +38,7 @@ def main() -> int:
         "gsd.web_eval_agent.v1.schema.json": WebEvalAgentPayloadV1.model_json_schema(),
         "gsd.web_task_agent.v1.schema.json": WebTaskAgentPayloadV1.model_json_schema(),
         "gsd.web_task_agent_github.v1.schema.json": WebTaskAgentGitHubPayloadV1.model_json_schema(),
+        "gsd.web_structured_flow.v1.schema.json": WebStructuredFlowPayloadV1.model_json_schema(),
         "gsd.get_run_events.v1.schema.json": GetRunEventsPayloadV1.model_json_schema(),
         "gsd.get_screenshots.v1.schema.json": GetScreenshotsPayloadV1.model_json_schema(),
         "gsd.setup_browser_state.v1.schema.json": SetupBrowserStatePayloadV1.model_json_schema(),

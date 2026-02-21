@@ -53,10 +53,12 @@ services:
       - GSD_MODEL=${GSD_MODEL:-claude-haiku-4-5}
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
       - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - OPENAI_BASE_URL=${OPENAI_BASE_URL}
+      - GSD_OPENAI_DONT_FORCE_STRUCTURED_OUTPUT=${GSD_OPENAI_DONT_FORCE_STRUCTURED_OUTPUT:-false}
       - BROWSER_USE_API_KEY=${BROWSER_USE_API_KEY}
       - OLLAMA_HOST=${OLLAMA_HOST}
     ports:
-      - "8080:8080"
+      - "8090:8080"
     entrypoint: ["uvicorn"]
     command:
       [
@@ -140,6 +142,8 @@ services:
       - GSD_MODEL=${GSD_MODEL:-claude-haiku-4-5}
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
       - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - OPENAI_BASE_URL=${OPENAI_BASE_URL}
+      - GSD_OPENAI_DONT_FORCE_STRUCTURED_OUTPUT=${GSD_OPENAI_DONT_FORCE_STRUCTURED_OUTPUT:-false}
       - BROWSER_USE_API_KEY=${BROWSER_USE_API_KEY}
       - OLLAMA_HOST=${OLLAMA_HOST}
     entrypoint: ["gsd-browser"]
