@@ -1292,8 +1292,9 @@ async def web_eval_agent(
             except Exception:  # noqa: BLE001
                 logger.debug("Failed to record agent step event", exc_info=True)
 
-        # Let browser-use handle model-specific timeouts (90s for Claude, 60s default)
-        llms = create_browser_use_llms(settings, timeout_s=settings.llm_timeout_s)
+        # Let browser-use handle model-specific timeouts (90s for Claude, 60s default).
+        # Use getattr for forward/backward compatibility across Settings revisions.
+        llms = create_browser_use_llms(settings, timeout_s=getattr(settings, "llm_timeout_s", None))
         llm = llms.primary
         browser_executable_path = getattr(settings, "browser_executable_path", "") or None
         browser_session = BrowserSession(

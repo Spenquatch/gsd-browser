@@ -66,6 +66,98 @@ Health check:
 curl -fsS http://localhost:8081/healthz
 ```
 
+## Call the tool via MCP-over-HTTP (JSON-RPC 2.0)
+
+If you’re running the **HTTP transport** (for example via `compose.minimal.yml`), you can call
+`web_structured_flow` directly over HTTP using JSON-RPC 2.0.
+
+Notes:
+- The MCP endpoint path is `POST /mcp`.
+- `compose.minimal.yml` maps container `8080` → host `8090`, so your local MCP URL is typically:
+  - `http://localhost:8090/mcp`
+- HTTP mode requires `Authorization: Bearer <token>` (see ADR-0019 for how tokens are obtained).
+- Responses may be returned as **SSE** (`text/event-stream`). In that case, the final JSON-RPC message
+  is the last `data: ...` line.
+
+Set these once:
+
+```bash
+export GSD_BASE_URL="http://localhost:8090"
+export GSD_MCP_URL="http://localhost:8090/mcp"
+export GSD_TOKEN="..."        # Bearer JWT / developer token
+export GSD_ORIGIN="http://localhost"
+```
+
+Optional sanity check (OAuth protected resource metadata):
+
+```bash
+curl -fsS -H "Origin: $GSD_ORIGIN" "$GSD_BASE_URL/.well-known/oauth-protected-resource"
+```
+
+### JSON-RPC: record
+
+```bash
+curl -sN --max-time 600 -X POST "$GSD_MCP_URL" \
+  -H "Content-Type: application/json" \
+  -H "Accept: application/json, text/event-stream" \
+  -H "Authorization: Bearer $GSD_TOKEN" \
+  -H "Origin: $GSD_ORIGIN" \
+  -d @- <<'JSON'
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "method": "tools/call",
+  "params": {
+    "name": "web_structured_flow",
+    "arguments": {
+      "record": {
+        "template_id": "example_flow",
+        "url": "https://example.com/start",
+        "task": "Click the JavaScript tab, extract fields, click final button and return the final URL",
+        "strategy": "agent",
+        "min_actions": 3,
+        "require_llm_free_replay": true,
+        "headless_browser": false
+      }
+    }
+  }
+}
+JSON
+```
+
+### JSON-RPC: replay
+
+```bash
+curl -sN --max-time 600 -X POST "$GSD_MCP_URL" \
+  -H "Content-Type: application/json" \
+  -H "Accept: application/json, text/event-stream" \
+  -H "Authorization: Bearer $GSD_TOKEN" \
+  -H "Origin: $GSD_ORIGIN" \
+  -d @- <<'JSON'
+{
+  "jsonrpc": "2.0",
+  "id": 2,
+  "method": "tools/call",
+  "params": {
+    "name": "web_structured_flow",
+    "arguments": {
+      "replay": {
+        "template_id": "example_flow",
+        "url": "https://example.com/items/123",
+        "runner": "script_then_dsl",
+        "headless_browser": true
+      }
+    }
+  }
+}
+JSON
+```
+
+Result shape reminder:
+- The JSON-RPC envelope contains `result.content[]`.
+- The tool’s actual payload is a JSON string in `result.content[0].text` (schema:
+  `gsd.web_structured_flow.v1`).
+
 ## Record a template
 
 Use the helper CLI (runs the tool directly, prints the JSON payload):

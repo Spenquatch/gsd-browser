@@ -75,6 +75,7 @@ class Settings(BaseModel):
     web_eval_budget_s: float | None = Field(None, alias="GSD_WEB_EVAL_BUDGET_S")
     web_eval_max_steps: int | None = Field(None, alias="GSD_WEB_EVAL_MAX_STEPS")
     web_eval_step_timeout_s: float | None = Field(None, alias="GSD_WEB_EVAL_STEP_TIMEOUT_S")
+    llm_timeout_s: float | None = Field(None, alias="GSD_LLM_TIMEOUT_S")
 
     # Vision mode configuration
     # Controls how browser-use perceives web pages (DOM-only, vision-only, or hybrid)

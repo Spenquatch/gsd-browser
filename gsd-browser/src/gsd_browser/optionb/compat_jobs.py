@@ -42,6 +42,53 @@ def _truncate(value: str, *, max_len: int) -> str:
     return text[: max_len - 1] + "…"
 
 
+def compact_payload_for_transport(payload: object) -> object:
+    """Return a JSON-serializable payload with large fields truncated.
+
+    This is used by `job_result_compact` / `job_wait_compact` to keep responses
+    below typical orchestrator log/HTTP limits without changing the v1 contract.
+    """
+
+    if hasattr(payload, "model_dump"):
+        payload = payload.model_dump(mode="json")  # type: ignore[union-attr]
+
+    def _compact(value: object, *, depth: int) -> object:
+        if depth > 6:
+            return value
+
+        if isinstance(value, str):
+            return _truncate(value, max_len=20_000)
+
+        if isinstance(value, dict):
+            out: dict[str, object] = {}
+            for key, inner in value.items():
+                if key in {"traceback", "stack", "stacktrace"}:
+                    out[key] = _truncate(str(inner or ""), max_len=8_000)
+                    continue
+                if key in {"html", "dom", "page_html", "page_dom"}:
+                    out[key] = _truncate(str(inner or ""), max_len=8_000)
+                    continue
+                if key in {"screenshots", "images", "artifacts"} and isinstance(inner, list):
+                    trimmed = inner[:25]
+                    out[key] = [_compact(item, depth=depth + 1) for item in trimmed]
+                    if len(inner) > 25:
+                        out[f"{key}_truncated"] = True
+                    continue
+                out[key] = _compact(inner, depth=depth + 1)
+            return out
+
+        if isinstance(value, list):
+            trimmed = value[:50]
+            out_list = [_compact(item, depth=depth + 1) for item in trimmed]
+            if len(value) > 50:
+                out_list.append("…")
+            return out_list
+
+        return value
+
+    return _compact(payload, depth=0)
+
+
 def _parse_uuid4(value: str, *, name: str) -> uuid.UUID:
     try:
         parsed = uuid.UUID(str(value).strip())

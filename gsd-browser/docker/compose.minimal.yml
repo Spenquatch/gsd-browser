@@ -28,12 +28,28 @@ services:
       retries: 20
     restart: unless-stopped
 
+  gsd-jwks:
+    image: nginx:alpine
+    volumes:
+      - ./jwks.local:/usr/share/nginx/html:ro
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost/.well-known/jwks.json >/dev/null 2>&1"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
   gsd:
     image: gsd-browser:local
     build:
       context: ..
       dockerfile: docker/Dockerfile
       network: host
+    volumes:
+      # Load local dev secrets/config (LLM API keys, etc.) from the host.
+      # On Windows, `${USERPROFILE}` is typically `C:\Users\<you>`.
+      # If you don't have this file, either create it or remove this mount and pass keys via `environment`.
+      - ${USERPROFILE}/.gsd/.env:/root/.gsd/.env:ro
     environment:
       - GSD_DEPLOYMENT_ENV=${GSD_DEPLOYMENT_ENV:-dev}
       - GSD_TRANSPORT=http
@@ -42,21 +58,21 @@ services:
       - FASTMCP_DOCKET_CONCURRENCY=0
 
       # JWT auth (required for HTTP mode; canonical spec §8.3).
-      - GSD_JWT_JWKS_URL=${GSD_JWT_JWKS_URL:-http://localhost:8000/.well-known/jwks.json}
-      - GSD_JWT_ISSUER=${GSD_JWT_ISSUER:-https://issuer.example}
+      - GSD_JWT_JWKS_URL=${GSD_JWT_JWKS_URL:-http://gsd-jwks/.well-known/jwks.json}
+      - GSD_JWT_ISSUER=${GSD_JWT_ISSUER:-http://gsd.local}
       - GSD_JWT_AUDIENCE=${GSD_JWT_AUDIENCE:-gsd}
       - GSD_JWT_TENANT_ID_CLAIM=${GSD_JWT_TENANT_ID_CLAIM:-tenant_id}
       - GSD_JWT_SUBJECT_ID_CLAIM=${GSD_JWT_SUBJECT_ID_CLAIM:-sub}
 
+      # Local HTTP hardening (ADR-0014):
+      # - Allow server-to-server calls that omit the Origin header (Kestra, CLI scripts).
+      # - Add `http://gsd` so Docker-to-Docker calls with Host `gsd:8080` are accepted.
+      - GSD_HTTP_ALLOW_NULL_ORIGIN=${GSD_HTTP_ALLOW_NULL_ORIGIN:-1}
+      - GSD_HTTP_ALLOWED_ORIGINS=${GSD_HTTP_ALLOWED_ORIGINS:-http://localhost,http://127.0.0.1,http://[::1],http://gsd}
+
       # LLM provider config (set one of these API keys as needed).
       - GSD_LLM_PROVIDER=${GSD_LLM_PROVIDER:-anthropic}
       - GSD_MODEL=${GSD_MODEL:-claude-haiku-4-5}
-      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
-      - OPENAI_BASE_URL=${OPENAI_BASE_URL}
-      - GSD_OPENAI_DONT_FORCE_STRUCTURED_OUTPUT=${GSD_OPENAI_DONT_FORCE_STRUCTURED_OUTPUT:-false}
-      - BROWSER_USE_API_KEY=${BROWSER_USE_API_KEY}
-      - OLLAMA_HOST=${OLLAMA_HOST}
     ports:
       - "8090:8080"
     entrypoint: ["uvicorn"]
@@ -73,6 +89,11 @@ services:
     depends_on:
       valkey:
         condition: service_healthy
+      gsd-jwks:
+        condition: service_healthy
+    networks:
+      - default
+      - gsd
     healthcheck:
       test:
         [
@@ -91,14 +112,16 @@ services:
     depends_on:
       valkey:
         condition: service_healthy
+      gsd-jwks:
+        condition: service_healthy
     environment:
       - GSD_DEPLOYMENT_ENV=${GSD_DEPLOYMENT_ENV:-dev}
       - FASTMCP_DOCKET_URL=redis://valkey:6379/0
       - FASTMCP_DOCKET_NAME=${FASTMCP_DOCKET_NAME:-gsd}
 
       # Auth (same identity rules as 8080; HTTP_API.md).
-      - GSD_JWT_JWKS_URL=${GSD_JWT_JWKS_URL:-http://localhost:8000/.well-known/jwks.json}
-      - GSD_JWT_ISSUER=${GSD_JWT_ISSUER:-https://issuer.example}
+      - GSD_JWT_JWKS_URL=${GSD_JWT_JWKS_URL:-http://gsd-jwks/.well-known/jwks.json}
+      - GSD_JWT_ISSUER=${GSD_JWT_ISSUER:-http://gsd.local}
       - GSD_JWT_AUDIENCE=${GSD_JWT_AUDIENCE:-gsd}
       - GSD_JWT_TENANT_ID_CLAIM=${GSD_JWT_TENANT_ID_CLAIM:-tenant_id}
       - GSD_JWT_SUBJECT_ID_CLAIM=${GSD_JWT_SUBJECT_ID_CLAIM:-sub}
@@ -132,6 +155,8 @@ services:
     depends_on:
       valkey:
         condition: service_healthy
+    volumes:
+      - ${USERPROFILE}/.gsd/.env:/root/.gsd/.env:ro
     environment:
       - GSD_DEPLOYMENT_ENV=${GSD_DEPLOYMENT_ENV:-dev}
       - GSD_USE_FASTMCP_V2=true
@@ -140,12 +165,6 @@ services:
       - FASTMCP_DOCKET_CONCURRENCY=${FASTMCP_DOCKET_CONCURRENCY_WORKER:-4}
       - GSD_LLM_PROVIDER=${GSD_LLM_PROVIDER:-anthropic}
       - GSD_MODEL=${GSD_MODEL:-claude-haiku-4-5}
-      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
-      - OPENAI_BASE_URL=${OPENAI_BASE_URL}
-      - GSD_OPENAI_DONT_FORCE_STRUCTURED_OUTPUT=${GSD_OPENAI_DONT_FORCE_STRUCTURED_OUTPUT:-false}
-      - BROWSER_USE_API_KEY=${BROWSER_USE_API_KEY}
-      - OLLAMA_HOST=${OLLAMA_HOST}
     entrypoint: ["gsd-browser"]
     command: ["worker"]
     ports:
@@ -154,3 +173,8 @@ services:
 
 volumes:
   valkey-data: {}
+
+networks:
+  gsd:
+    external: true
+    name: gsd
