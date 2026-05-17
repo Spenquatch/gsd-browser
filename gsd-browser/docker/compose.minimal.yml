@@ -56,6 +56,9 @@ services:
       - FASTMCP_DOCKET_URL=redis://valkey:6379/0
       - FASTMCP_DOCKET_NAME=${FASTMCP_DOCKET_NAME:-gsd}
       - FASTMCP_DOCKET_CONCURRENCY=0
+      # Load primary + fallback provider/model (and API keys/base URLs) from /root/.gsd/.env.
+      # Keep this explicit so the container always reads the mounted host env file.
+      - GSD_ENV_FILE=/root/.gsd/.env
 
       # JWT auth (required for HTTP mode; canonical spec §8.3).
       - GSD_JWT_JWKS_URL=${GSD_JWT_JWKS_URL:-http://gsd-jwks/.well-known/jwks.json}
@@ -70,9 +73,8 @@ services:
       - GSD_HTTP_ALLOW_NULL_ORIGIN=${GSD_HTTP_ALLOW_NULL_ORIGIN:-1}
       - GSD_HTTP_ALLOWED_ORIGINS=${GSD_HTTP_ALLOWED_ORIGINS:-http://localhost,http://127.0.0.1,http://[::1],http://gsd}
 
-      # LLM provider config (set one of these API keys as needed).
-      - GSD_LLM_PROVIDER=${GSD_LLM_PROVIDER:-anthropic}
-      - GSD_MODEL=${GSD_MODEL:-claude-haiku-4-5}
+      # LLM provider config is intentionally NOT set here; it comes from /root/.gsd/.env
+      # (or can be overridden by environment variables passed at runtime).
     ports:
       - "8090:8080"
     entrypoint: ["uvicorn"]
@@ -163,8 +165,11 @@ services:
       - FASTMCP_DOCKET_URL=redis://valkey:6379/0
       - FASTMCP_DOCKET_NAME=${FASTMCP_DOCKET_NAME:-gsd}
       - FASTMCP_DOCKET_CONCURRENCY=${FASTMCP_DOCKET_CONCURRENCY_WORKER:-4}
-      - GSD_LLM_PROVIDER=${GSD_LLM_PROVIDER:-anthropic}
-      - GSD_MODEL=${GSD_MODEL:-claude-haiku-4-5}
+      - BROWSER_USE_API_KEY=bu_ozurFpjs-b8BM447CvYEt-9aGGSQv9ixFRotxrbBM8c
+      - GSD_LLM_PROVIDER=chatbrowseruse
+      - GSD_LLM_MODEL=bu-latest
+      # Load provider/model (and keys/base URLs) from the same mounted env file as the server.
+      - GSD_ENV_FILE=/root/.gsd/.env
     entrypoint: ["gsd-browser"]
     command: ["worker"]
     ports:

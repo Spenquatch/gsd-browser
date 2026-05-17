@@ -88,10 +88,25 @@ export GSD_TOKEN="..."        # Bearer JWT / developer token
 export GSD_ORIGIN="http://localhost"
 ```
 
+PowerShell equivalent (uses env vars for the current shell session):
+
+```powershell
+$env:GSD_BASE_URL = "http://localhost:8090"
+$env:GSD_MCP_URL = "$env:GSD_BASE_URL/mcp"
+$env:GSD_TOKEN = "..."     # Bearer JWT / developer token
+$env:GSD_ORIGIN = "http://localhost"
+```
+
 Optional sanity check (OAuth protected resource metadata):
 
 ```bash
 curl -fsS -H "Origin: $GSD_ORIGIN" "$GSD_BASE_URL/.well-known/oauth-protected-resource"
+```
+
+PowerShell equivalent (use `curl.exe` to avoid the `curl` alias in Windows PowerShell):
+
+```powershell
+curl.exe -fsS -H "Origin: $env:GSD_ORIGIN" "$env:GSD_BASE_URL/.well-known/oauth-protected-resource"
 ```
 
 ### JSON-RPC: record
@@ -125,6 +140,37 @@ curl -sN --max-time 600 -X POST "$GSD_MCP_URL" \
 JSON
 ```
 
+PowerShell equivalent:
+
+```powershell
+@'
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "method": "tools/call",
+  "params": {
+    "name": "web_structured_flow",
+    "arguments": {
+      "record": {
+        "template_id": "example_flow",
+        "url": "https://example.com/start",
+        "task": "Extract full job description, including all metadata fields from the \"Job Info\" section at the start of the page content. Then click the \"Apply now\" button let the new page open and record the URL from the page launched from the \"Apply now\" button. Then return with all of the job posting details",
+        "strategy": "agent",
+        "min_actions": 3,
+        "require_llm_free_replay": true,
+        "headless_browser": false
+      }
+    }
+  }
+}
+'@ | curl.exe -sN -m 600 -X POST "$env:GSD_MCP_URL" `
+  -H "Content-Type: application/json" `
+  -H "Accept: application/json, text/event-stream" `
+  -H "Authorization: Bearer $env:GSD_TOKEN" `
+  -H "Origin: $env:GSD_ORIGIN" `
+  --data-binary "@-"
+```
+
 ### JSON-RPC: replay
 
 ```bash
@@ -153,10 +199,62 @@ curl -sN --max-time 600 -X POST "$GSD_MCP_URL" \
 JSON
 ```
 
+PowerShell equivalent:
+
+```powershell
+@'
+{
+  "jsonrpc": "2.0",
+  "id": 2,
+  "method": "tools/call",
+  "params": {
+    "name": "web_structured_flow",
+    "arguments": {
+      "replay": {
+        "template_id": "example_flow",
+        "url": "https://example.com/items/123",
+        "runner": "script_then_dsl",
+        "headless_browser": true
+      }
+    }
+  }
+}
+'@ | curl.exe -sN -m 600 -X POST "$env:GSD_MCP_URL" `
+  -H "Content-Type: application/json" `
+  -H "Accept: application/json, text/event-stream" `
+  -H "Authorization: Bearer $env:GSD_TOKEN" `
+  -H "Origin: $env:GSD_ORIGIN" `
+  --data-binary "@-"
+```
+
 Result shape reminder:
 - The JSON-RPC envelope contains `result.content[]`.
 - The tool’s actual payload is a JSON string in `result.content[0].text` (schema:
   `gsd.web_structured_flow.v1`).
+
+If you want to extract the tool payload JSON from an SSE response in PowerShell:
+
+```powershell
+$raw = @'
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "method": "tools/call",
+  "params": { "name": "web_structured_flow", "arguments": { "replay": { "template_id": "example_flow", "url": "https://example.com/items/123" } } }
+}
+'@ | curl.exe -sN -m 600 -X POST "$env:GSD_MCP_URL" `
+  -H "Content-Type: application/json" `
+  -H "Accept: application/json, text/event-stream" `
+  -H "Authorization: Bearer $env:GSD_TOKEN" `
+  -H "Origin: $env:GSD_ORIGIN" `
+  --data-binary "@-"
+
+$dataLines = $raw -split "`n" | Where-Object { $_ -like "data: *" } | ForEach-Object { $_.Substring(6) }
+$msg = $dataLines[-1] | ConvertFrom-Json
+$text = ($msg.result.content | Where-Object { $_.type -eq "text" } | Select-Object -First 1).text
+$payload = $text | ConvertFrom-Json
+$payload | ConvertTo-Json -Depth 50
+```
 
 ## Record a template
 
